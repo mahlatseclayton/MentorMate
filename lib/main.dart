@@ -1,7 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth_platform_interface/firebase_auth_platform_interface.dart';
+import 'firebase_options.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 
-void main() {
+
+void main()async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(MyApp());
 }
 
@@ -266,6 +277,57 @@ class _SignUpPageState extends State<SignUpPage> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
+  }
+  void createAccount()async{
+    String fName=_nameController.text;
+    String lName=_surnameController.text;
+    String email=_studentNumberController.text+"@students.wits.ac.za";
+    String password=_passwordController.text;
+    String cpassword=_confirmPasswordController.text;
+    String?imageUrl="";
+    if(password!=cpassword){
+      Fluttertoast.showToast(msg:
+      "Password do not match",
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM,);
+      return;
+    }
+    else {
+      try {
+        UserCredential userCredential = await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(email:email , password: password);
+        String?uid=userCredential.user?.uid;
+
+
+        if(uid!=null) {
+          await FirebaseFirestore.instance.collection('users').doc(uid).set({
+            'fName': fName,
+            'lName': lName,
+            'role': _selectedRole,
+            'studentNo': _studentNumberController.text,
+            'profile': imageUrl,
+          });
+          Fluttertoast.showToast(msg: "Account successfully created.");
+          Navigator.push(context, MaterialPageRoute(builder: (_)=>SignInPage()));
+        }
+
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'weak-password') {
+          Fluttertoast.showToast(msg:"Password is too weak.",
+              gravity:ToastGravity.BOTTOM,
+              toastLength:Toast.LENGTH_SHORT);
+        } else if (e.code == 'email-already-in-use') {
+          Fluttertoast.showToast(msg:"Student number already exist.",
+              gravity:ToastGravity.BOTTOM,
+              toastLength:Toast.LENGTH_SHORT);
+        } else {
+          Fluttertoast.showToast(msg:"${e.message}",
+              gravity:ToastGravity.BOTTOM,
+              toastLength:Toast.LENGTH_SHORT);
+        }
+      }
+    }
+
   }
 
   @override
@@ -555,7 +617,7 @@ class _SignUpPageState extends State<SignUpPage> {
                             child: ElevatedButton(
                               onPressed: () {
                                 if (_formKey.currentState!.validate()) {
-
+                                      createAccount();
                                 }
                               },
                               style: ElevatedButton.styleFrom(
@@ -638,7 +700,43 @@ class _SignInPageState extends State<SignInPage> {
     _passwordController.dispose();
     super.dispose();
   }
+  void _login()async{
+    String email=_studentNumberController.text+"@students.wits.ac.za";
+    String password=_passwordController.text;
+    Fluttertoast.showToast(msg: "Login successful.",
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM);
+    String? uid;
+    try {
+          await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
+          uid=FirebaseAuth.instance.currentUser?.uid;
+          DocumentSnapshot doc=await FirebaseFirestore.instance.collection('users').doc(uid).get();
+          if(doc['role']=='mentee'){
 
+              Navigator.push(
+                  context, MaterialPageRoute(builder: (_) => MenteeHomePage()));
+            }
+            else{
+              Navigator.push(context, MaterialPageRoute(builder: (_)=>MentorHomePage()));
+            }
+
+    }on FirebaseAuthException catch(e){
+        Fluttertoast.showToast(msg: "Login failed :${e.message}");
+    }
+  }
+void _changePass()async{
+    String email=_studentNumberController.text+"@students.wits.ac.za";
+    if(!_studentNumberController.text.isEmpty){
+    await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+    Fluttertoast.showToast(msg: "Recovery email sent.",
+        toastLength:Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM);}
+    else{
+      Fluttertoast.showToast(msg: "Failed to send recovery email.",
+      toastLength:Toast.LENGTH_SHORT,
+      gravity: ToastGravity.BOTTOM);
+    }
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -770,6 +868,7 @@ class _SignInPageState extends State<SignInPage> {
                                   alignment: Alignment.centerRight,
                                   child: GestureDetector(
                                     onTap: () {
+                                      _changePass();
 
                                     },
                                     child: Text(
@@ -793,7 +892,7 @@ class _SignInPageState extends State<SignInPage> {
                             child: ElevatedButton(
                               onPressed: () {
                                 if (_formKey.currentState!.validate()) {
-                                      Navigator.push(context,MaterialPageRoute(builder: (_)=>MenteeHomePage()));
+                                      _login();
                                 }
                               },
                               style: ElevatedButton.styleFrom(
@@ -830,7 +929,7 @@ class _SignInPageState extends State<SignInPage> {
                               ),
                               GestureDetector(
                                 onTap: () {
-
+                                      Navigator.push(context, MaterialPageRoute(builder: (_)=>SignUpPage()));
                                 },
                                 child: Text(
                                   'Sign Up',
