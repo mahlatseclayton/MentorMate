@@ -1348,7 +1348,7 @@ Future <String> getKey(String uid)async {
                                     'uid': FirebaseAuth.instance.currentUser!.uid,
                                   };
                                   await FirebaseFirestore.instance
-                                      .collection('events')
+                                      .collection('Events')
                                       .add(event);
                                   Navigator.pop(context);
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -1557,7 +1557,7 @@ Future <String> getKey(String uid)async {
                                           'uid': FirebaseAuth.instance.currentUser!.uid,
                                         };
                                         await FirebaseFirestore.instance
-                                            .collection('events')
+                                            .collection('Events')
                                             .add(event);
                                         Navigator.pop(context);
                                         ScaffoldMessenger.of(context).showSnackBar(
@@ -1825,7 +1825,7 @@ Future <String> getKey(String uid)async {
 
 
                                         await FirebaseFirestore.instance
-                                            .collection('events')
+                                            .collection('Events')
                                             .add(event);
 
                                         Navigator.pop(context);
@@ -2953,6 +2953,7 @@ class _CalendarPageState extends State<CalendarPage> {
   void initState() {
     super.initState();
     _loadEventsFromFirebase();
+    _loadEventsFromFirebase2();
   }
   Future <String> getKey(String uid)async {
     DocumentSnapshot doc= await FirebaseFirestore.instance.collection('users').doc(uid).get();
@@ -3112,7 +3113,7 @@ class _CalendarPageState extends State<CalendarPage> {
     FirebaseFirestore.instance
         .collection('events')
         .where('uid', isEqualTo: uid)
-    .where('signkey',isEqualTo: signKey)
+        .where('signkey',isEqualTo: signKey)
         .snapshots()
         .listen((snapshot) {
       Map<DateTime, List<Map<String, dynamic>>> newEvents = {};
@@ -3133,6 +3134,93 @@ class _CalendarPageState extends State<CalendarPage> {
       setState(() {
         _events = newEvents;
       });
+    });
+  }
+  void _loadEventsFromFirebase2() async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final signKey = await getKey(uid);
+
+    FirebaseFirestore.instance
+        .collection('Events')
+        .where('signkey', isEqualTo: signKey)
+        .snapshots()
+        .listen((snapshot) {
+      Map<DateTime, List<Map<String, dynamic>>> newEvents = {};
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+
+        // Parse the string date instead of treating it as Timestamp
+        final String dateString = data['dateTime'] as String;
+        final DateTime dt = _parseDateString(dateString);
+
+        DateTime dayOnly = DateTime(dt.year, dt.month, dt.day);
+
+        if (newEvents[dayOnly] == null) {
+          newEvents[dayOnly] = [data];
+        } else {
+          newEvents[dayOnly]!.add(data);
+        }
+      }
+
+      setState(() {
+        _events = newEvents;
+      });
+    });
+  }
+
+  DateTime _parseDateString(String dateString) {
+    try {
+      // Handle "27/11/2025 • 12:01 AM" format
+      if (dateString.contains('•')) {
+        final parts = dateString.split('•');
+        final datePart = parts[0].trim(); // "27/11/2025"
+        final dateParts = datePart.split('/');
+        final day = int.parse(dateParts[0]);
+        final month = int.parse(dateParts[1]);
+        final year = int.parse(dateParts[2]);
+        return DateTime(year, month, day);
+      }
+      // Handle "23/11/2025" format
+      else if (dateString.contains('/')) {
+        final dateParts = dateString.split('/');
+        final day = int.parse(dateParts[0]);
+        final month = int.parse(dateParts[1]);
+        final year = int.parse(dateParts[2]);
+        return DateTime(year, month, day);
+      }
+      // Fallback
+      return DateTime.now();
+    } catch (e) {
+      print('Error parsing date: $dateString');
+      return DateTime.now();
+    }
+  }
+
+
+  void _processAndUpdateEvents(List<QueryDocumentSnapshot> docs) {
+    // Remove duplicates by document ID
+    final uniqueDocs = docs.fold<Map<String, QueryDocumentSnapshot>>({}, (map, doc) {
+      map[doc.id] = doc;
+      return map;
+    }).values.toList();
+
+    Map<DateTime, List<Map<String, dynamic>>> newEvents = {};
+
+    for (var doc in uniqueDocs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final DateTime dt = (data['dateTime'] as Timestamp).toDate();
+      DateTime dayOnly = DateTime(dt.year, dt.month, dt.day);
+
+      if (newEvents[dayOnly] == null) {
+        newEvents[dayOnly] = [data];
+      } else {
+        newEvents[dayOnly]!.add(data);
+      }
+    }
+
+    setState(() {
+      _events = newEvents;
     });
   }
   @override
