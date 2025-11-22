@@ -5,9 +5,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth_platform_interface/firebase_auth_platform_interface.dart';
 import 'firebase_options.dart';
+import 'package:intl/intl.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-
-
+import 'dart:math';
 void main()async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
@@ -15,7 +15,6 @@ void main()async {
   );
   runApp(MyApp());
 }
-
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -32,14 +31,12 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
 class WelcomePage extends StatefulWidget {
   const WelcomePage({super.key});
 
   @override
   State<WelcomePage> createState() => _WelcomePageState();
 }
-
 class _WelcomePageState extends State<WelcomePage> {
   @override
   Widget build(BuildContext context) {
@@ -251,14 +248,12 @@ class _WelcomePageState extends State<WelcomePage> {
     );
   }
 }
-
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
 
   @override
   State<SignUpPage> createState() => _SignUpPageState();
 }
-
 class _SignUpPageState extends State<SignUpPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
@@ -266,6 +261,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final _studentNumberController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _signkeyController = TextEditingController(); // NEW: For mentee signkey
 
   String _selectedRole = 'mentee';
 
@@ -276,58 +272,187 @@ class _SignUpPageState extends State<SignUpPage> {
     _studentNumberController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _signkeyController.dispose(); // NEW
     super.dispose();
   }
-  void createAccount()async{
-    String fName=_nameController.text;
-    String lName=_surnameController.text;
-    String email=_studentNumberController.text+"@students.wits.ac.za";
-    String password=_passwordController.text;
-    String cpassword=_confirmPasswordController.text;
-    String?imageUrl="";
-    if(password!=cpassword){
-      Fluttertoast.showToast(msg:
-      "Password do not match",
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,);
-      return;
+
+  String _generateSignKey() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final random = Random();
+    return List.generate(6, (index) => chars[random.nextInt(chars.length)]).join();
+  }
+
+  Future<String?> _findMentorBySignKey(String signkey) async {
+    try {
+      final mentorSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('signkey', isEqualTo: signkey)
+          .where('role', isEqualTo: 'mentor')
+          .limit(1)
+          .get();
+
+      if (mentorSnapshot.docs.isNotEmpty) {
+        return mentorSnapshot.docs.first.id;
+      }
+      return null;
+    } catch (e) {
+      print('Error finding mentor: $e');
+      return null;
     }
-    else {
+  }
+
+  void createAccount() async {
+    String fName = _nameController.text;
+    String lName = _surnameController.text;
+    String email = _studentNumberController.text + "@students.wits.ac.za";
+    String password = _passwordController.text;
+    String cpassword = _confirmPasswordController.text;
+    String? imageUrl = "";
+
+    if (password != cpassword) {
+      Fluttertoast.showToast(
+        msg: "Passwords do not match",
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM,
+      );
+      return;
+    } else {
       try {
         UserCredential userCredential = await FirebaseAuth.instance
-            .createUserWithEmailAndPassword(email:email , password: password);
-        String?uid=userCredential.user?.uid;
+            .createUserWithEmailAndPassword(email: email, password: password);
+        String? uid = userCredential.user?.uid;
 
-
-        if(uid!=null) {
-          await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        if (uid != null) {
+          Map<String, dynamic> userData = {
             'fName': fName,
             'lName': lName,
             'role': _selectedRole,
             'studentNo': _studentNumberController.text,
             'profile': imageUrl,
-          });
-          Fluttertoast.showToast(msg: "Account successfully created.");
-          Navigator.push(context, MaterialPageRoute(builder: (_)=>SignInPage()));
-        }
+            'createdAt': FieldValue.serverTimestamp(),
+          };
 
+          if (_selectedRole == 'mentor') {
+            String signkey = _generateSignKey();
+            userData['signkey'] = signkey; // Store signkey for mentor
+
+            await FirebaseFirestore.instance.collection('users').doc(uid).set(userData);
+            _showMentorSignKeyDialog(signkey);
+          } else if (_selectedRole == 'mentee') {
+            if (_signkeyController.text.isEmpty) {
+              Fluttertoast.showToast(
+                msg: "Please enter your mentor's signkey",
+                gravity: ToastGravity.BOTTOM,
+                toastLength: Toast.LENGTH_SHORT,
+              );
+              return;
+            }
+
+            String? mentorId = await _findMentorBySignKey(_signkeyController.text);
+            if (mentorId == null) {
+              Fluttertoast.showToast(
+                msg: "Invalid signkey. Please check with your mentor.",
+                gravity: ToastGravity.BOTTOM,
+                toastLength: Toast.LENGTH_SHORT,
+              );
+              return;
+            }
+
+            userData['mentor_id'] = mentorId;
+            userData['signkey'] = _signkeyController.text; // Store signkey for mentee too
+
+            await FirebaseFirestore.instance.collection('users').doc(uid).set(userData);
+
+            Fluttertoast.showToast(msg: "Account successfully created!");
+            Navigator.push(context, MaterialPageRoute(builder: (_) => SignInPage()));
+          }
+        }
       } on FirebaseAuthException catch (e) {
         if (e.code == 'weak-password') {
-          Fluttertoast.showToast(msg:"Password is too weak.",
-              gravity:ToastGravity.BOTTOM,
-              toastLength:Toast.LENGTH_SHORT);
+          Fluttertoast.showToast(
+            msg: "Password is too weak.",
+            gravity: ToastGravity.BOTTOM,
+            toastLength: Toast.LENGTH_SHORT,
+          );
         } else if (e.code == 'email-already-in-use') {
-          Fluttertoast.showToast(msg:"Student number already exist.",
-              gravity:ToastGravity.BOTTOM,
-              toastLength:Toast.LENGTH_SHORT);
+          Fluttertoast.showToast(
+            msg: "Student number already exists.",
+            gravity: ToastGravity.BOTTOM,
+            toastLength: Toast.LENGTH_SHORT,
+          );
         } else {
-          Fluttertoast.showToast(msg:"${e.message}",
-              gravity:ToastGravity.BOTTOM,
-              toastLength:Toast.LENGTH_SHORT);
+          Fluttertoast.showToast(
+            msg: "${e.message}",
+            gravity: ToastGravity.BOTTOM,
+            toastLength: Toast.LENGTH_SHORT,
+          );
         }
       }
     }
+  }
 
+  void _showMentorSignKeyDialog(String signkey) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.vpn_key, color: Color(0xFF667eea)),
+            SizedBox(width: 8),
+            Text('Your Mentor Sign Key'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Share this code with your mentees for them to sign up:',
+              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+            ),
+            SizedBox(height: 16),
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Color(0xFF667eea).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Color(0xFF667eea)),
+              ),
+              child: Center(
+                child: Text(
+                  signkey,
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF667eea),
+                    letterSpacing: 2,
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Important: Save this code securely! You cannot change it later.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.orange[700],
+                fontStyle: FontStyle.italic,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => SignInPage()));
+            },
+            child: Text('Continue to Sign In'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -563,6 +688,34 @@ class _SignUpPageState extends State<SignUpPage> {
                                   },
                                 ),
 
+                                // NEW: Signkey Field (only shown for mentees)
+                                if (_selectedRole == 'mentee') ...[
+                                  const SizedBox(height: 16),
+                                  TextFormField(
+                                    controller: _signkeyController,
+                                    decoration: InputDecoration(
+                                      labelText: 'Mentor Sign Key *',
+                                      prefixIcon: Icon(Icons.vpn_key, color: Colors.grey[600]),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      filled: true,
+                                      fillColor: Colors.grey[50],
+                                      hintText: 'Enter 6-character code',
+                                      helperText: 'Get this code from your assigned mentor',
+                                    ),
+                                    validator: (value) {
+                                      if (_selectedRole == 'mentee' && (value == null || value.isEmpty)) {
+                                        return 'Please enter your mentor sign key';
+                                      }
+                                      if (value != null && value.length != 6) {
+                                        return 'Sign key must be exactly 6 characters';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                ],
+
                                 const SizedBox(height: 16),
 
                                 TextFormField(
@@ -617,7 +770,7 @@ class _SignUpPageState extends State<SignUpPage> {
                             child: ElevatedButton(
                               onPressed: () {
                                 if (_formKey.currentState!.validate()) {
-                                      createAccount();
+                                  createAccount();
                                 }
                               },
                               style: ElevatedButton.styleFrom(
@@ -653,7 +806,7 @@ class _SignUpPageState extends State<SignUpPage> {
                               ),
                               GestureDetector(
                                 onTap: () {
-                                                  Navigator.push(context, MaterialPageRoute(builder: (_)=>SignInPage()));
+                                  Navigator.push(context, MaterialPageRoute(builder: (_) => SignInPage()));
                                 },
                                 child: Text(
                                   'Sign In',
@@ -680,15 +833,12 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 }
-
-
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key});
 
   @override
   State<SignInPage> createState() => _SignInPageState();
 }
-
 class _SignInPageState extends State<SignInPage> {
   final _formKey = GlobalKey<FormState>();
   final _studentNumberController = TextEditingController();
@@ -956,65 +1106,42 @@ void _changePass()async{
     );
   }
 }
-
-
 class MentorHomePage extends StatefulWidget {
   const MentorHomePage({super.key});
 
   @override
   State<MentorHomePage> createState() => _MentorHomePageState();
 }
-
 class _MentorHomePageState extends State<MentorHomePage> {
   int _currentIndex = 0;
-  final List<Map<String, dynamic>> _previousMeetings = [
-    {
-      'date': 'Nov 18, 2024',
-      'time': '2:00 PM',
-      'attended': 12,
-      'total': 15,
-      'attendance': '80%'
-    },
-    {
-      'date': 'Nov 11, 2024',
-      'time': '2:00 PM',
-      'attended': 14,
-      'total': 15,
-      'attendance': '93%'
-    },
-    {
-      'date': 'Nov 04, 2024',
-      'time': '2:00 PM',
-      'attended': 11,
-      'total': 15,
-      'attendance': '73%'
-    },
-    {
-      'date': 'Oct 28, 2024',
-      'time': '2:00 PM',
-      'attended': 13,
-      'total': 15,
-      'attendance': '87%'
-    },
-  ];
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  final List<Map<String, dynamic>> _announcements = [
-    {
-      'title': 'Important: Final Project Submission',
-      'date': 'Nov 25, 2024 • 5:00 PM',
-      'type': 'announcement'
-    },
-    {
-      'title': 'Weekly Meeting Rescheduled',
-      'date': 'Nov 22, 2024 • 3:00 PM',
-      'type': 'announcement'
-    },
-    {
-      'title': 'Career Guidance Session',
-      'date': 'Nov 20, 2024 • 2:00 PM',
-      'type': 'meeting'
-    },
-  ];
+
+  TextEditingController _announcementTitleController = TextEditingController();
+  TextEditingController _announcementDescriptionController = TextEditingController();
+  DateTime _announcementSelectedDate = DateTime.now();
+  TimeOfDay _announcementSelectedTime = TimeOfDay.now();
+
+  TextEditingController _quizTitleController = TextEditingController();
+  TextEditingController _quizDescriptionController = TextEditingController();
+  TextEditingController _quizDueDateController = TextEditingController();
+  List<Map<String, dynamic>> _quizQuestions = [];
+
+  TextEditingController _meetingTitleController = TextEditingController();
+  TextEditingController _meetingVenueController = TextEditingController();
+  DateTime _meetingSelectedDate = DateTime.now();
+  TimeOfDay _meetingSelectedTime = TimeOfDay.now();
+
+  CollectionReference get announcementsRef => _firestore.collection('announcements');
+  CollectionReference get meetingsRef => _firestore.collection('meetings');
+  CollectionReference get quizzesRef => _firestore.collection('quizzes');
+
+  String get currentUserId => _auth.currentUser?.uid ?? '';
+Future <String> getKey(String uid)async {
+  DocumentSnapshot doc= await FirebaseFirestore.instance.collection('users').doc(uid).get();
+  return doc['signkey'];
+}
 
   void _showAddContentDialog() {
     showDialog(
@@ -1064,10 +1191,19 @@ class _MentorHomePageState extends State<MentorHomePage> {
                       Divider(height: 1),
                       ListTile(
                         leading: Icon(Icons.quiz, color: Color(0xFF667eea)),
-                        title: Text('Add Quiz'),
+                        title: Text('Add Register'),
                         onTap: () {
                           Navigator.pop(context);
-                          _showAddQuizDialog();
+                          _showAddRegisterDialog();
+                        },
+                      ),
+                      Divider(height: 1),
+                      ListTile(
+                        leading: Icon(Icons.calendar_today, color: Color(0xFF667eea)),
+                        title: Text('Schedule Meeting'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _showScheduleMeetingDialog();
                         },
                       ),
                     ],
@@ -1080,11 +1216,144 @@ class _MentorHomePageState extends State<MentorHomePage> {
       },
     );
   }
+  void _showAddRegisterDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF667eea),
+                  Color(0xFF764ba2),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Text(
+                    'Generate Register',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.only(
+                      bottomLeft: Radius.circular(16),
+                      bottomRight: Radius.circular(16),
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  side: BorderSide(color: Color(0xFF667eea)),
+                                ),
+                              ),
+                              child: Text(
+                                'Cancel',
+                                style: TextStyle(color: Color(0xFF667eea)),
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                // Simple query without ordering to avoid index requirement
+                                final meetingSnapshot = await FirebaseFirestore.instance
+                                    .collection('meetings')
+                                    .where('mentorId', isEqualTo: currentUserId)
+                                    .get();
 
+                                if (meetingSnapshot.docs.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('No meeting found'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                // Get the first meeting (or manually find latest if needed)
+                                final meeting = meetingSnapshot.docs.first;
+                                final meetingData = meeting.data() as Map<String, dynamic>;
+                                final date = meetingData['date'];
+                                final title = meetingData['title'];
+
+                                // Calculate expiration time (24 hours from now)
+                                final expiresAt = DateTime.now().add(Duration(hours: 24));
+
+                                await FirebaseFirestore.instance.collection('registers').add({
+                                  'question': 'Did you attend "$title" on $date?',
+                                  'options': ['Yes', 'No'],
+                                  'title': title,
+                                  'date': date,
+                                  'mentorId': currentUserId,
+                                  'createdAt': FieldValue.serverTimestamp(),
+                                  'expiresAt': Timestamp.fromDate(expiresAt),
+                                  'attendedStudents': [],
+                                  'attendancePercentage': 0,
+                                });
+
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Register generated - expires in 24 hours'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Color(0xFF667eea),
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: Text('Generate Register'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
   void _showAddAnnouncementDialog() {
-    TextEditingController titleController = TextEditingController();
-    DateTime selectedDate = DateTime.now();
-    TimeOfDay selectedTime = TimeOfDay.now();
+    _announcementTitleController.clear();
+    _announcementDescriptionController.clear();
+    _announcementSelectedDate = DateTime.now();
+    _announcementSelectedTime = TimeOfDay.now();
 
     showDialog(
       context: context,
@@ -1132,7 +1401,7 @@ class _MentorHomePageState extends State<MentorHomePage> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           TextField(
-                            controller: titleController,
+                            controller: _announcementTitleController,
                             decoration: InputDecoration(
                               labelText: 'Announcement Title',
                               border: OutlineInputBorder(
@@ -1141,6 +1410,19 @@ class _MentorHomePageState extends State<MentorHomePage> {
                               filled: true,
                               fillColor: Colors.grey[50],
                             ),
+                          ),
+                          SizedBox(height: 16),
+                          TextField(
+                            controller: _announcementDescriptionController,
+                            decoration: InputDecoration(
+                              labelText: 'Description (Optional)',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              filled: true,
+                              fillColor: Colors.grey[50],
+                            ),
+                            maxLines: 3,
                           ),
                           SizedBox(height: 16),
                           Container(
@@ -1154,32 +1436,32 @@ class _MentorHomePageState extends State<MentorHomePage> {
                               children: [
                                 ListTile(
                                   leading: Icon(Icons.calendar_today, color: Color(0xFF667eea)),
-                                  title: Text('${selectedDate.day}/${selectedDate.month}/${selectedDate.year}'),
+                                  title: Text('${_announcementSelectedDate.day}/${_announcementSelectedDate.month}/${_announcementSelectedDate.year}'),
                                   onTap: () async {
                                     final DateTime? picked = await showDatePicker(
                                       context: context,
-                                      initialDate: selectedDate,
+                                      initialDate: _announcementSelectedDate,
                                       firstDate: DateTime.now(),
                                       lastDate: DateTime(2025),
                                     );
-                                    if (picked != null && picked != selectedDate) {
+                                    if (picked != null && picked != _announcementSelectedDate) {
                                       setState(() {
-                                        selectedDate = picked;
+                                        _announcementSelectedDate = picked;
                                       });
                                     }
                                   },
                                 ),
                                 ListTile(
                                   leading: Icon(Icons.access_time, color: Color(0xFF667eea)),
-                                  title: Text('${selectedTime.format(context)}'),
+                                  title: Text('${_announcementSelectedTime.format(context)}'),
                                   onTap: () async {
                                     final TimeOfDay? picked = await showTimePicker(
                                       context: context,
-                                      initialTime: selectedTime,
+                                      initialTime: _announcementSelectedTime,
                                     );
-                                    if (picked != null && picked != selectedTime) {
+                                    if (picked != null && picked != _announcementSelectedTime) {
                                       setState(() {
-                                        selectedTime = picked;
+                                        _announcementSelectedTime = picked;
                                       });
                                     }
                                   },
@@ -1209,8 +1491,44 @@ class _MentorHomePageState extends State<MentorHomePage> {
                               SizedBox(width: 12),
                               Expanded(
                                 child: ElevatedButton(
-                                  onPressed: () {
-                                    Navigator.pop(context);
+                                  onPressed: () async {
+                                    if (_announcementTitleController.text.isNotEmpty) {
+                                      try {
+                                        final newAnnouncement = {
+                                          'title': _announcementTitleController.text,
+                                          'description': _announcementDescriptionController.text,
+                                          'date': '${_announcementSelectedDate.day}/${_announcementSelectedDate.month}/${_announcementSelectedDate.year} • ${_announcementSelectedTime.format(context)}',
+                                          'type': 'announcement',
+                                          'createdAt': FieldValue.serverTimestamp(),
+                                          'signkey':getKey(currentUserId),
+                                          'createdBy': currentUserId,
+                                        };
+
+                                        await announcementsRef.add(newAnnouncement);
+
+                                        Navigator.pop(context);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Announcement created successfully!'),
+                                            backgroundColor: Colors.green,
+                                          ),
+                                        );
+                                      } catch (e) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Error creating announcement: $e'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                      }
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Please enter a title'),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                    }
                                   },
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Color(0xFF667eea),
@@ -1236,203 +1554,11 @@ class _MentorHomePageState extends State<MentorHomePage> {
       },
     );
   }
-  void _showAddQuizDialog() {
-    TextEditingController titleController = TextEditingController();
-    TextEditingController descriptionController = TextEditingController();
-    TextEditingController dueDateController = TextEditingController();
-    List<Map<String, dynamic>> questions = [];
-    int _currentQuestionIndex = 0;
-
-    void _addQuestion() {
-      TextEditingController questionController = TextEditingController();
-      List<TextEditingController> optionControllers = [
-        TextEditingController(),
-        TextEditingController(),
-        TextEditingController(),
-        TextEditingController(),
-      ];
-
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return StatefulBuilder(
-            builder: (context, setState) {
-              return Dialog(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFF667eea),
-                        Color(0xFF764ba2),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Text(
-                          'Add Question ${questions.length + 1}',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.only(
-                            bottomLeft: Radius.circular(16),
-                            bottomRight: Radius.circular(16),
-                          ),
-                        ),
-                        child: SingleChildScrollView(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              TextField(
-                                controller: questionController,
-                                decoration: InputDecoration(
-                                  labelText: 'Question',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.grey[50],
-                                ),
-                                maxLines: 2,
-                              ),
-                              SizedBox(height: 16),
-                              Text(
-                                'Options:',
-                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[700]),
-                              ),
-                              SizedBox(height: 8),
-                              TextField(
-                                controller: optionControllers[0],
-                                decoration: InputDecoration(
-                                  labelText: 'Option 1',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.grey[50],
-                                ),
-                              ),
-                              SizedBox(height: 8),
-                              TextField(
-                                controller: optionControllers[1],
-                                decoration: InputDecoration(
-                                  labelText: 'Option 2',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.grey[50],
-                                ),
-                              ),
-                              SizedBox(height: 8),
-                              TextField(
-                                controller: optionControllers[2],
-                                decoration: InputDecoration(
-                                  labelText: 'Option 3',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.grey[50],
-                                ),
-                              ),
-                              SizedBox(height: 8),
-                              TextField(
-                                controller: optionControllers[3],
-                                decoration: InputDecoration(
-                                  labelText: 'Option 4',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.grey[50],
-                                ),
-                              ),
-                              SizedBox(height: 20),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      style: TextButton.styleFrom(
-                                        padding: EdgeInsets.symmetric(vertical: 12),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(8),
-                                          side: BorderSide(color: Color(0xFF667eea)),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        'Cancel',
-                                        style: TextStyle(color: Color(0xFF667eea)),
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 12),
-                                  Expanded(
-                                    child: ElevatedButton(
-                                      onPressed: () {
-                                        if (questionController.text.isNotEmpty &&
-                                            optionControllers[0].text.isNotEmpty &&
-                                            optionControllers[1].text.isNotEmpty) {
-                                          questions.add({
-                                            'questionNumber': questions.length + 1,
-                                            'question': questionController.text,
-                                            'options': [
-                                              optionControllers[0].text,
-                                              optionControllers[1].text,
-                                              optionControllers[2].text,
-                                              optionControllers[3].text,
-                                            ]
-                                          });
-                                          Navigator.pop(context);
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text('Question ${questions.length} added successfully'),
-                                              backgroundColor: Colors.green,
-                                            ),
-                                          );
-                                        }
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Color(0xFF667eea),
-                                        padding: EdgeInsets.symmetric(vertical: 12),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                      ),
-                                      child: Text('Add Question'),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      );
-    }
+  void _showScheduleMeetingDialog() {
+    _meetingTitleController.clear();
+    _meetingVenueController.clear();
+    _meetingSelectedDate = DateTime.now();
+    _meetingSelectedTime = TimeOfDay.now();
 
     showDialog(
       context: context,
@@ -1440,6 +1566,7 @@ class _MentorHomePageState extends State<MentorHomePage> {
         return StatefulBuilder(
           builder: (context, setState) {
             return Dialog(
+              insetPadding: EdgeInsets.all(16), // fixes overflow issues
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Container(
                 decoration: BoxDecoration(
@@ -1459,7 +1586,7 @@ class _MentorHomePageState extends State<MentorHomePage> {
                     Padding(
                       padding: const EdgeInsets.all(20),
                       child: Text(
-                        'Create New Quiz',
+                        'Schedule Meeting',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -1467,6 +1594,7 @@ class _MentorHomePageState extends State<MentorHomePage> {
                         ),
                       ),
                     ),
+
                     Container(
                       padding: EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -1480,10 +1608,11 @@ class _MentorHomePageState extends State<MentorHomePage> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            // TITLE
                             TextField(
-                              controller: titleController,
+                              controller: _meetingTitleController,
                               decoration: InputDecoration(
-                                labelText: 'Quiz Title',
+                                labelText: 'Meeting Title',
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
                                 ),
@@ -1491,63 +1620,80 @@ class _MentorHomePageState extends State<MentorHomePage> {
                                 fillColor: Colors.grey[50],
                               ),
                             ),
+
                             SizedBox(height: 16),
+
+                            // VENUE
                             TextField(
-                              controller: descriptionController,
+                              controller: _meetingVenueController,
                               decoration: InputDecoration(
-                                labelText: 'Quiz Description',
+                                labelText: 'Venue',
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 filled: true,
                                 fillColor: Colors.grey[50],
                               ),
-                              maxLines: 3,
                             ),
+
                             SizedBox(height: 16),
-                            TextField(
-                              controller: dueDateController,
-                              decoration: InputDecoration(
-                                labelText: 'Due Date (e.g., Dec 15, 2024)',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                filled: true,
-                                fillColor: Colors.grey[50],
+
+                            // DATE + TIME PICKERS
+                            Container(
+                              padding: EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[50],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey[300]!),
+                              ),
+                              child: Column(
+                                children: [
+                                  // DATE PICKER
+                                  ListTile(
+                                    leading: Icon(Icons.calendar_today, color: Color(0xFF667eea)),
+                                    title: Text(
+                                        '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year}'
+                                    ),
+                                    onTap: () async {
+                                      final DateTime? picked = await showDatePicker(
+                                        context: context, // FIXED
+                                        initialDate: _meetingSelectedDate,
+                                        firstDate: DateTime.now(),
+                                        lastDate: DateTime(2100), // FIXED (was 2025)
+                                      );
+
+                                      if (picked != null) {
+                                        setState(() => _meetingSelectedDate = picked);
+                                      }
+                                    },
+                                  ),
+
+                                  // TIME PICKER
+                                  ListTile(
+                                    leading: Icon(Icons.access_time, color: Color(0xFF667eea)),
+                                    title: Text(_meetingSelectedTime.format(context)),
+                                    onTap: () async {
+                                      final TimeOfDay? picked = await showTimePicker(
+                                        context: context, // FIXED
+                                        initialTime: _meetingSelectedTime,
+                                      );
+
+                                      if (picked != null) {
+                                        setState(() => _meetingSelectedTime = picked);
+                                      }
+                                    },
+                                  ),
+                                ],
                               ),
                             ),
+
                             SizedBox(height: 20),
-                            if (questions.isNotEmpty) ...[
-                              Text(
-                                'Questions Added: ${questions.length}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green,
-                                ),
-                              ),
-                              SizedBox(height: 16),
-                            ],
-                            ElevatedButton.icon(
-                              onPressed: _addQuestion,
-                              icon: Icon(Icons.add, size: 18),
-                              label: Text('Add Question'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Color(0xFF667eea),
-                                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: 20),
+
                             Row(
                               children: [
                                 Expanded(
                                   child: TextButton(
-                                    onPressed: () {
-                                      questions.clear();
-                                      Navigator.pop(context);
-                                    },
+                                    onPressed: () => Navigator.pop(context),
                                     style: TextButton.styleFrom(
                                       padding: EdgeInsets.symmetric(vertical: 12),
                                       shape: RoundedRectangleBorder(
@@ -1561,37 +1707,76 @@ class _MentorHomePageState extends State<MentorHomePage> {
                                     ),
                                   ),
                                 ),
+
                                 SizedBox(width: 12),
+
                                 Expanded(
                                   child: ElevatedButton(
-                                    onPressed: () {
-                                      if (titleController.text.isNotEmpty &&
-                                          descriptionController.text.isNotEmpty &&
-                                          dueDateController.text.isNotEmpty &&
-                                          questions.isNotEmpty) {
-                                        // Create the quiz in the format mentees expect
-                                        final newQuiz = {
-                                          'id': DateTime.now().millisecondsSinceEpoch.toString(),
-                                          'title': titleController.text,
-                                          'dueDate': 'Due: ${dueDateController.text}',
-                                          'description': descriptionController.text,
-                                          'questions': questions,
-                                          'completed': false
-                                        };
-
-                                        // Here you would save the quiz to your database
-                                        // For now, we'll just show a success message
-                                        Navigator.pop(context);
+                                    onPressed: () async {
+                                      if (_meetingTitleController.text.isEmpty ||
+                                          _meetingVenueController.text.isEmpty) {
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(
-                                            content: Text('Quiz "${titleController.text}" created successfully!'),
+                                            content: Text('Please fill all fields'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                        return;
+                                      }
+
+                                      try {
+                                        // GET MENTOR SIGNKEY
+                                        final signkey = await getKey(currentUserId);
+
+                                        // GET MENTEES COUNT
+                                        final menteesSnapshot = await FirebaseFirestore.instance
+                                            .collection('users')
+                                            .where('role', isEqualTo: 'mentee')
+                                            .where('mentor_id', isEqualTo: currentUserId)
+                                            .get();
+
+                                        int totalMentees = menteesSnapshot.docs.length;
+
+                                        // SAVE MEETING
+                                        await meetingsRef.add({
+                                          'title': _meetingTitleController.text,
+                                          'venue': _meetingVenueController.text,
+                                          'date': '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year}',
+                                          'time': _meetingSelectedTime.format(context),
+                                          'dateTime': Timestamp.fromDate(_meetingSelectedDate),
+                                          'createdAt': FieldValue.serverTimestamp(),
+                                          'createdBy': currentUserId,
+                                          'signkey': signkey,
+                                          'mentorId': currentUserId,
+                                          'attendedStudents': [],
+                                          'totalMentees': totalMentees,
+                                          'attendancePercentage': 0.0,
+                                        });
+
+                                        // ANNOUNCEMENT
+                                        await announcementsRef.add({
+                                          'title': _meetingTitleController.text,
+                                          'date': '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year} • ${_meetingSelectedTime.format(context)}',
+                                          'type': 'meeting',
+                                          'venue': _meetingVenueController.text,
+                                          'createdAt': FieldValue.serverTimestamp(),
+                                          'createdBy': currentUserId,
+                                          'signkey': signkey,
+                                        });
+
+                                        Navigator.pop(context);
+
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Meeting scheduled successfully!'),
                                             backgroundColor: Colors.green,
                                           ),
                                         );
-                                      } else {
+
+                                      } catch (e) {
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(
-                                            content: Text('Please fill all fields and add at least one question'),
+                                            content: Text('Error scheduling meeting: $e'),
                                             backgroundColor: Colors.red,
                                           ),
                                         );
@@ -1604,7 +1789,7 @@ class _MentorHomePageState extends State<MentorHomePage> {
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                     ),
-                                    child: Text('Create Quiz'),
+                                    child: Text('Schedule Meeting'),
                                   ),
                                 ),
                               ],
@@ -1676,35 +1861,63 @@ class _MentorHomePageState extends State<MentorHomePage> {
                       topRight: Radius.circular(20),
                     ),
                   ),
-                  child: ListView.builder(
-                    padding: EdgeInsets.all(16),
-                    itemCount: _previousMeetings.length,
-                    itemBuilder: (context, index) {
-                      final meeting = _previousMeetings[index];
-                      return Card(
-                        elevation: 2,
-                        margin: EdgeInsets.only(bottom: 12),
-                        child: ListTile(
-                          leading: Icon(Icons.groups, color: Color(0xFF667eea)),
-                          title: Text('Weekly Meeting'),
-                          subtitle: Text('${meeting['date']} • ${meeting['time']}'),
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                meeting['attendance'],
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF667eea),
-                                ),
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: meetingsRef
+                        .where('createdBy', isEqualTo: currentUserId)
+                        .orderBy('dateTime', descending: true)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return Center(child: Text('Error: ${snapshot.error}'));
+                      }
+
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return Center(child: CircularProgressIndicator());
+                      }
+
+                      final meetings = snapshot.data!.docs;
+
+                      if (meetings.isEmpty) {
+                        return Center(child: Text('No meetings found'));
+                      }
+
+                      return ListView.builder(
+                        padding: EdgeInsets.all(16),
+                        itemCount: meetings.length,
+                        itemBuilder: (context, index) {
+                          final meeting = meetings[index];
+                          final data = meeting.data() as Map<String, dynamic>;
+
+                          final attendedCount = (data['attendedStudents'] as List?)?.length ?? 0;
+                          final totalMentees = data['totalMentees'] ?? 15;
+                          final percentage = data['attendancePercentage'] ?? 0.0;
+
+                          return Card(
+                            elevation: 2,
+                            margin: EdgeInsets.only(bottom: 12),
+                            child: ListTile(
+                              leading: Icon(Icons.groups, color: Color(0xFF667eea)),
+                              title: Text(data['title'] ?? 'Meeting'),
+                              subtitle: Text('${data['date']} • ${data['time']}'),
+                              trailing: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    '${percentage.toStringAsFixed(1)}%',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF667eea),
+                                    ),
+                                  ),
+                                  Text(
+                                    '$attendedCount/$totalMentees',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                ],
                               ),
-                              Text(
-                                '${meeting['attended']}/${meeting['total']}',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                            ],
-                          ),
-                        ),
+                            ),
+                          );
+                        },
                       );
                     },
                   ),
@@ -1847,99 +2060,180 @@ class _MentorHomePageState extends State<MentorHomePage> {
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Latest Meeting Attendance',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: _showAttendanceReport,
-                      child: Text(
-                        'View Report',
-                        style: TextStyle(
-                          color: Color(0xFF667eea),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 16),
-                Row(
-                  children: [
-                    Container(
-                      padding: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Color(0xFF667eea).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '80%',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF667eea),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+          // Latest Meeting Attendance Card
+          StreamBuilder<QuerySnapshot>(
+            stream: meetingsRef
+                .where('createdBy', isEqualTo: currentUserId)
+                .orderBy('dateTime', descending: true)
+                .limit(1)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text('Error loading meeting data'),
+                );
+              }
+
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              final meetings = snapshot.data!.docs;
+              if (meetings.isEmpty) {
+                return Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Weekly Check-in',
+                            'Latest Meeting Attendance',
                             style: TextStyle(
                               fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey[800],
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Nov 20, 2024 • 2:00 PM',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          Text(
-                            '12/15 Mentees attended',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[600],
+                          TextButton(
+                            onPressed: _showAttendanceReport,
+                            child: Text(
+                              'View Report',
+                              style: TextStyle(
+                                color: Color(0xFF667eea),
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],
                       ),
+                      SizedBox(height: 16),
+                      Text('No meetings scheduled yet'),
+                    ],
+                  ),
+                );
+              }
+
+              final meeting = meetings.first;
+              final data = meeting.data() as Map<String, dynamic>;
+              final attendedCount = (data['attendedStudents'] as List?)?.length ?? 0;
+              final totalMentees = data['totalMentees'] ?? 15;
+              final percentage = data['attendancePercentage'] ?? 0.0;
+
+              return Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
-              ],
-            ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Latest Meeting Attendance',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _showAttendanceReport,
+                          child: Text(
+                            'View Report',
+                            style: TextStyle(
+                              color: Color(0xFF667eea),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Container(
+                          padding: EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Color(0xFF667eea).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${percentage.toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF667eea),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                data['title'] ?? 'Meeting',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey[800],
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                '${data['date']} • ${data['time']}',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              Text(
+                                '$attendedCount/$totalMentees Mentees attended',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
+
           SizedBox(height: 20),
+
+          // Announcements & Upcoming Meetings Card
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -1965,59 +2259,97 @@ class _MentorHomePageState extends State<MentorHomePage> {
                   ),
                 ),
                 SizedBox(height: 16),
-                ..._announcements.map((announcement) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[200]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Color(0xFF667eea).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            announcement['type'] == 'meeting'
-                                ? Icons.groups
-                                : Icons.announcement,
-                            color: Color(0xFF667eea),
-                            size: 20,
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                announcement['title'],
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey[800],
+                StreamBuilder<QuerySnapshot>(
+                  stream: announcementsRef
+                      .where('createdBy', isEqualTo: currentUserId)
+                      .orderBy('createdAt', descending: true)
+                      .limit(5)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Text('Error loading announcements');
+                    }
+
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(child: CircularProgressIndicator());
+                    }
+
+                    final announcements = snapshot.data!.docs;
+
+                    if (announcements.isEmpty) {
+                      return Text('No announcements yet');
+                    }
+
+                    return Column(
+                      children: announcements.map((doc) {
+                        final announcement = doc.data() as Map<String, dynamic>;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[50],
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey[200]!),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Color(0xFF667eea).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    announcement['type'] == 'meeting'
+                                        ? Icons.groups
+                                        : Icons.announcement,
+                                    color: Color(0xFF667eea),
+                                    size: 20,
+                                  ),
                                 ),
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                announcement['date'],
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        announcement['title'],
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.grey[800],
+                                        ),
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        announcement['date'],
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                      if (announcement['venue'] != null) ...[
+                                        SizedBox(height: 2),
+                                        Text(
+                                          'Venue: ${announcement['venue']}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )).toList(),
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -2025,16 +2357,13 @@ class _MentorHomePageState extends State<MentorHomePage> {
       ),
     );
   }
-
 }
-
 class SuggestionsPage extends StatefulWidget {
   const SuggestionsPage({super.key});
 
   @override
   State<SuggestionsPage> createState() => _SuggestionsPageState();
 }
-
 class _SuggestionsPageState extends State<SuggestionsPage> {
   final List<Map<String, dynamic>> _aiSuggestions = [
     {
@@ -2367,14 +2696,12 @@ class _SuggestionsPageState extends State<SuggestionsPage> {
     );
   }
 }
-
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
 
   @override
   State<CalendarPage> createState() => _CalendarPageState();
 }
-
 class _CalendarPageState extends State<CalendarPage> {
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
@@ -2558,22 +2885,45 @@ class _CalendarPageState extends State<CalendarPage> {
       },
     );
   }
+  @override
+  void initState() {
+    super.initState();
+    _loadEventsFromFirebase();
+  }
 
-  void _addEvent(DateTime date, String title, String description, TimeOfDay? time) {
+  void _addEvent(DateTime date, String title, String description, TimeOfDay? time) async {
+    DateTime finalDateTime = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time?.hour ?? 0,
+      time?.minute ?? 0,
+    );
+
     final event = {
       'title': title,
       'description': description,
-      'time': time,
+      'dateTime': finalDateTime,
+      'uid': FirebaseAuth.instance.currentUser!.uid,
     };
 
-    setState(() {
-      DateTime dateOnly = DateTime(date.year, date.month, date.day);
-      if (_events[dateOnly] == null) {
-        _events[dateOnly] = [event];
-      } else {
-        _events[dateOnly]!.add(event);
-      }
-    });
+    try {
+      await FirebaseFirestore.instance
+          .collection('events')
+          .add(event);
+
+      Fluttertoast.showToast(
+        msg: "Event added successfully",
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM,
+      );
+    } catch (e) {
+      Fluttertoast.showToast(
+        msg: "Failed to add event: $e",
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM,
+      );
+    }
   }
 
   void _showEventDetails(DateTime date, Map<String, dynamic> event) {
@@ -2680,12 +3030,39 @@ class _CalendarPageState extends State<CalendarPage> {
       },
     );
   }
-
   List<Map<String, dynamic>> _getEventsForDay(DateTime day) {
     DateTime dateOnly = DateTime(day.year, day.month, day.day);
     return _events[dateOnly] ?? [];
   }
 
+  void _loadEventsFromFirebase() async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    FirebaseFirestore.instance
+        .collection('events')
+        .where('uid', isEqualTo: uid)
+        .snapshots()
+        .listen((snapshot) {
+      Map<DateTime, List<Map<String, dynamic>>> newEvents = {};
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final DateTime dt = (data['dateTime'] as Timestamp).toDate();
+
+        DateTime dayOnly = DateTime(dt.year, dt.month, dt.day);
+
+        if (newEvents[dayOnly] == null) {
+          newEvents[dayOnly] = [data];
+        } else {
+          newEvents[dayOnly]!.add(data);
+        }
+      }
+
+      setState(() {
+        _events = newEvents;
+      });
+    });
+  }
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -2884,81 +3261,129 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 }
-
 class MenteesPage extends StatefulWidget {
   const MenteesPage({super.key});
 
   @override
   State<MenteesPage> createState() => _MenteesPageState();
 }
-
 class _MenteesPageState extends State<MenteesPage> {
-  final List<Map<String, dynamic>> _mentees = [
-    {
-      'name': 'John',
-      'surname': 'Smith',
-      'studentNumber': 'STU001',
-      'profileImage': 'https://via.placeholder.com/100',
-      'attendance': 85,
-      'totalMeetings': 12,
-      'attendedMeetings': 10,
-      'meetings': [
-        {'date': 'Nov 20, 2024', 'time': '2:00 PM', 'attended': true},
-        {'date': 'Nov 13, 2024', 'time': '2:00 PM', 'attended': true},
-        {'date': 'Nov 06, 2024', 'time': '2:00 PM', 'attended': false},
-        {'date': 'Oct 30, 2024', 'time': '2:00 PM', 'attended': true},
-        {'date': 'Oct 23, 2024', 'time': '2:00 PM', 'attended': true},
-      ]
-    },
-    {
-      'name': 'Sarah',
-      'surname': 'Johnson',
-      'studentNumber': 'STU002',
-      'profileImage': 'https://via.placeholder.com/100',
-      'attendance': 92,
-      'totalMeetings': 12,
-      'attendedMeetings': 11,
-      'meetings': [
-        {'date': 'Nov 20, 2024', 'time': '2:00 PM', 'attended': true},
-        {'date': 'Nov 13, 2024', 'time': '2:00 PM', 'attended': true},
-        {'date': 'Nov 06, 2024', 'time': '2:00 PM', 'attended': true},
-        {'date': 'Oct 30, 2024', 'time': '2:00 PM', 'attended': true},
-        {'date': 'Oct 23, 2024', 'time': '2:00 PM', 'attended': false},
-      ]
-    },
-    {
-      'name': 'Michael',
-      'surname': 'Brown',
-      'studentNumber': 'STU003',
-      'profileImage': 'https://via.placeholder.com/100',
-      'attendance': 75,
-      'totalMeetings': 12,
-      'attendedMeetings': 9,
-      'meetings': [
-        {'date': 'Nov 20, 2024', 'time': '2:00 PM', 'attended': true},
-        {'date': 'Nov 13, 2024', 'time': '2:00 PM', 'attended': false},
-        {'date': 'Nov 06, 2024', 'time': '2:00 PM', 'attended': true},
-        {'date': 'Oct 30, 2024', 'time': '2:00 PM', 'attended': false},
-        {'date': 'Oct 23, 2024', 'time': '2:00 PM', 'attended': true},
-      ]
-    },
-    {
-      'name': 'Emily',
-      'surname': 'Davis',
-      'studentNumber': 'STU004',
-      'profileImage': 'https://via.placeholder.com/100',
-      'attendance': 100,
-      'totalMeetings': 12,
-      'attendedMeetings': 12,
-      'meetings': [
-        {'date': 'Nov 20, 2024', 'time': '2:00 PM', 'attended': true},
-        {'date': 'Nov 13, 2024', 'time': '2:00 PM', 'attended': true},
-        {'date': 'Nov 06, 2024', 'time': '2:00 PM', 'attended': true},
-        {'date': 'Oct 30, 2024', 'time': '2:00 PM', 'attended': true},
-        {'date': 'Oct 23, 2024', 'time': '2:00 PM', 'attended': true},
-      ]
-    },
-  ];
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  CollectionReference get usersRef => _firestore.collection('users');
+  CollectionReference get meetingsRef => _firestore.collection('meetings');
+
+  String get currentUserId => _auth.currentUser?.uid ?? '';
+
+  List<Map<String, dynamic>> _menteesWithAttendance = [];
+  bool _isLoading = true;
+  String _errorMessage = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMenteesWithAttendance();
+  }
+
+  Future<void> _loadMenteesWithAttendance() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
+
+      print('Loading mentees for mentor: $currentUserId');
+
+      // Get all mentees assigned to this mentor using mentor_id
+      final menteesSnapshot = await usersRef
+          .where('role', isEqualTo: 'mentee')
+          .where('mentor_id', isEqualTo: currentUserId)
+          .get();
+
+      print('Found ${menteesSnapshot.docs.length} mentees');
+
+      // Get all meetings for this mentor
+      final meetingsSnapshot = await meetingsRef
+          .where('mentorId', isEqualTo: currentUserId)
+          .get();
+
+      print('Found ${meetingsSnapshot.docs.length} meetings');
+
+      List<Map<String, dynamic>> menteesData = [];
+
+      for (var menteeDoc in menteesSnapshot.docs) {
+        final mentee = menteeDoc.data() as Map<String, dynamic>;
+        final menteeId = menteeDoc.id;
+
+        print('Processing mentee: ${mentee['fName']} ${mentee['lName']}');
+
+        // Calculate attendance for this mentee
+        final attendanceData = await _calculateMenteeAttendance(menteeId, meetingsSnapshot.docs);
+
+        menteesData.add({
+          'id': menteeId,
+          'name': mentee['fName'] ?? '',
+          'surname': mentee['lName'] ?? '',
+          'studentNumber': mentee['studentNo'] ?? '',
+          'email': mentee['email'] ?? '',
+          'profileImage': mentee['profile'] ?? 'https://via.placeholder.com/100',
+          ...attendanceData,
+        });
+      }
+
+      setState(() {
+        _menteesWithAttendance = menteesData;
+        _isLoading = false;
+      });
+
+    } catch (e) {
+      print('Error loading mentees: $e');
+      setState(() {
+        _errorMessage = 'Error loading mentees: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<Map<String, dynamic>> _calculateMenteeAttendance(
+      String menteeId, List<QueryDocumentSnapshot> meetings) async {
+
+    List<Map<String, dynamic>> meetingHistory = [];
+    int attendedCount = 0;
+    int totalMeetings = meetings.length;
+
+    for (var meetingDoc in meetings) {
+      final meeting = meetingDoc.data() as Map<String, dynamic>;
+      final attendedStudents = List.from(meeting['attendedStudents'] ?? []);
+      final attended = attendedStudents.contains(menteeId);
+
+      if (attended) attendedCount++;
+
+      meetingHistory.add({
+        'date': meeting['date'] ?? 'Unknown Date',
+        'time': meeting['time'] ?? 'Unknown Time',
+        'attended': attended,
+        'meetingTitle': meeting['title'] ?? 'Weekly Meeting',
+        'venue': meeting['venue'] ?? '',
+      });
+    }
+
+    // Sort meetings by date (newest first)
+    meetingHistory.sort((a, b) => b['date'].compareTo(a['date']));
+
+    final attendancePercentage = totalMeetings > 0
+        ? ((attendedCount / totalMeetings) * 100).round()
+        : 0;
+
+    return {
+      'attendance': attendancePercentage,
+      'totalMeetings': totalMeetings,
+      'attendedMeetings': attendedCount,
+      'meetings': meetingHistory,
+    };
+  }
+
 
   void _showMenteeReport(Map<String, dynamic> mentee) {
     showModalBottomSheet(
@@ -2967,7 +3392,7 @@ class _MenteesPageState extends State<MenteesPage> {
       backgroundColor: Colors.transparent,
       builder: (context) {
         return Container(
-          height: MediaQuery.of(context).size.height * 0.8,
+          height: MediaQuery.of(context).size.height * 0.9,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
@@ -2989,12 +3414,15 @@ class _MenteesPageState extends State<MenteesPage> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      '${mentee['name']} ${mentee['surname']} - Attendance Report',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                    Expanded(
+                      child: Text(
+                        '${mentee['name']} ${mentee['surname']} - Attendance Report',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        maxLines: 2,
                       ),
                     ),
                     IconButton(
@@ -3013,99 +3441,195 @@ class _MenteesPageState extends State<MenteesPage> {
                       topRight: Radius.circular(20),
                     ),
                   ),
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(16),
+                  child: DefaultTabController(
+                    length: 2,
                     child: Column(
                       children: [
-                        Container(
-                          padding: EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[50],
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.grey[200]!),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        TabBar(
+                          labelColor: Color(0xFF667eea),
+                          unselectedLabelColor: Colors.grey,
+                          tabs: [
+                            Tab(text: 'Overview'),
+
+                          ],
+                        ),
+                        Expanded(
+                          child: TabBarView(
                             children: [
-                              Column(
-                                children: [
-                                  Text(
-                                    '${mentee['attendance']}%',
-                                    style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF667eea),
+                              // Overview Tab
+                              SingleChildScrollView(
+                                padding: EdgeInsets.all(16),
+                                child: Column(
+                                  children: [
+                                    // Student Info
+                                    Container(
+                                      padding: EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[50],
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.grey[300]!),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 30,
+                                            backgroundImage: NetworkImage(mentee['profileImage']),
+                                            backgroundColor: Colors.grey[200],
+                                          ),
+                                          SizedBox(width: 16),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  '${mentee['name']} ${mentee['surname']}',
+                                                  style: TextStyle(
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.grey[800],
+                                                  ),
+                                                ),
+                                                SizedBox(height: 4),
+                                                Text(
+                                                  'Student No: ${mentee['studentNumber']}',
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    color: Colors.grey[600],
+                                                  ),
+                                                ),
+                                                if (mentee['email'] != null && mentee['email'].isNotEmpty)
+                                                  Text(
+                                                    'Email: ${mentee['email']}',
+                                                    style: TextStyle(
+                                                      fontSize: 14,
+                                                      color: Colors.grey[600],
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  Text(
-                                    'Attendance',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.grey[600],
+                                    SizedBox(height: 20),
+
+                                    // Attendance Stats
+                                    Container(
+                                      padding: EdgeInsets.all(20),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey[50],
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(color: Colors.grey[200]!),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                        children: [
+                                          Column(
+                                            children: [
+                                              Text(
+                                                '${mentee['attendance']}%',
+                                                style: TextStyle(
+                                                  fontSize: 24,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Color(0xFF667eea),
+                                                ),
+                                              ),
+                                              Text(
+                                                'Attendance',
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  color: Colors.grey[600],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          Column(
+                                            children: [
+                                              Text(
+                                                '${mentee['attendedMeetings']}/${mentee['totalMeetings']}',
+                                                style: TextStyle(
+                                                  fontSize: 24,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Color(0xFF667eea),
+                                                ),
+                                              ),
+                                              Text(
+                                                'Meetings Attended',
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  color: Colors.grey[600],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                ],
+
+                                    SizedBox(height: 20),
+                                    Text(
+                                      'Meeting History',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.grey[800],
+                                      ),
+                                    ),
+                                    SizedBox(height: 16),
+
+                                    if (mentee['meetings'].isEmpty)
+                                      Text(
+                                        'No meetings found',
+                                        style: TextStyle(
+                                          color: Colors.grey[500],
+                                          fontSize: 16,
+                                        ),
+                                      )
+                                    else
+                                      ...mentee['meetings'].map((meeting) => Card(
+                                        margin: EdgeInsets.only(bottom: 8),
+                                        child: ListTile(
+                                          leading: Container(
+                                            padding: EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: meeting['attended']
+                                                  ? Colors.green.withOpacity(0.2)
+                                                  : Colors.red.withOpacity(0.2),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Icon(
+                                              meeting['attended'] ? Icons.check : Icons.close,
+                                              color: meeting['attended'] ? Colors.green : Colors.red,
+                                              size: 20,
+                                            ),
+                                          ),
+                                          title: Text(meeting['meetingTitle']),
+                                          subtitle: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text('${meeting['date']} • ${meeting['time']}'),
+                                              if (meeting['venue'] != null && meeting['venue'].isNotEmpty)
+                                                Text('Venue: ${meeting['venue']}'),
+                                            ],
+                                          ),
+                                          trailing: Text(
+                                            meeting['attended'] ? 'Present' : 'Absent',
+                                            style: TextStyle(
+                                              color: meeting['attended'] ? Colors.green : Colors.red,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                      )).toList(),
+                                  ],
+                                ),
                               ),
-                              Column(
-                                children: [
-                                  Text(
-                                    '${mentee['attendedMeetings']}/${mentee['totalMeetings']}',
-                                    style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF667eea),
-                                    ),
-                                  ),
-                                  Text(
-                                    'Meetings Attended',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ],
-                              ),
+
+
+
                             ],
                           ),
                         ),
-                        SizedBox(height: 20),
-                        Text(
-                          'Meeting History',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[800],
-                          ),
-                        ),
-                        SizedBox(height: 16),
-                        ...mentee['meetings'].map((meeting) => Card(
-                          margin: EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            leading: Container(
-                              padding: EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: meeting['attended']
-                                    ? Colors.green.withOpacity(0.2)
-                                    : Colors.red.withOpacity(0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                meeting['attended'] ? Icons.check : Icons.close,
-                                color: meeting['attended'] ? Colors.green : Colors.red,
-                                size: 20,
-                              ),
-                            ),
-                            title: Text('Weekly Meeting'),
-                            subtitle: Text('${meeting['date']} • ${meeting['time']}'),
-                            trailing: Text(
-                              meeting['attended'] ? 'Present' : 'Absent',
-                              style: TextStyle(
-                                color: meeting['attended'] ? Colors.green : Colors.red,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        )).toList(),
                       ],
                     ),
                   ),
@@ -3156,7 +3680,74 @@ class _MenteesPageState extends State<MenteesPage> {
                     topRight: Radius.circular(20),
                   ),
                 ),
-                child: SingleChildScrollView(
+                child: _isLoading
+                    ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text(
+                        'Loading mentees...',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+                    : _errorMessage.isNotEmpty
+                    ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
+                      SizedBox(height: 16),
+                      Text(
+                        _errorMessage,
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 16,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _loadMenteesWithAttendance,
+                        child: Text('Retry'),
+                      ),
+                    ],
+                  ),
+                )
+                    : _menteesWithAttendance.isEmpty
+                    ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
+                      SizedBox(height: 16),
+                      Text(
+                        'No mentees assigned yet',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Mentees will appear here once they sign up\nusing your sign key',
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 14,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                )
+                    : SingleChildScrollView(
                   padding: EdgeInsets.all(16),
                   child: Column(
                     children: [
@@ -3179,7 +3770,7 @@ class _MenteesPageState extends State<MenteesPage> {
                             SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Tap on any mentee to view their attendance report',
+                                'Tap on any mentee to view their attendance report and mark attendance',
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: Colors.grey[600],
@@ -3190,7 +3781,7 @@ class _MenteesPageState extends State<MenteesPage> {
                         ),
                       ),
                       SizedBox(height: 20),
-                      ..._mentees.map((mentee) => Card(
+                      ..._menteesWithAttendance.map((mentee) => Card(
                         margin: EdgeInsets.only(bottom: 16),
                         elevation: 2,
                         child: ListTile(
@@ -3262,67 +3853,44 @@ class _MenteesPageState extends State<MenteesPage> {
     return Colors.red;
   }
 }
-
 class MenteeHomePage extends StatefulWidget {
   const MenteeHomePage({super.key});
 
   @override
   State<MenteeHomePage> createState() => _MenteeHomePageState();
 }
-
 class _MenteeHomePageState extends State<MenteeHomePage> {
   int _currentIndex = 0;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  final List<Map<String, dynamic>> _announcements = [
-    {
-      'title': 'Important: Final Project Submission',
-      'date': 'Nov 25, 2024 • 5:00 PM',
-      'type': 'announcement',
-      'description': 'Please submit your final projects by the deadline. Late submissions will not be accepted.'
-    },
-    {
-      'title': 'Weekly Meeting Rescheduled',
-      'date': 'Nov 22, 2024 • 3:00 PM',
-      'type': 'meeting',
-      'description': 'This week\'s meeting has been moved to 3:00 PM. Please update your calendars.'
-    },
-    {
-      'title': 'Career Guidance Session',
-      'date': 'Nov 20, 2024 • 2:00 PM',
-      'type': 'meeting',
-      'description': 'Join us for a career guidance session with industry professionals.'
-    },
-  ];
+  String _menteeSignKey = '';
+  String _mentorId = '';
 
-  final List<Map<String, dynamic>> _upcomingMeetings = [
-    {
-      'title': 'Weekly Check-in',
-      'date': 'Nov 27, 2024 • 2:00 PM',
-      'location': 'Room 302',
-      'mentor': 'Dr. Johnson'
-    },
-    {
-      'title': 'Study Techniques Workshop',
-      'date': 'Nov 29, 2024 • 1:00 PM',
-      'location': 'Library Study Room',
-      'mentor': 'Ms. Davis'
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadMenteeData();
+  }
 
-  final List<Map<String, dynamic>> _pendingQuizzes = [
-    {
-      'title': 'Study Habits Assessment',
-      'dueDate': 'Nov 26, 2024',
-      'questions': 5,
-      'completed': false
-    },
-    {
-      'title': 'Career Interests Survey',
-      'dueDate': 'Dec 01, 2024',
-      'questions': 8,
-      'completed': true
-    },
-  ];
+  Future<void> _loadMenteeData() async {
+    try {
+      final userDoc = await _firestore.collection('users').doc(_auth.currentUser!.uid).get();
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>;
+        setState(() {
+          _menteeSignKey = userData['signkey'] ?? '';
+          _mentorId = userData['mentor_id'] ?? '';
+        });
+      }
+    } catch (e) {
+      print('Error loading mentee data: $e');
+    }
+  }
+
+  CollectionReference get announcementsRef => _firestore.collection('announcements');
+  CollectionReference get meetingsRef => _firestore.collection('meetings');
+  CollectionReference get registersRef => _firestore.collection('registers');
 
   @override
   Widget build(BuildContext context) {
@@ -3413,8 +3981,8 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
               label: 'Home',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.quiz),
-              label: 'Quizzes',
+              icon: Icon(Icons.assignment),
+              label: 'Register',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.calendar_today),
@@ -3435,7 +4003,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
       case 0:
         return _buildHomeContent();
       case 1:
-        return QuizzesPage();
+        return _buildRegistersContent();
       case 2:
         return CalendarPage();
       case 3:
@@ -3450,6 +4018,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
+          // Today's Overview Card
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -3481,18 +4050,21 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                   ],
                 ),
                 SizedBox(height: 16),
+                // Simplified stats without complex queries
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildStatCard('Upcoming\nMeetings', '2', Icons.event),
-                    _buildStatCard('Pending\nQuizzes', '1', Icons.quiz),
-                    _buildStatCard('New\nAnnouncements', '3', Icons.announcement),
+                    _buildStatCard('Active\nRegisters', 'Check', Icons.assignment),
+                    _buildStatCard('Upcoming\nMeetings', 'View', Icons.event),
+                    _buildStatCard('Latest\nNews', 'See', Icons.announcement),
                   ],
                 ),
               ],
             ),
           ),
           SizedBox(height: 20),
+
+          // Latest Announcements Card - SIMPLIFIED QUERY
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -3524,75 +4096,128 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                   ],
                 ),
                 SizedBox(height: 16),
-                ..._announcements.map((announcement) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[200]!),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Color(0xFF667eea).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                announcement['type'] == 'meeting'
-                                    ? Icons.groups
-                                    : Icons.announcement,
-                                color: Color(0xFF667eea),
-                                size: 20,
-                              ),
+                StreamBuilder<QuerySnapshot>(
+                  stream: announcementsRef.snapshots(), // Simple query without filters
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Text('Error loading announcements');
+                    }
+
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(child: CircularProgressIndicator());
+                    }
+
+                    final allAnnouncements = snapshot.data!.docs;
+
+                    // Filter locally by signkey
+                    final announcements = allAnnouncements.where((doc) {
+                      final announcement = doc.data() as Map<String, dynamic>;
+                      return announcement['signkey'] == _menteeSignKey;
+                    }).toList();
+
+                    if (announcements.isEmpty) {
+                      return Text('No announcements yet');
+                    }
+
+                    // Sort locally by createdAt
+                    announcements.sort((a, b) {
+                      final aTime = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+                      final bTime = (b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+                      return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
+                    });
+
+                    final recentAnnouncements = announcements.take(5).toList();
+
+                    return Column(
+                      children: recentAnnouncements.map((doc) {
+                        final announcement = doc.data() as Map<String, dynamic>;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[50],
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey[200]!),
                             ),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Color(0xFF667eea).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Icon(
+                                        announcement['type'] == 'meeting'
+                                            ? Icons.groups
+                                            : Icons.announcement,
+                                        color: Color(0xFF667eea),
+                                        size: 20,
+                                      ),
+                                    ),
+                                    SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            announcement['title'] ?? 'No Title',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.grey[800],
+                                            ),
+                                          ),
+                                          Text(
+                                            announcement['date'] ?? '',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (announcement['description'] != null) ...[
+                                  SizedBox(height: 8),
                                   Text(
-                                    announcement['title'],
+                                    announcement['description'],
                                     style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.grey[800],
+                                      fontSize: 13,
+                                      color: Colors.grey[700],
                                     ),
                                   ),
+                                ],
+                                if (announcement['venue'] != null) ...[
+                                  SizedBox(height: 4),
                                   Text(
-                                    announcement['date'],
+                                    'Venue: ${announcement['venue']}',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.grey[600],
                                     ),
                                   ),
                                 ],
-                              ),
+                              ],
                             ),
-                          ],
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          announcement['description'],
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[700],
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )).toList(),
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
               ],
             ),
           ),
           SizedBox(height: 20),
+
+          // Upcoming Meetings Card - SIMPLIFIED QUERY
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -3624,63 +4249,106 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                   ],
                 ),
                 SizedBox(height: 16),
-                ..._upcomingMeetings.map((meeting) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey[200]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Color(0xFF667eea).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            Icons.groups,
-                            color: Color(0xFF667eea),
-                            size: 20,
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                meeting['title'],
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey[800],
+                StreamBuilder<QuerySnapshot>(
+                  stream: meetingsRef.snapshots(), // Simple query without filters
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Text('Error loading meetings');
+                    }
+
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(child: CircularProgressIndicator());
+                    }
+
+                    final allMeetings = snapshot.data!.docs;
+
+                    // Filter locally by mentorId and future dates
+                    final meetings = allMeetings.where((doc) {
+                      final meeting = doc.data() as Map<String, dynamic>;
+                      final isMyMentor = meeting['mentorId'] == _mentorId;
+                      final dateTime = meeting['dateTime'] as Timestamp?;
+                      final isFuture = dateTime != null &&
+                          dateTime.toDate().isAfter(DateTime.now());
+                      return isMyMentor && isFuture;
+                    }).toList();
+
+                    if (meetings.isEmpty) {
+                      return Text('No upcoming meetings');
+                    }
+
+                    // Sort locally by dateTime
+                    meetings.sort((a, b) {
+                      final aTime = (a.data() as Map<String, dynamic>)['dateTime'] as Timestamp?;
+                      final bTime = (b.data() as Map<String, dynamic>)['dateTime'] as Timestamp?;
+                      return (aTime ?? Timestamp.now()).compareTo(bTime ?? Timestamp.now());
+                    });
+
+                    final upcomingMeetings = meetings.take(5).toList();
+
+                    return Column(
+                      children: upcomingMeetings.map((doc) {
+                        final meeting = doc.data() as Map<String, dynamic>;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[50],
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey[200]!),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Color(0xFF667eea).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    Icons.groups,
+                                    color: Color(0xFF667eea),
+                                    size: 20,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                meeting['date'],
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        meeting['title'] ?? 'No Title',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.grey[800],
+                                        ),
+                                      ),
+                                      Text(
+                                        '${meeting['date']} • ${meeting['time']}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                      Text(
+                                        'Venue: ${meeting['venue']}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[500],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                '${meeting['location']} • ${meeting['mentor']}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[500],
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )).toList(),
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -3688,6 +4356,199 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
         ],
       ),
     );
+  }
+
+  Widget _buildRegistersContent() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: registersRef.snapshots(), // Simple query without filters
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Error loading registers'));
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        final allRegisters = snapshot.data!.docs;
+
+        // Filter locally by mentorId and expiration
+        final registers = allRegisters.where((doc) {
+          final register = doc.data() as Map<String, dynamic>;
+          final isMyMentor = register['mentorId'] == _mentorId;
+          final expiresAt = register['expiresAt'] as Timestamp?;
+          final isActive = expiresAt != null &&
+              expiresAt.toDate().isAfter(DateTime.now());
+          return isMyMentor && isActive;
+        }).toList();
+
+        if (registers.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.assignment, size: 64, color: Colors.grey[400]),
+                SizedBox(height: 16),
+                Text(
+                  'No Active Registers',
+                  style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Check back later for attendance registers',
+                  style: TextStyle(color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: EdgeInsets.all(16),
+          itemCount: registers.length,
+          itemBuilder: (context, index) {
+            final register = registers[index];
+            final data = register.data() as Map<String, dynamic>;
+            final expiresAt = (data['expiresAt'] as Timestamp).toDate();
+
+            return Card(
+              margin: EdgeInsets.only(bottom: 12),
+              child: ListTile(
+                leading: Icon(Icons.assignment, color: Color(0xFF667eea)),
+                title: Text(
+                  data['question'] ?? 'No Question',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(height: 4),
+                    Text(
+                      'Expires: ${DateFormat('MMM dd, yyyy - hh:mm a').format(expiresAt)}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+                trailing: Icon(Icons.radio_button_checked, color: Color(0xFF667eea)),
+                onTap: () {
+                  _showRegisterResponseDialog(context, register.id, data);
+                },
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showRegisterResponseDialog(BuildContext context, String registerId, Map<String, dynamic> data) {
+    String? selectedOption;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('Attendance Register'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    data['question'] ?? 'No Question',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  SizedBox(height: 16),
+                  Text('Select your response:'),
+                  SizedBox(height: 12),
+                  ...(data['options'] as List).map((option) {
+                    return RadioListTile<String>(
+                      title: Text(option),
+                      value: option,
+                      groupValue: selectedOption,
+                      onChanged: (value) {
+                        setState(() {
+                          selectedOption = value;
+                        });
+                      },
+                    );
+                  }).toList(),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
+                ),
+                ElevatedButton(
+                  onPressed: selectedOption == null ? null : () {
+                    Navigator.pop(context);
+                    _submitRegisterResponse(registerId, selectedOption!, data);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF667eea),
+                  ),
+                  child: Text('Submit Attendance'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _submitRegisterResponse(String registerId, String response, Map<String, dynamic> registerData) async {
+    final userId = _auth.currentUser!.uid;
+
+    try {
+      // 1. Update the register table - add user to attendedStudents
+      await registersRef.doc(registerId).update({
+        'attendedStudents': FieldValue.arrayUnion([userId])
+      });
+
+      // 2. Get the meeting ID from register data
+      final meetingId = registerData['meetingId'];
+      if (meetingId != null) {
+        // 3. Get the current meeting data
+        final meetingDoc = await meetingsRef.doc(meetingId).get();
+        if (meetingDoc.exists) {
+          final meetingData = meetingDoc.data() as Map<String, dynamic>;
+          final currentAttendedStudents = List<String>.from(meetingData['attendedStudents'] ?? []);
+          final totalMentees = meetingData['totalMentees'] ?? 1;
+
+          // 4. Add user to meeting's attendedStudents if not already there
+          if (!currentAttendedStudents.contains(userId)) {
+            currentAttendedStudents.add(userId);
+
+            // 5. Calculate new attendance percentage
+            final newAttendancePercentage = (currentAttendedStudents.length / totalMentees) * 100;
+
+            // 6. Update meeting table
+            await meetingsRef.doc(meetingId).update({
+              'attendedStudents': currentAttendedStudents,
+              'attendancePercentage': newAttendancePercentage,
+            });
+          }
+        }
+      }
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Attendance submitted successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error submitting attendance: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _buildStatCard(String title, String value, IconData icon) {
@@ -3721,27 +4582,13 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
       ],
     );
   }
-
-  Widget _buildQuizzesContent() {
-    return Center(child: Text('Quizzes Page'));
-  }
-
-  Widget _buildScheduleContent() {
-    return Center(child: Text('Schedule Page'));
-  }
-
-  Widget _buildSuggestContent() {
-    return Center(child: Text('Suggest Topics Page'));
-  }
 }
-
 class QuizzesPage extends StatefulWidget {
   const QuizzesPage({super.key});
 
   @override
   State<QuizzesPage> createState() => _QuizzesPageState();
 }
-
 class _QuizzesPageState extends State<QuizzesPage> {
   final List<Map<String, dynamic>> _quizzes = [
     {
@@ -3981,7 +4828,6 @@ class _QuizzesPageState extends State<QuizzesPage> {
     );
   }
 }
-
 class QuizDetailPage extends StatefulWidget {
   final Map<String, dynamic> quiz;
 
@@ -3990,7 +4836,6 @@ class QuizDetailPage extends StatefulWidget {
   @override
   State<QuizDetailPage> createState() => _QuizDetailPageState();
 }
-
 class _QuizDetailPageState extends State<QuizDetailPage> {
   List<List<int?>> _answers = [];
   int _currentQuestionIndex = 0;
@@ -4280,14 +5125,12 @@ class _QuizDetailPageState extends State<QuizDetailPage> {
     );
   }
 }
-
 class SuggestTopicsPage extends StatefulWidget {
   const SuggestTopicsPage({super.key});
 
   @override
   State<SuggestTopicsPage> createState() => _SuggestTopicsPageState();
 }
-
 class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
   final TextEditingController _topicController = TextEditingController();
   bool _isSubmitting = false;
