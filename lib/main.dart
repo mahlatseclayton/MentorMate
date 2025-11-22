@@ -1282,50 +1282,89 @@ Future <String> getKey(String uid)async {
                           Expanded(
                             child: ElevatedButton(
                               onPressed: () async {
-                                // Simple query without ordering to avoid index requirement
-                                final meetingSnapshot = await FirebaseFirestore.instance
-                                    .collection('meetings')
-                                    .where('mentorId', isEqualTo: currentUserId)
-                                    .get();
+                                try {
+                                  // Query meetings for this mentor (no ordering so no index required)
+                                  final meetingSnapshot = await FirebaseFirestore.instance
+                                      .collection('meetings')
+                                      .where('mentorId', isEqualTo: currentUserId)
+                                      .get();
 
-                                if (meetingSnapshot.docs.isEmpty) {
+                                  if (meetingSnapshot.docs.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('No meeting found'),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  // If there are multiple meetings, choose the latest by createdAt locally
+                                  final docs = List<QueryDocumentSnapshot>.from(meetingSnapshot.docs);
+
+                                  docs.sort((a, b) {
+                                    final aData = a.data() as Map<String, dynamic>;
+                                    final bData = b.data() as Map<String, dynamic>;
+
+                                    final aTs = aData['createdAt'] as Timestamp?;
+                                    final bTs = bData['createdAt'] as Timestamp?;
+
+                                    // Treat null timestamps as very old
+                                    final aMillis = aTs?.millisecondsSinceEpoch ?? 0;
+                                    final bMillis = bTs?.millisecondsSinceEpoch ?? 0;
+
+                                    return bMillis.compareTo(aMillis); // descending -> latest first
+                                  });
+
+                                  final chosenDoc = docs.first;
+                                  final meetingData = chosenDoc.data() as Map<String, dynamic>;
+
+                                  // IMPORTANT: get the Firestore doc ID from the snapshot, NOT from the fields
+                                  final meetingId = chosenDoc.id;
+
+                                  final date = meetingData['date'] ?? '';
+                                  final title = meetingData['title'] ?? 'the meeting';
+
+                                  // Calculate expiration time (24 hours from now)
+                                  final expiresAt = DateTime.now().add(Duration(hours: 24));
+                                  final signKey=await getKey(currentUserId);
+                                  await FirebaseFirestore.instance.collection('registers').add({
+                                    'question': 'Did you attend "$title" on $date?',
+                                    'options': ['Yes', 'No'],
+                                    'title': title,
+                                    'date': date,
+                                    'meetingId': meetingId, // <-- correct: doc.id
+                                    'mentorId': currentUserId,
+                                    'createdAt': FieldValue.serverTimestamp(),
+                                    'expiresAt': Timestamp.fromDate(expiresAt),
+                                    'attendedStudents': [],
+                                    'attendancePercentage': 0,
+                                  });
+                                  final event = {
+                                    'title': title,
+                                    'description':'Register reminder due on $date?',
+                                    'signkey':signKey,
+                                    'dateTime': date,
+                                    'uid': FirebaseAuth.instance.currentUser!.uid,
+                                  };
+                                  await FirebaseFirestore.instance
+                                      .collection('events')
+                                      .add(event);
+                                  Navigator.pop(context);
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text('No meeting found'),
+                                      content: Text('Register generated - expires in 24 hours'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Error generating register: $e'),
                                       backgroundColor: Colors.red,
                                     ),
                                   );
-                                  return;
                                 }
-
-                                // Get the first meeting (or manually find latest if needed)
-                                final meeting = meetingSnapshot.docs.first;
-                                final meetingData = meeting.data() as Map<String, dynamic>;
-                                final date = meetingData['date'];
-                                final title = meetingData['title'];
-
-                                // Calculate expiration time (24 hours from now)
-                                final expiresAt = DateTime.now().add(Duration(hours: 24));
-
-                                await FirebaseFirestore.instance.collection('registers').add({
-                                  'question': 'Did you attend "$title" on $date?',
-                                  'options': ['Yes', 'No'],
-                                  'title': title,
-                                  'date': date,
-                                  'mentorId': currentUserId,
-                                  'createdAt': FieldValue.serverTimestamp(),
-                                  'expiresAt': Timestamp.fromDate(expiresAt),
-                                  'attendedStudents': [],
-                                  'attendancePercentage': 0,
-                                });
-
-                                Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Register generated - expires in 24 hours'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Color(0xFF667eea),
@@ -1336,6 +1375,7 @@ Future <String> getKey(String uid)async {
                               ),
                               child: Text('Generate Register'),
                             ),
+
                           ),
                         ],
                       ),
@@ -1436,14 +1476,17 @@ Future <String> getKey(String uid)async {
                               children: [
                                 ListTile(
                                   leading: Icon(Icons.calendar_today, color: Color(0xFF667eea)),
-                                  title: Text('${_announcementSelectedDate.day}/${_announcementSelectedDate.month}/${_announcementSelectedDate.year}'),
+                                  title: Text(
+                                    '${_announcementSelectedDate.day}/${_announcementSelectedDate.month}/${_announcementSelectedDate.year}',
+                                  ),
                                   onTap: () async {
                                     final DateTime? picked = await showDatePicker(
                                       context: context,
                                       initialDate: _announcementSelectedDate,
                                       firstDate: DateTime.now(),
-                                      lastDate: DateTime(2025),
+                                      lastDate: DateTime(2100),
                                     );
+
                                     if (picked != null && picked != _announcementSelectedDate) {
                                       setState(() {
                                         _announcementSelectedDate = picked;
@@ -1492,6 +1535,7 @@ Future <String> getKey(String uid)async {
                               Expanded(
                                 child: ElevatedButton(
                                   onPressed: () async {
+                                    final signKey=await getKey(currentUserId);
                                     if (_announcementTitleController.text.isNotEmpty) {
                                       try {
                                         final newAnnouncement = {
@@ -1500,12 +1544,21 @@ Future <String> getKey(String uid)async {
                                           'date': '${_announcementSelectedDate.day}/${_announcementSelectedDate.month}/${_announcementSelectedDate.year} • ${_announcementSelectedTime.format(context)}',
                                           'type': 'announcement',
                                           'createdAt': FieldValue.serverTimestamp(),
-                                          'signkey':getKey(currentUserId),
+                                          'signkey':signKey,
                                           'createdBy': currentUserId,
                                         };
 
                                         await announcementsRef.add(newAnnouncement);
-
+                                        final event = {
+                                          'title': _announcementTitleController.text,
+                                          'description':'Announcement reminder',
+                                          'signkey':signKey,
+                                          'dateTime': '${_announcementSelectedDate.day}/${_announcementSelectedDate.month}/${_announcementSelectedDate.year} • ${_announcementSelectedTime.format(context)}',
+                                          'uid': FirebaseAuth.instance.currentUser!.uid,
+                                        };
+                                        await FirebaseFirestore.instance
+                                            .collection('events')
+                                            .add(event);
                                         Navigator.pop(context);
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(
@@ -1727,7 +1780,13 @@ Future <String> getKey(String uid)async {
                                       try {
                                         // GET MENTOR SIGNKEY
                                         final signkey = await getKey(currentUserId);
-
+                                        final event = {
+                                          'title': _meetingTitleController.text,
+                                          'description':"Meeting reminder",
+                                          'signkey':signkey,
+                                          'dateTime': '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year} • ${_meetingSelectedTime.format(context)}',
+                                          'uid': FirebaseAuth.instance.currentUser!.uid,
+                                        };
                                         // GET MENTEES COUNT
                                         final menteesSnapshot = await FirebaseFirestore.instance
                                             .collection('users')
@@ -1753,7 +1812,7 @@ Future <String> getKey(String uid)async {
                                           'attendancePercentage': 0.0,
                                         });
 
-                                        // ANNOUNCEMENT
+
                                         await announcementsRef.add({
                                           'title': _meetingTitleController.text,
                                           'date': '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year} • ${_meetingSelectedTime.format(context)}',
@@ -1763,6 +1822,11 @@ Future <String> getKey(String uid)async {
                                           'createdBy': currentUserId,
                                           'signkey': signkey,
                                         });
+
+
+                                        await FirebaseFirestore.instance
+                                            .collection('events')
+                                            .add(event);
 
                                         Navigator.pop(context);
 
@@ -2890,6 +2954,10 @@ class _CalendarPageState extends State<CalendarPage> {
     super.initState();
     _loadEventsFromFirebase();
   }
+  Future <String> getKey(String uid)async {
+    DocumentSnapshot doc= await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    return doc['signkey'];
+  }
 
   void _addEvent(DateTime date, String title, String description, TimeOfDay? time) async {
     DateTime finalDateTime = DateTime(
@@ -2899,10 +2967,13 @@ class _CalendarPageState extends State<CalendarPage> {
       time?.hour ?? 0,
       time?.minute ?? 0,
     );
+    String? uid =await FirebaseAuth.instance.currentUser?.uid;
+    final signKey=await  getKey(uid!);
 
     final event = {
       'title': title,
       'description': description,
+      'signkey':signKey,
       'dateTime': finalDateTime,
       'uid': FirebaseAuth.instance.currentUser!.uid,
     };
@@ -3037,10 +3108,11 @@ class _CalendarPageState extends State<CalendarPage> {
 
   void _loadEventsFromFirebase() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-
+    final signKey=await getKey(uid);
     FirebaseFirestore.instance
         .collection('events')
         .where('uid', isEqualTo: uid)
+    .where('signkey',isEqualTo: signKey)
         .snapshots()
         .listen((snapshot) {
       Map<DateTime, List<Map<String, dynamic>>> newEvents = {};
@@ -4580,548 +4652,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
           ),
         ),
       ],
-    );
-  }
-}
-class QuizzesPage extends StatefulWidget {
-  const QuizzesPage({super.key});
-
-  @override
-  State<QuizzesPage> createState() => _QuizzesPageState();
-}
-class _QuizzesPageState extends State<QuizzesPage> {
-  final List<Map<String, dynamic>> _quizzes = [
-    {
-      'id': '1',
-      'title': 'Study Habits Assessment',
-      'dueDate': 'Due: Nov 26, 2024',
-      'description': 'This quiz will help us understand your current study habits and provide better guidance.',
-      'questions': [
-        {
-          'questionNumber': 1,
-          'question': 'How many hours do you typically study per day?',
-          'options': ['1-2 hours', '3-4 hours', '5-6 hours', 'More than 6 hours']
-        },
-        {
-          'questionNumber': 2,
-          'question': 'Which study environment works best for you?',
-          'options': ['Library', 'Home', 'Coffee shop', 'Study groups']
-        },
-        {
-          'questionNumber': 3,
-          'question': 'How do you usually prepare for exams?',
-          'options': ['Last minute cramming', 'Regular revision', 'Study groups', 'Practice tests']
-        },
-        {
-          'questionNumber': 4,
-          'question': 'What is your biggest challenge when studying?',
-          'options': ['Time management', 'Concentration', 'Understanding material', 'Motivation']
-        },
-        {
-          'questionNumber': 5,
-          'question': 'How often do you review your notes after class?',
-          'options': ['Daily', 'Weekly', 'Before exams', 'Rarely']
-        }
-      ],
-      'completed': false
-    },
-    {
-      'id': '2',
-      'title': 'Career Interests Survey',
-      'dueDate': 'Due: Dec 01, 2024',
-      'description': 'Help us understand your career interests to provide relevant guidance and opportunities.',
-      'questions': [
-        {
-          'questionNumber': 1,
-          'question': 'Which field interests you the most?',
-          'options': ['Technology', 'Business', 'Healthcare', 'Education', 'Arts']
-        },
-        {
-          'questionNumber': 2,
-          'question': 'What type of work environment do you prefer?',
-          'options': ['Office', 'Remote', 'Hybrid', 'Field work', 'Creative space']
-        },
-        {
-          'questionNumber': 3,
-          'question': 'Which skills do you want to develop most?',
-          'options': ['Technical skills', 'Communication', 'Leadership', 'Problem-solving', 'Creative thinking']
-        }
-      ],
-      'completed': true
-    },
-    {
-      'id': '3',
-      'title': 'Learning Style Assessment',
-      'dueDate': 'Due: Dec 05, 2024',
-      'description': 'Identify your learning style to help tailor study techniques that work best for you.',
-      'questions': [
-        {
-          'questionNumber': 1,
-          'question': 'How do you prefer to learn new information?',
-          'options': ['Reading', 'Listening', 'Watching videos', 'Hands-on practice']
-        },
-        {
-          'questionNumber': 2,
-          'question': 'When studying, what helps you remember best?',
-          'options': ['Writing notes', 'Drawing diagrams', 'Discussing with others', 'Teaching someone else']
-        }
-      ],
-      'completed': false
-    },
-  ];
-
-  void _openQuiz(Map<String, dynamic> quiz) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => QuizDetailPage(quiz: quiz),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF667eea),
-            Color(0xFF764ba2),
-          ],
-        ),
-      ),
-      child: SafeArea(
-        child: Column(
-          children: [
-            SizedBox(height: 20),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                'My Quizzes',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            SizedBox(height: 10),
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
-                  ),
-                ),
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 8,
-                              offset: Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.quiz, color: Color(0xFF667eea), size: 20),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Complete quizzes assigned by your mentor to help with your development',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      SizedBox(height: 20),
-                      ..._quizzes.map((quiz) => Card(
-                        margin: EdgeInsets.only(bottom: 16),
-                        elevation: 2,
-                        child: ListTile(
-                          contentPadding: EdgeInsets.all(16),
-                          leading: Container(
-                            padding: EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: quiz['completed']
-                                  ? Colors.green.withOpacity(0.2)
-                                  : Color(0xFF667eea).withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              quiz['completed'] ? Icons.check : Icons.quiz_outlined,
-                              color: quiz['completed'] ? Colors.green : Color(0xFF667eea),
-                              size: 24,
-                            ),
-                          ),
-                          title: Text(
-                            quiz['title'],
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey[800],
-                            ),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                quiz['dueDate'],
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                '${quiz['questions'].length} questions',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[500],
-                                ),
-                              ),
-                            ],
-                          ),
-                          trailing: Container(
-                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: quiz['completed'] ? Colors.green : Color(0xFF667eea),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              quiz['completed'] ? 'Completed' : 'Start',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          onTap: () => _openQuiz(quiz),
-                        ),
-                      )).toList(),
-                      SizedBox(height: 20),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-class QuizDetailPage extends StatefulWidget {
-  final Map<String, dynamic> quiz;
-
-  const QuizDetailPage({super.key, required this.quiz});
-
-  @override
-  State<QuizDetailPage> createState() => _QuizDetailPageState();
-}
-class _QuizDetailPageState extends State<QuizDetailPage> {
-  List<List<int?>> _answers = [];
-  int _currentQuestionIndex = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeAnswers();
-  }
-
-  void _initializeAnswers() {
-    _answers = List.generate(
-      widget.quiz['questions'].length,
-          (_) => List.filled(4, null),
-    );
-  }
-
-  void _selectAnswer(int questionIndex, int optionIndex) {
-    setState(() {
-      for (int i = 0; i < _answers[questionIndex].length; i++) {
-        _answers[questionIndex][i] = i == optionIndex ? 1 : null;
-      }
-    });
-  }
-
-  void _nextQuestion() {
-    if (_currentQuestionIndex < widget.quiz['questions'].length - 1) {
-      setState(() {
-        _currentQuestionIndex++;
-      });
-    }
-  }
-
-  void _previousQuestion() {
-    if (_currentQuestionIndex > 0) {
-      setState(() {
-        _currentQuestionIndex--;
-      });
-    }
-  }
-
-  void _submitQuiz() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF667eea),
-                  Color(0xFF764ba2),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Text(
-                    'Quiz Submitted',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(16),
-                      bottomRight: Radius.circular(16),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 64),
-                      SizedBox(height: 16),
-                      Text(
-                        'Thank you for completing the quiz!',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[800],
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Your responses have been saved and will be reviewed by your mentor.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            Navigator.pop(context);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Color(0xFF667eea),
-                            padding: EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: Text('Back to Quizzes'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final currentQuestion = widget.quiz['questions'][_currentQuestionIndex];
-    final totalQuestions = widget.quiz['questions'].length;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.quiz['title']),
-        backgroundColor: Color(0xFF667eea),
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey[300]!),
-              ),
-              child: Text(
-                widget.quiz['description'],
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[700],
-                ),
-              ),
-            ),
-            SizedBox(height: 20),
-            Container(
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Question ${_currentQuestionIndex + 1} of $totalQuestions',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Color(0xFF667eea).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '${((_currentQuestionIndex + 1) / totalQuestions * 100).round()}%',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF667eea),
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    currentQuestion['question'],
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  SizedBox(height: 20),
-                  ...List.generate(currentQuestion['options'].length, (index) {
-                    final option = currentQuestion['options'][index];
-                    final isSelected = _answers[_currentQuestionIndex][index] == 1;
-
-                    return Padding(
-                      padding: EdgeInsets.only(bottom: 12),
-                      child: Card(
-                        elevation: 1,
-                        child: RadioListTile(
-                          title: Text(option),
-                          value: index,
-                          groupValue: isSelected ? index : null,
-                          onChanged: (value) {
-                            _selectAnswer(_currentQuestionIndex, index);
-                          },
-                          activeColor: Color(0xFF667eea),
-                        ),
-                      ),
-                    );
-                  }),
-                  SizedBox(height: 20),
-                  Row(
-                    children: [
-                      if (_currentQuestionIndex > 0)
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _previousQuestion,
-                            style: OutlinedButton.styleFrom(
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              side: BorderSide(color: Color(0xFF667eea)),
-                            ),
-                            child: Text(
-                              'Previous',
-                              style: TextStyle(color: Color(0xFF667eea)),
-                            ),
-                          ),
-                        ),
-                      if (_currentQuestionIndex > 0) SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _currentQuestionIndex < totalQuestions - 1
-                              ? _nextQuestion
-                              : _submitQuiz,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Color(0xFF667eea),
-                            padding: EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: Text(
-                            _currentQuestionIndex < totalQuestions - 1
-                                ? 'Next Question'
-                                : 'Submit Quiz',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
