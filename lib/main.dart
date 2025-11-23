@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -8,11 +10,14 @@ import 'firebase_options.dart';
 import 'package:intl/intl.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:math';
+import 'package:http/http.dart' as http;
 void main()async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  await dotenv.load(fileName: ".env");
+
   runApp(MyApp());
 }
 class MyApp extends StatelessWidget {
@@ -2438,78 +2443,218 @@ class SuggestionsPage extends StatefulWidget {
   State<SuggestionsPage> createState() => _SuggestionsPageState();
 }
 class _SuggestionsPageState extends State<SuggestionsPage> {
-  final List<Map<String, dynamic>> _aiSuggestions = [
-    {
-      'title': 'Study Techniques & Learning Strategies',
-      'description': 'Explore effective study methods, time management, and personalized learning approaches to enhance academic performance.',
-      'iceBreakers': [
-        'What study method has worked best for you so far?',
-        'Share one thing you struggle with when studying',
-        'What\'s your ideal study environment?'
-      ],
-      'miniGames': [
-        'Study Method Match: Match learning styles with study techniques',
-        'Time Management Challenge: Prioritize weekly tasks',
-        'Focus Timer: Pomodoro technique practice'
-      ]
-    },
-    {
-      'title': 'Work-Life Balance & Wellness',
-      'description': 'Strategies for maintaining healthy balance between academic responsibilities, personal life, and mental wellness.',
-      'iceBreakers': [
-        'How do you currently manage your free time?',
-        'What activities help you relax and recharge?',
-        'Share one boundary you\'ve set for better balance'
-      ],
-      'miniGames': [
-        'Balance Wheel: Visualize life balance areas',
-        'Stress Buster: Quick relaxation techniques',
-        'Goal Setting: Personal wellness objectives'
-      ]
-    },
-    {
-      'title': 'Career Exploration & Skill Development',
-      'description': 'Discover career paths, develop professional skills, and create a roadmap for future career success.',
-      'iceBreakers': [
-        'What career fields interest you the most?',
-        'Share a professional skill you want to develop',
-        'What does your ideal career look like?'
-      ],
-      'miniGames': [
-        'Skill Bingo: Identify and develop key skills',
-        'Career Charades: Act out different professions',
-        'Networking Practice: Role-play introductions'
-      ]
-    },
-    {
-      'title': 'Communication & Team Building',
-      'description': 'Enhance interpersonal skills, active listening, and collaborative abilities for better team dynamics.',
-      'iceBreakers': [
-        'What makes a good team member?',
-        'Share a successful collaboration experience',
-        'What communication style works best for you?'
-      ],
-      'miniGames': [
-        'Two Truths and a Lie: Get to know each other',
-        'Active Listening Pairs: Practice reflective listening',
-        'Problem Solving Challenge: Group puzzle activity'
-      ]
-    },
+  final List<String> campusResources = [
+    "SRC (Student Representative Council)",
+    "CCDU (Counselling and Careers Development Unit)",
+    "Centre for Student Development (CSD)",
+    "DLU (Development and Leadership Unit)",
+    "WCCO (Wits Citizenship and Community Outreach)",
+    "SGO (Student Governance Office)",
+    "STPU (Student Transitions and Persistence Unit)",
+    "FYE (First Year Experience) Program",
+    "Clubs & Societies / CSOs (Student‑Run Clubs)",
+    "Wits Food Programme / Wits Food Bank",
+    "Campus Health & Wellness Centre (CHWC)",
+    "Gender Equity Office (GEO)",
+    "Disability Rights Unit (DRU)",
+    "Wits Postgraduate Association (PGA)",
+    "International Students Sub‑Council (ISSC)",
+    "Wits Sports Council / Wits Sport",
+    "Wits Vuvuzela (Student Newspaper)"
   ];
 
+  final List<String> suggestions = [];
   bool _isLoading = false;
+  bool _showResults = false;
+  TextEditingController _mentorPromptController = TextEditingController();
+  List<dynamic> _aiSuggestions = [];
+  final ScrollController _scrollController = ScrollController();
+  bool _isInitialized = false;
+  String buildGeminiPrompt() {
+    return """
+You are an AI mentor assistant. Your task is to generate 3 mentorship session suggestions for university students.
 
-  void _retrySuggestions() {
+Requirements:
+1. Each suggestion must include:
+   - "topic": a short title (1–7 words)
+   - "description": 1–2 sentences explaining why this topic is relevant
+   - "iceBreakers": 2–3 ice-breakers per topic
+   - "resources": 3 general resources (websites, articles, apps, or provided institution resources if any)
+2. Output must ALWAYS be JSON, structured exactly as:
+{
+  "suggestions": [
+    {
+      "topic": "string",
+      "description": "string",
+      "iceBreakers": ["string1", "string2", "string3"],
+      "resources": ["string1", "string2", "string3"]
+    },
+    { "...": "3 topics total" }
+  ]
+}
+3. Use the provided context to make the suggestions more relevant.
+4. Keep content culturally neutral, safe, and appropriate for students. Avoid politics, religion, medical, or financial advice.
+
+Context:
+- Mentor Notes / Text: ${_mentorPromptController.text}
+- Stored Topics: ${suggestions.join(', ')}
+- Institution Resources: ${campusResources.join(', ')}
+
+Now generate 3 relevant session suggestions based on the above context.
+""";
+  }
+  Future<void> loadSuggestions() async {
+    try {
+      QuerySnapshot querySnapshot = await FirebaseFirestore.instance.collection('suggestions').get();
+      suggestions.clear();
+      for (var doc in querySnapshot.docs) {
+        if (doc['suggestion'] != null) {
+          suggestions.add(doc['suggestion'].toString());
+        }
+      }
+    } catch (e) {
+      print('Error fetching suggestions: $e');
+    }
+  }
+  String? apiKey;
+  @override
+  void initState() {
+    super.initState();
+
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    await dotenv.load(fileName: ".env");
+    apiKey = dotenv.get('GEMINI_API_KEY');
+    await loadSuggestions();
+    setState(() {
+      _isInitialized = true;
+    });
+  }
+
+  Future<Map<String, dynamic>> _callGeminiAPI(String prompt) async {
+    // Load key
+    final String? key = apiKey;
+
+    if (key == null || key.isEmpty) {
+      throw Exception("❌ API key is NULL or EMPTY!");
+    }
+
+    const String apiUrl =
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+
+    final Uri uri = Uri.parse('$apiUrl?key=$key');
+
+    final Map<String, dynamic> requestBody = {
+      "contents": [
+        {
+          "parts": [
+            {"text": prompt}
+          ]
+        }
+      ],
+      "generationConfig": {
+        "temperature": 0.7,
+        "topK": 40,
+        "topP": 0.95,
+        "maxOutputTokens": 2048,
+      }
+    };
+
+    final response = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(requestBody),
+    );
+
+    print("STATUS: ${response.statusCode}");
+    print("BODY: ${response.body}");
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> responseData = jsonDecode(response.body);
+      final String textResponse =
+      responseData['candidates'][0]['content']['parts'][0]['text'];
+      return _parseGeminiResponse(textResponse);
+    } else {
+      throw Exception(
+          'Failed to load suggestions: ${response.statusCode} | ${response.body}');
+    }
+  }
+
+  Future<void> _generateAISuggestions() async {
+    if (_mentorPromptController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please describe the mentee\'s situation first'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
+      _showResults = false;
     });
 
-    // Simulate AI processing delay
-    Future.delayed(Duration(seconds: 2), () {
+    try {
+      final String prompt = buildGeminiPrompt();
+      final Map<String, dynamic> response = await _callGeminiAPI(prompt);
+
+      if (response.containsKey('suggestions') && response['suggestions'] is List) {
+        setState(() {
+          _aiSuggestions = response['suggestions'];
+          _isLoading = false;
+          _showResults = true;
+        });
+      } else {
+        throw Exception('Invalid response format from AI');
+      }
+
+      // Auto-scroll to show new suggestions
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollController.animateTo(
+          0,
+          duration: Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      });
+
+    } catch (e) {
       setState(() {
         _isLoading = false;
-        // In real app, this would fetch new suggestions from AI
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error generating suggestions: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+
+      print('Error calling Gemini API: $e');
+    }
+  }
+  Map<String, dynamic> _parseGeminiResponse(String textResponse) {
+    try {
+      // Clean the response - remove markdown code blocks if present
+      String cleanResponse = textResponse.replaceAll('```json', '').replaceAll('```', '').trim();
+
+      // Parse the JSON
+      return jsonDecode(cleanResponse);
+    } catch (e) {
+      print('Error parsing Gemini response: $e');
+      print('Raw response: $textResponse');
+      throw Exception('Failed to parse AI response');
+    }
+  }
+  void _retryWithNewContext() {
+    setState(() {
+      _showResults = false;
+      _mentorPromptController.clear();
     });
   }
 
@@ -2530,22 +2675,195 @@ class _SuggestionsPageState extends State<SuggestionsPage> {
         child: SafeArea(
           child: Column(
             children: [
+              // Header Section - Always visible
+              _buildHeader(),
 
+              // Input Section - Only show when no results
+              if (!_showResults) _buildInputSection(),
+
+              // Content Section - Takes full space when results shown
               Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
-                    ),
-                  ),
-                  child: _buildContent(),
-                ),
+                child: _buildContentSection(),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  'Session Topic Suggestions',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              // Mini retry button - Only show when results are visible
+              if (_showResults && !_isLoading)
+                IconButton(
+                  onPressed: _retryWithNewContext,
+                  icon: Icon(Icons.refresh, color: Colors.white),
+                  tooltip: 'New Search',
+                ),
+            ],
+          ),
+          SizedBox(height: 4),
+          Text(
+            _showResults
+                ? 'AI-generated session topics for your mentee'
+                : 'Get AI-powered session ideas for your mentees',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.white.withOpacity(0.8),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputSection() {
+    return Container(
+      margin: EdgeInsets.all(16),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(Icons.description, color: Color(0xFF667eea), size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Mentee Context',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[800],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 12),
+          TextField(
+            controller: _mentorPromptController,
+            maxLines: 3,
+            decoration: InputDecoration(
+              hintText: 'Enter context prompt for the session...',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[300]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Color(0xFF667eea)),
+              ),
+              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              helperText: 'Describe your mentee\'s current challenges, goals, or interests',
+              helperStyle: TextStyle(
+                color: Colors.grey[500],
+                fontSize: 12,
+              ),
+            ),
+          ),
+          SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _generateAISuggestions,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Color(0xFF667eea),
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 2,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.auto_awesome, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Generate Session Topics',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContentSection() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+      ),
+      child: Column(
+        children: [
+          // Section Title - Only show when we have content
+          if (_showResults || _isLoading)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+              child: Row(
+                children: [
+                  Icon(Icons.lightbulb_outline, color: Color(0xFF667eea), size: 24),
+                  SizedBox(width: 8),
+                  Text(
+                    _isLoading ? 'Generating Topics...' : 'Suggested Session Topics',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                  Spacer(),
+                  if (_showResults && !_isLoading)
+                    Text(
+                      '${_aiSuggestions.length} topics',
+                      style: TextStyle(
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+          // Content with proper scrolling
+          Expanded(
+            child: _buildContent(),
+          ),
+        ],
       ),
     );
   }
@@ -2561,59 +2879,123 @@ class _SuggestionsPageState extends State<SuggestionsPage> {
             ),
             SizedBox(height: 16),
             Text(
-              'AI is generating new suggestions...',
+              'Creating personalized session topics...',
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey[600],
               ),
             ),
+            SizedBox(height: 8),
+
           ],
         ),
       );
     }
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    if (!_showResults) {
+      return SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              Icon(Icons.auto_awesome, size: 80, color: Colors.grey[300]),
+              SizedBox(height: 20),
               Text(
-                'AI Topic Suggestions',
+                'Ready to Generate Session Topics',
                 style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
+                  fontSize: 20,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
                 ),
+                textAlign: TextAlign.center,
               ),
-              ElevatedButton.icon(
-                onPressed: _retrySuggestions,
-                icon: Icon(Icons.auto_awesome, size: 18),
-                label: Text('New Ideas'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFF667eea),
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  'Enter your mentee\'s context above to get AI-powered session topic suggestions tailored to their specific needs',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 14,
+                    height: 1.4,
                   ),
+                  textAlign: TextAlign.center,
                 ),
               ),
             ],
           ),
         ),
-        Expanded(
-          child: ListView.builder(
-            padding: EdgeInsets.symmetric(horizontal: 20),
-            itemCount: _aiSuggestions.length,
-            itemBuilder: (context, index) {
-              final suggestion = _aiSuggestions[index];
+      );
+    }
+
+    return SingleChildScrollView(
+      controller: _scrollController,
+      physics: AlwaysScrollableScrollPhysics(),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          children: [
+            // Context summary bar
+            Container(
+              width: double.infinity,
+              margin: EdgeInsets.only(bottom: 16),
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Color(0xFF667eea).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Color(0xFF667eea).withOpacity(0.2)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: Color(0xFF667eea)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Based on: ${_mentorPromptController.text}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Suggestions
+            ..._aiSuggestions.asMap().entries.map((entry) {
+              final index = entry.key;
+              final suggestion = entry.value;
               return _buildSuggestionCard(suggestion, index);
-            },
-          ),
+            }).toList(),
+
+            SizedBox(height: 20),
+
+            // Retry button at bottom
+            if (_showResults)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: OutlinedButton.icon(
+                  onPressed: _retryWithNewContext,
+                  icon: Icon(Icons.refresh, size: 18),
+                  label: Text('Search with Different Context'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Color(0xFF667eea),
+                    side: BorderSide(color: Color(0xFF667eea)),
+                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+
+            SizedBox(height: 20),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -2625,40 +3007,40 @@ class _SuggestionsPageState extends State<SuggestionsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: Offset(0, 4),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: Offset(0, 2),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with topic title
+          // Topic Header
           Container(
+            width: double.infinity,
             padding: EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Color(0xFF667eea).withOpacity(0.1),
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [
+                  Color(0xFF667eea).withOpacity(0.1),
+                  Color(0xFF764ba2).withOpacity(0.05),
+                ],
+              ),
               borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
               ),
             ),
-            child: Row(
-              children: [
-                Icon(Icons.lightbulb_outline, color: Color(0xFF667eea), size: 20),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    suggestion['title'],
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                ),
-              ],
+            child: Text(
+              suggestion['topic'],
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[800],
+              ),
             ),
           ),
 
@@ -2674,99 +3056,81 @@ class _SuggestionsPageState extends State<SuggestionsPage> {
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey[600],
-                    height: 1.4,
+                    height: 1.5,
                   ),
                 ),
-                SizedBox(height: 16),
+                SizedBox(height: 20),
 
-                // Ice Breakers Section
-                Row(
-                  children: [
-                    Icon(Icons.chat_bubble_outline, size: 16, color: Color(0xFF667eea)),
-                    SizedBox(width: 8),
-                    Text(
-                      'Suggested Ice Breakers',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF667eea),
-                      ),
-                    ),
-                  ],
+                // Ice Breakers
+                _buildSection(
+                  icon: Icons.chat_bubble_outline,
+                  title: 'Conversation Starters',
+                  items: suggestion['iceBreakers'],
                 ),
-                SizedBox(height: 8),
+                SizedBox(height: 20),
 
-                // Ice Breakers List
-                ...suggestion['iceBreakers'].map((iceBreaker) => Padding(
-                  padding: EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.circle, size: 6, color: Color(0xFF667eea)),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          iceBreaker,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[700],
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                )).toList(),
-
-                SizedBox(height: 12),
-
-                // Mini Games Section
-                Row(
-                  children: [
-                    Icon(Icons.videogame_asset_outlined, size: 16, color: Color(0xFF667eea)),
-                    SizedBox(width: 8),
-                    Text(
-                      'Suggested Mini Games',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF667eea),
-                      ),
-                    ),
-                  ],
+                // Resources
+                _buildSection(
+                  icon: Icons.assignment_outlined,
+                  title: 'Campus Resources',
+                  items: suggestion['resources'],
                 ),
-                SizedBox(height: 8),
-
-                // Mini Games List
-                ...suggestion['miniGames'].map((game) => Padding(
-                  padding: EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.play_arrow, size: 14, color: Color(0xFF667eea)),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          game,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[700],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                )).toList(),
-
-                SizedBox(height: 16),
-
-
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildSection({required IconData icon, required String title, required List<dynamic> items}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 18, color: Color(0xFF667eea)),
+            SizedBox(width: 8),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 8),
+        ...items.map((item) => Padding(
+          padding: EdgeInsets.only(bottom: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.chevron_right, size: 16, color: Color(0xFF667eea)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  item.toString(),
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        )).toList(),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _mentorPromptController.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 }
 class CalendarPage extends StatefulWidget {
@@ -4752,12 +5116,10 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
     );
   }
 }
-
 class SuggestionsView extends StatefulWidget {
   @override
   _SuggestionsViewState createState() => _SuggestionsViewState();
 }
-
 class _SuggestionsViewState extends State<SuggestionsView> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   TextEditingController _searchController = TextEditingController();
