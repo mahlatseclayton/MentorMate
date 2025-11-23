@@ -1612,6 +1612,169 @@ Future <String> getKey(String uid)async {
       },
     );
   }
+  Widget showDrawer() {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          // Header with App Bar
+          Container(
+            height: 120,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Colors.blue.shade700, Colors.blue.shade500],
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16, top: 40, bottom: 16),
+              child: Row(
+                children: [
+                  Icon(Icons.people_alt_rounded, color: Colors.white, size: 28),
+                  SizedBox(width: 12),
+                  Text(
+                    "MentorMate",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontSize: 20,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+
+
+          // Menu Items
+          _buildMenuItem(
+            icon: Icons.person_outline,
+            title: "My Profile",
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage()));
+            },
+          ),
+          Divider(height: 20, thickness: 1, color: Colors.grey.shade300),
+
+          _buildMenuItem(
+            icon: Icons.help_outline,
+            title: "Help & Support",
+            onTap: () {},
+          ),
+
+          Divider(height: 20, thickness: 1, color: Colors.grey.shade300),
+
+          // Logout
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: ListTile(
+              leading: Icon(Icons.logout, color: Colors.red.shade400),
+              title: Text(
+                "Log Out",
+                style: TextStyle(
+                  color: Colors.red.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              onTap: () {
+                _showLogoutDialog();
+              },
+            ),
+          ),
+
+          // Version Info
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              "Version 1.0.0",
+              style: TextStyle(
+                color: Colors.grey.shade500,
+                fontSize: 12,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Log Out", style: TextStyle(fontWeight: FontWeight.bold)),
+          content: Text("Are you sure you want to log out?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel", style: TextStyle(color: Colors.grey.shade600)),
+            ),
+            TextButton(
+              onPressed: () {
+                _logout();
+                Navigator.push(context, MaterialPageRoute(builder: (_)=>SignInPage()));
+
+      },
+              child: Text("Log Out", style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String title,
+    VoidCallback? onTap,
+    int? badgeCount,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: ListTile(
+        leading: Icon(icon, color: Colors.grey.shade700, size: 22),
+        title: Row(
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                color: Colors.grey.shade800,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            if (badgeCount != null && badgeCount > 0) ...[
+              SizedBox(width: 8),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade500,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  badgeCount.toString(),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        trailing: Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20),
+        onTap: onTap,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12),
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+void _logout()async{
+  await FirebaseAuth.instance.signOut();
+}
   void _showScheduleMeetingDialog() {
     _meetingTitleController.clear();
     _meetingVenueController.clear();
@@ -1876,7 +2039,11 @@ Future <String> getKey(String uid)async {
       },
     );
   }
-
+Future <String>getUsername()async{
+  final uid=FirebaseAuth.instance.currentUser?.uid;
+  DocumentSnapshot doc=await FirebaseFirestore.instance.collection('users').doc(uid).get();
+  return doc['fName']+" " +doc['lName'];
+}
   void _showAttendanceReport() {
     showModalBottomSheet(
       context: context,
@@ -1913,10 +2080,6 @@ Future <String> getKey(String uid)async {
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.download, color: Colors.white),
-                      onPressed: () {},
                     ),
                   ],
                 ),
@@ -2002,6 +2165,7 @@ Future <String> getKey(String uid)async {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer:showDrawer(),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -2025,14 +2189,28 @@ Future <String> getKey(String uid)async {
                       radius: 20,
                     ),
                     SizedBox(width: 12),
-                    Text(
-                      'Mentor Mate ',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                      ),
+                    FutureBuilder<String>(
+                      future: getUsername(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) {
+                          return SizedBox(
+                            width: 80,
+                            height: 20,
+                            child: LinearProgressIndicator(color: Colors.white),
+                          );
+                        }
+
+                        return Text(
+                          snapshot.data!,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 20,
+                          ),
+                        );
+                      },
                     ),
+
                   ],
                 ),
                 backgroundColor: Colors.transparent,
@@ -2470,6 +2648,7 @@ class _SuggestionsPageState extends State<SuggestionsPage> {
   List<dynamic> _aiSuggestions = [];
   final ScrollController _scrollController = ScrollController();
   bool _isInitialized = false;
+  String? path_url;
   String buildGeminiPrompt() {
     return """
 You are an AI mentor assistant. Your task is to generate 3 mentorship session suggestions for university students.
@@ -2527,6 +2706,8 @@ Now generate 3 relevant session suggestions based on the above context.
   Future<void> _initialize() async {
     await dotenv.load(fileName: ".env");
     apiKey = dotenv.get('GEMINI_API_KEY');
+    path_url=dotenv.get('path_url');
+
     await loadSuggestions();
     setState(() {
       _isInitialized = true;
@@ -2536,15 +2717,15 @@ Now generate 3 relevant session suggestions based on the above context.
   Future<Map<String, dynamic>> _callGeminiAPI(String prompt) async {
     // Load key
     final String? key = apiKey;
+    final String? path=path_url;
 
     if (key == null || key.isEmpty) {
       throw Exception("❌ API key is NULL or EMPTY!");
     }
 
-    const String apiUrl =
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
-    final Uri uri = Uri.parse('$apiUrl?key=$key');
+
+    final Uri uri = Uri.parse('$path?key=$key');
 
     final Map<String, dynamic> requestBody = {
       "contents": [
@@ -3818,7 +3999,11 @@ class _MenteesPageState extends State<MenteesPage> {
     super.initState();
     _loadMenteesWithAttendance();
   }
-
+  Future <String>getUsername()async{
+    final uid=FirebaseAuth.instance.currentUser?.uid;
+    DocumentSnapshot doc=await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    return doc['fName']+" " +doc['lName'];
+  }
   Future<void> _loadMenteesWithAttendance() async {
     try {
       setState(() {
@@ -4425,9 +4610,67 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
   CollectionReference get meetingsRef => _firestore.collection('meetings');
   CollectionReference get registersRef => _firestore.collection('registers');
 
+  Future<String> getUsername() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    return doc['fName'] + " " + doc['lName'];
+  }
+
+  @override
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: showDrawer(),
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(kToolbarHeight),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF667eea),
+                Color(0xFF764ba2),
+              ],
+            ),
+          ),
+          child: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            title: Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: Colors.white,
+                  child: Icon(Icons.person, color: Color(0xFF667eea)),
+                  radius: 20,
+                ),
+                SizedBox(width: 12),
+                FutureBuilder<String>(
+                  future: getUsername(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return SizedBox(
+                        width: 80,
+                        height: 20,
+                        child: LinearProgressIndicator(color: Colors.white),
+                      );
+                    }
+
+                    return Text(
+                      snapshot.data!,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -4442,34 +4685,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
         child: SafeArea(
           child: Column(
             children: [
-              AppBar(
-                title: Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: Colors.white,
-                      child: Icon(Icons.person, color: Color(0xFF667eea)),
-                      radius: 20,
-                    ),
-                    SizedBox(width: 12),
-                    Text(
-                      'Mentor Mate',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                      ),
-                    ),
-                  ],
-                ),
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                actions: [
-                  IconButton(
-                    icon: Icon(Icons.notifications, color: Colors.white),
-                    onPressed: () {},
-                  ),
-                ],
-              ),
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
@@ -4544,6 +4759,212 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
       default:
         return _buildHomeContent();
     }
+  }
+
+  Widget showDrawer() {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          // Header with App Bar
+          Container(
+            height: 120,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Colors.blue.shade700, Colors.blue.shade500],
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16, top: 40, bottom: 16),
+              child: Row(
+                children: [
+                  Icon(Icons.people_alt_rounded, color: Colors.white, size: 28),
+                  SizedBox(width: 12),
+                  Text(
+                    "MentorMate",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontSize: 20,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // User Profile Section
+          Container(
+            color: Colors.grey.shade50,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: Colors.blue.shade100,
+                    child: Icon(Icons.person, color: Colors.blue.shade700),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "John Doe", // Replace with actual user name
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          "Mentor", // Replace with user role
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, color: Colors.grey.shade500),
+                ],
+              ),
+            ),
+          ),
+
+          // Menu Items
+          _buildMenuItem(
+            icon: Icons.person_outline,
+            title: "My Profile",
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage()));
+            },
+          ),
+          Divider(height: 20, thickness: 1, color: Colors.grey.shade300),
+
+          _buildMenuItem(
+            icon: Icons.help_outline,
+            title: "Help & Support",
+            onTap: () {},
+          ),
+
+          Divider(height: 20, thickness: 1, color: Colors.grey.shade300),
+
+          // Logout
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: ListTile(
+              leading: Icon(Icons.logout, color: Colors.red.shade400),
+              title: Text(
+                "Log Out",
+                style: TextStyle(
+                  color: Colors.red.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              onTap: () {
+                _showLogoutDialog();
+              },
+            ),
+          ),
+
+          // Version Info
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              "Version 1.0.0",
+              style: TextStyle(
+                color: Colors.grey.shade500,
+                fontSize: 12,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Helper method to build consistent menu items
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String title,
+    VoidCallback? onTap,
+    int? badgeCount,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: ListTile(
+        leading: Icon(icon, color: Colors.grey.shade700, size: 22),
+        title: Row(
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                color: Colors.grey.shade800,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            if (badgeCount != null && badgeCount > 0) ...[
+              SizedBox(width: 8),
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade500,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  badgeCount.toString(),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        trailing: Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20),
+        onTap: onTap,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12),
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+  void _logout()async{
+    await FirebaseAuth.instance.signOut();
+  }
+  // Logout confirmation dialog
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Log Out", style: TextStyle(fontWeight: FontWeight.bold)),
+          content: Text("Are you sure you want to log out?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel", style: TextStyle(color: Colors.grey.shade600)),
+            ),
+            TextButton(
+              onPressed: () {
+                _logout();
+                Navigator.push(context, MaterialPageRoute(builder: (_)=>SignInPage()));
+              },
+              child: Text("Log Out", style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildHomeContent() {
@@ -5812,5 +6233,405 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
         ),
       ),
     );
+  }
+}
+class ProfilePage extends StatefulWidget {
+  const ProfilePage({super.key});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+class _ProfilePageState extends State<ProfilePage> {
+  final TextEditingController _nameController = TextEditingController(text: "John Doe");
+  final TextEditingController _emailController = TextEditingController(text: "john.doe@email.com");
+  final TextEditingController _bioController = TextEditingController(text: "Experienced mobile developer passionate about mentoring and sharing knowledge with aspiring developers.");
+  final TextEditingController _skillsController = TextEditingController(text: "Flutter, Dart, UI/UX, Mobile Development");
+
+  String _role = "Mentor";
+  String _experience = "3-5 years";
+  bool _isEditing = false;
+  String _profileImageUrl = ""; // Add your image URL here
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          "My Profile",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: Colors.blue.shade700,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: Icon(_isEditing ? Icons.check : Icons.edit),
+            onPressed: () {
+              setState(() {
+                if (_isEditing) {
+                  // Save profile changes
+                  _saveProfile();
+                }
+                _isEditing = !_isEditing;
+              });
+            },
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Profile Header with Picture
+            _buildProfileHeader(),
+            SizedBox(height: 32),
+
+            // Personal Information
+            _buildSectionHeader("Personal Information"),
+            _buildInfoCard(),
+            SizedBox(height: 24),
+
+
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileHeader() {
+    return Column(
+      children: [
+        Stack(
+          alignment: Alignment.bottomRight,
+          children: [
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.blue.shade300,
+                  width: 3,
+                ),
+              ),
+              child: ClipOval(
+                child: _profileImageUrl.isEmpty
+                    ? Container(
+                  color: Colors.blue.shade100,
+                  child: Icon(
+                    Icons.person,
+                    size: 50,
+                    color: Colors.blue.shade700,
+                  ),
+                )
+                    : Image.network(
+                  _profileImageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: Colors.blue.shade100,
+                      child: Icon(
+                        Icons.person,
+                        size: 50,
+                        color: Colors.blue.shade700,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            if (_isEditing)
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade700,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: IconButton(
+                  icon: Icon(Icons.camera_alt, size: 18, color: Colors.white),
+                  onPressed: _changeProfilePicture,
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+          ],
+        ),
+        SizedBox(height: 16),
+        Text(
+          _nameController.text,
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey.shade800,
+          ),
+        ),
+        SizedBox(height: 4),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          decoration: BoxDecoration(
+            color: _role == "Mentor" ? Colors.blue.shade50 : Colors.green.shade50,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: _role == "Mentor" ? Colors.blue.shade200 : Colors.green.shade200,
+            ),
+          ),
+          child: Text(
+            _role,
+            style: TextStyle(
+              color: _role == "Mentor" ? Colors.blue.shade700 : Colors.green.shade700,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.only(bottom: 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey.shade800,
+        ),
+        textAlign: TextAlign.left,
+      ),
+    );
+  }
+
+  Widget _buildInfoCard() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            _buildEditableField(
+              label: "Full Name",
+              controller: _nameController,
+              icon: Icons.person_outline,
+            ),
+            SizedBox(height: 16),
+            _buildEditableField(
+              label: "Email Address",
+              controller: _emailController,
+              icon: Icons.email_outlined,
+              isEmail: true,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+
+
+
+  Widget _buildEditableField({
+    required String label,
+    required TextEditingController controller,
+    required IconData icon,
+    bool isEmail = false,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.grey.shade600, size: 20),
+        SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              SizedBox(height: 4),
+              TextField(
+                controller: controller,
+                readOnly: !_isEditing,
+                keyboardType: isEmail ? TextInputType.emailAddress : TextInputType.text,
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding: EdgeInsets.zero,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  hintStyle: TextStyle(color: Colors.grey.shade400),
+                ),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReadOnlyField({
+    required String label,
+    required String value,
+    required IconData icon,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.grey.shade600, size: 20),
+        SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDropdownField({
+    required String label,
+    required String value,
+    required IconData icon,
+    required List<String> items,
+    required Function(String?) onChanged,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.grey.shade600, size: 20),
+        SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              SizedBox(height: 4),
+              DropdownButtonFormField<String>(
+                value: value,
+                items: items.map((String item) {
+                  return DropdownMenuItem<String>(
+                    value: item,
+                    child: Text(item),
+                  );
+                }).toList(),
+                onChanged: onChanged,
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+                  border: InputBorder.none,
+                ),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+
+
+  void _changeProfilePicture() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.photo_library),
+                title: Text("Choose from Gallery"),
+                onTap: () {
+                  Navigator.pop(context);
+                  // Implement image picker from gallery
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.photo_camera),
+                title: Text("Take Photo"),
+                onTap: () {
+                  Navigator.pop(context);
+                  // Implement camera functionality
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.delete_outline, color: Colors.red),
+                title: Text("Remove Photo", style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    _profileImageUrl = "";
+                  });
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _saveProfile() {
+    // Implement your profile saving logic here
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Profile updated successfully!"),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _bioController.dispose();
+    _skillsController.dispose();
+    super.dispose();
   }
 }
