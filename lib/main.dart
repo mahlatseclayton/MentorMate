@@ -2034,6 +2034,15 @@ Future <String> getKey(String uid)async {
                 elevation: 0,
                 actions: [
                   IconButton(
+                    icon: Icon(Icons.lightbulb_outline, color: Colors.white),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => SuggestionsView()),
+                      );
+                    },
+                  ),
+                  IconButton(
                     icon: Icon(Icons.add, color: Colors.white),
                     onPressed: _showAddContentDialog,
                   ),
@@ -4743,6 +4752,343 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
     );
   }
 }
+
+class SuggestionsView extends StatefulWidget {
+  @override
+  _SuggestionsViewState createState() => _SuggestionsViewState();
+}
+
+class _SuggestionsViewState extends State<SuggestionsView> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  TextEditingController _searchController = TextEditingController();
+  Future<String>getKey(String uid)async{
+    DocumentSnapshot doc=await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    return doc['signkey'];
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        title: Text(
+          'Suggestions & Feedback',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: Color(0xFF667eea),
+        elevation: 0,
+        iconTheme: IconThemeData(color: Colors.white),
+      ),
+      body: Column(
+        children: [
+          // Search Section
+          _buildSearchSection(),
+
+          // Suggestions List
+          Expanded(
+            child: _buildSuggestionsList(),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddSuggestionDialog,
+        backgroundColor: Color(0xFF667eea),
+        child: Icon(Icons.add_comment, color: Colors.white),
+      ),
+    );
+  }
+
+  Widget _buildSearchSection() {
+    return Container(
+      padding: EdgeInsets.all(16),
+      color: Colors.white,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.grey[100],
+          borderRadius: BorderRadius.circular(25),
+        ),
+        child: TextField(
+          controller: _searchController,
+          decoration: InputDecoration(
+            hintText: 'Search suggestions...',
+            prefixIcon: Icon(Icons.search, color: Color(0xFF667eea)),
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+          ),
+          onChanged: (value) => setState(() {}),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSuggestionsList() {
+    return FutureBuilder<String>(
+      future: getKey(FirebaseAuth.instance.currentUser!.uid), // Your exact method
+      builder: (context, keySnapshot) {
+        // Handle signKey loading states
+        if (keySnapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        if (keySnapshot.hasError) {
+          return Center(child: Text('Error loading sign key'));
+        }
+
+        if (!keySnapshot.hasData || keySnapshot.data == null) {
+          return Center(child: Text('No sign key found'));
+        }
+
+        final signKey = keySnapshot.data!;
+
+        // Now use the signKey in your StreamBuilder
+        return StreamBuilder<QuerySnapshot>(
+          stream: _firestore.collection('suggestions')
+              .where('signkey', isEqualTo: signKey)
+              .orderBy('timestamp', descending: true)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Center(child: CircularProgressIndicator());
+            }
+
+            if (snapshot.hasError) {
+              return Center(child: Text('Error loading suggestions'));
+            }
+
+            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              return _buildEmptyState();
+            }
+
+            var suggestions = snapshot.data!.docs;
+
+            // Apply search filter
+            if (_searchController.text.isNotEmpty) {
+              suggestions = suggestions.where((doc) {
+                final suggestion = doc['suggestion']?.toString().toLowerCase() ?? '';
+                return suggestion.contains(_searchController.text.toLowerCase());
+              }).toList();
+            }
+
+            return ListView.builder(
+              padding: EdgeInsets.all(16),
+              itemCount: suggestions.length,
+              itemBuilder: (context, index) {
+                final doc = suggestions[index];
+                final data = doc.data() as Map<String, dynamic>;
+                final suggestion = data['suggestion']?.toString() ?? '';
+                final timestamp = data['timestamp'] as Timestamp?;
+                final date = timestamp?.toDate() ?? DateTime.now();
+
+                return _buildSuggestionCard(doc.id, suggestion, date);
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSuggestionCard(String docId, String suggestion, DateTime date) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 12),
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Suggestion Text
+              Text(
+                suggestion,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[800],
+                  height: 1.4,
+                ),
+              ),
+              SizedBox(height: 12),
+
+              // Date and Delete Button
+              Row(
+                children: [
+                  // Date
+                  Row(
+                    children: [
+                      Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
+                      SizedBox(width: 4),
+                      Text(
+                        DateFormat('MMM dd, yyyy • hh:mm a').format(date),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                  Spacer(),
+
+                  // Delete Button
+                  IconButton(
+                    icon: Icon(Icons.delete_outline, size: 20),
+                    onPressed: () => _deleteSuggestion(docId),
+                    color: Colors.grey[500],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.inbox,
+            size: 80,
+            color: Colors.grey[300],
+          ),
+          SizedBox(height: 16),
+          Text(
+            'No Suggestions Yet',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[500],
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Be the first to share your feedback!',
+            style: TextStyle(
+              color: Colors.grey[400],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddSuggestionDialog() {
+    TextEditingController controller = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Add Suggestion'),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          decoration: InputDecoration(
+            hintText: 'Share your thoughts, ideas, or feedback...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                _addSuggestion(controller.text.trim());
+                Navigator.pop(context);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Color(0xFF667eea),
+            ),
+            child: Text('Submit'),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Future<void> _addSuggestion(String suggestion) async {
+    String? signkey=await getKey( FirebaseAuth.instance.currentUser!.uid);
+    try {
+      await _firestore.collection('suggestions').add({
+        'suggestion': suggestion,
+        'signkey':signkey,
+        'timestamp': FieldValue.serverTimestamp(),
+        'userId': FirebaseAuth.instance.currentUser?.uid,
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Suggestion added successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to add suggestion'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteSuggestion(String docId) async {
+    final confirmed = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Suggestion'),
+        content: Text('Are you sure you want to delete this suggestion?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _firestore.collection('suggestions').doc(docId).delete();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Suggestion deleted'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete suggestion'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+}
 class SuggestTopicsPage extends StatefulWidget {
   const SuggestTopicsPage({super.key});
 
@@ -4753,6 +5099,7 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
   final TextEditingController _topicController = TextEditingController();
   bool _isSubmitting = false;
 
+
   final List<String> _recentSuggestions = [
     'How to study for finals without stress',
     'Career options after graduation',
@@ -4761,8 +5108,25 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
     'How to prepare for job interviews',
     'Balancing social life and studies'
   ];
+  Future<String>getKey(String uid)async{
+    DocumentSnapshot doc=await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    return doc['signkey'];
+  }
+  void submit()async{
+    final uid=await FirebaseAuth.instance.currentUser?.uid;
+    final signkey=await getKey(uid!);
+    await FirebaseFirestore.instance.collection('suggestions').add({
+      'suggestion': _topicController.text,
+      'signkey':signkey,
+      'timestamp': FieldValue.serverTimestamp(),
+      'userId': FirebaseAuth.instance.currentUser?.uid,
+    });
+    Fluttertoast.showToast(msg: "Suggestion added successfully.",toastLength:Toast.LENGTH_SHORT,gravity:ToastGravity.BOTTOM);
+    _topicController.clear();
 
-  void _submitSuggestion() {
+  }
+
+  void _submitSuggestion() async{
     if (_topicController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -4770,6 +5134,7 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
           backgroundColor: Colors.red,
         ),
       );
+
       return;
     }
 
@@ -4795,7 +5160,7 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
 
       // Add to recent suggestions
       setState(() {
-        _recentSuggestions.insert(0, _topicController.text);
+        submit();
       });
 
       // Show success
