@@ -6857,17 +6857,52 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
   String mentorEmail = 'Loading...';
   String mentorRole = 'Loading...';
   bool isLoading = true;
+  String _profileImageUrl = "";
+
+  Future<void> _loadProfilePicture() async {
+    try {
+      final mentor = await getMentorDoc();
+
+      if (mentor != null && mentor['id'] != null) {
+        final DocumentSnapshot mentorDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(mentor['id'])
+            .get();
+
+        if (mentorDoc.exists && mentorDoc['profile'] != null && mentorDoc['profile'].isNotEmpty) {
+          setState(() {
+            _profileImageUrl = mentorDoc['profile'];
+          });
+        } else {
+          // If no profile image is found, set empty to show default icon
+          setState(() {
+            _profileImageUrl = "";
+          });
+        }
+      } else {
+        setState(() {
+          _profileImageUrl = "";
+        });
+      }
+    } catch (e) {
+      print('Error loading profile picture: $e');
+      setState(() {
+        _profileImageUrl = "";
+      });
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _loadMentorData();
+    _loadProfilePicture();
   }
+
   Future<Map<String, dynamic>?> getMentorDoc() async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return null;
-
 
       DocumentSnapshot currentUserDoc = await FirebaseFirestore.instance
           .collection('users')
@@ -6890,7 +6925,6 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
         return null;
       }
 
-
       DocumentSnapshot mentorDoc = mentorQuery.docs.first;
 
       return {
@@ -6899,13 +6933,13 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
         'email': '${mentorDoc['studentNo']}@students.wits.ac.za',
         'role': mentorDoc['role'],
         'signkey': mentorDoc['signkey'],
-
       };
     } catch (e) {
       print('Error getting mentor doc: $e');
       return null;
     }
   }
+
   Future<void> _loadMentorData() async {
     final mentor = await getMentorDoc();
 
@@ -6917,7 +6951,6 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
         isLoading = false;
       });
     } else {
-
       setState(() {
         mentorName = 'No Mentor Assigned';
         mentorEmail = 'N/A';
@@ -6926,6 +6959,7 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
       });
     }
   }
+
   Future<void> _sendEmail() async {
     final Uri emailLaunchUri = Uri(
       scheme: 'mailto',
@@ -6946,8 +6980,7 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        iconTheme: IconThemeData(
-            color: Colors.white),
+        iconTheme: IconThemeData(color: Colors.white),
         title: Text(
           'My Mentor',
           style: TextStyle(
@@ -7012,7 +7045,34 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
                         width: 3,
                       ),
                     ),
-                    child: Icon(
+                    child: _profileImageUrl.isNotEmpty
+                        ? ClipOval(
+                      child: Image.network(
+                        _profileImageUrl,
+                        width: 120,
+                        height: 120,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                  : null,
+                              color: Color(0xFF667eea),
+                            ),
+                          );
+                        },
+                        errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
+                          return Icon(
+                            Icons.person,
+                            size: 50,
+                            color: Color(0xFF667eea),
+                          );
+                        },
+                      ),
+                    )
+                        : Icon(
                       Icons.person,
                       size: 50,
                       color: Color(0xFF667eea),
