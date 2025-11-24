@@ -2359,24 +2359,9 @@ Future <String>getUsername()async{
       child: Column(
         children: [
           // Latest Meeting Attendance Card
-          StreamBuilder<QuerySnapshot>(
-            stream: meetingsRef
-                .where('createdBy', isEqualTo: currentUserId)
-                .orderBy('dateTime', descending: true)
-                .limit(1)
-                .snapshots(),
+          FutureBuilder<Map<String, dynamic>>(
+            future: _getLatestMeetingWithAttendance(),
             builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text('Error loading meeting data'),
-                );
-              }
-
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return Container(
                   padding: const EdgeInsets.all(20),
@@ -2388,8 +2373,21 @@ Future <String>getUsername()async{
                 );
               }
 
-              final meetings = snapshot.data!.docs;
-              if (meetings.isEmpty) {
+              if (snapshot.hasError) {
+                return Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text('Error loading meeting data'),
+                );
+              }
+
+              final meetingData = snapshot.data!;
+              final hasMeetings = meetingData['hasMeetings'] ?? false;
+
+              if (!hasMeetings) {
                 return Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -2428,11 +2426,12 @@ Future <String>getUsername()async{
                 );
               }
 
-              final meeting = meetings.first;
-              final data = meeting.data() as Map<String, dynamic>;
+              final data = meetingData['meetingData'];
               final attendedCount = (data['attendedStudents'] as List?)?.length ?? 0;
-              final totalMentees = data['totalMentees'] ?? 15;
-              final percentage = data['attendancePercentage'] ?? 0.0;
+              final totalMentees = meetingData['totalMentees'] ?? 0;
+              final percentage = totalMentees > 0
+                  ? (attendedCount / totalMentees * 100)
+                  : 0.0;
 
               return Container(
                 padding: const EdgeInsets.all(20),
@@ -2654,6 +2653,51 @@ Future <String>getUsername()async{
         ],
       ),
     );
+  }
+
+  Future<Map<String, dynamic>> _getLatestMeetingWithAttendance() async {
+    try {
+      // Get latest meeting
+      final meetingsSnapshot = await meetingsRef
+          .where('createdBy', isEqualTo: currentUserId)
+          .orderBy('dateTime', descending: true)
+          .limit(1)
+          .get();
+
+      if (meetingsSnapshot.docs.isEmpty) {
+        return {'hasMeetings': false};
+      }
+
+      // Get the mentor's signkey
+      final mentorDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUserId)
+          .get();
+
+      final mentorSignkey = mentorDoc['signkey'];
+
+      // Count mentees with the same signkey and role=mentee
+      final menteesSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'mentee')
+          .where('signkey', isEqualTo: mentorSignkey)
+          .get();
+
+      final totalMentees = menteesSnapshot.docs.length;
+
+      final meeting = meetingsSnapshot.docs.first;
+      final data = meeting.data() as Map<String, dynamic>;
+
+      return {
+        'hasMeetings': true,
+        'meetingData': data,
+        'totalMentees': totalMentees,
+      };
+
+    } catch (e) {
+      print('Error getting latest meeting data: $e');
+      return {'hasMeetings': false};
+    }
   }
 }
 class SuggestionsPage extends StatefulWidget {
