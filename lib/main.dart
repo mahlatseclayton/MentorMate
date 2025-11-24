@@ -2119,41 +2119,57 @@ Future <String>getUsername()async{
                         return Center(child: Text('No meetings found'));
                       }
 
-                      return ListView.builder(
-                        padding: EdgeInsets.all(16),
-                        itemCount: meetings.length,
-                        itemBuilder: (context, index) {
-                          final meeting = meetings[index];
-                          final data = meeting.data() as Map<String, dynamic>;
+                      return FutureBuilder<int>(
+                        future: _getTotalMenteesCount(),
+                        builder: (context, menteeCountSnapshot) {
+                          if (menteeCountSnapshot.connectionState == ConnectionState.waiting) {
+                            return Center(child: CircularProgressIndicator());
+                          }
 
-                          final attendedCount = (data['attendedStudents'] as List?)?.length ?? 0;
-                          final totalMentees = data['totalMentees'] ?? 15;
-                          final percentage = data['attendancePercentage'] ?? 0.0;
+                          if (menteeCountSnapshot.hasError) {
+                            return Center(child: Text('Error loading mentee count'));
+                          }
 
-                          return Card(
-                            elevation: 2,
-                            margin: EdgeInsets.only(bottom: 12),
-                            child: ListTile(
-                              leading: Icon(Icons.groups, color: Color(0xFF667eea)),
-                              title: Text(data['title'] ?? 'Meeting'),
-                              subtitle: Text('${data['date']} • ${data['time']}'),
-                              trailing: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    '${percentage.toStringAsFixed(1)}%',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF667eea),
-                                    ),
+                          final totalMentees = menteeCountSnapshot.data ?? 0;
+
+                          return ListView.builder(
+                            padding: EdgeInsets.all(16),
+                            itemCount: meetings.length,
+                            itemBuilder: (context, index) {
+                              final meeting = meetings[index];
+                              final data = meeting.data() as Map<String, dynamic>;
+
+                              final attendedCount = (data['attendedStudents'] as List?)?.length ?? 0;
+                              final percentage = totalMentees > 0
+                                  ? (attendedCount / totalMentees * 100)
+                                  : 0.0;
+
+                              return Card(
+                                elevation: 2,
+                                margin: EdgeInsets.only(bottom: 12),
+                                child: ListTile(
+                                  leading: Icon(Icons.groups, color: Color(0xFF667eea)),
+                                  title: Text(data['title'] ?? 'Meeting'),
+                                  subtitle: Text('${data['date']} • ${data['time']}'),
+                                  trailing: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        '${percentage.toStringAsFixed(1)}%',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF667eea),
+                                        ),
+                                      ),
+                                      Text(
+                                        '$attendedCount/$totalMentees',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                    ],
                                   ),
-                                  Text(
-                                    '$attendedCount/$totalMentees',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
+                                ),
+                              );
+                            },
                           );
                         },
                       );
@@ -2166,6 +2182,31 @@ Future <String>getUsername()async{
         );
       },
     );
+  }
+
+  Future<int> _getTotalMenteesCount() async {
+    try {
+      // Get the mentor's signkey
+      final mentorDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUserId)
+          .get();
+
+      final mentorSignkey = mentorDoc['signkey'];
+
+      // Count mentees with the same signkey and role=mentee
+      final menteesSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'mentee')
+          .where('signkey', isEqualTo: mentorSignkey)
+          .get();
+
+      return menteesSnapshot.docs.length;
+
+    } catch (e) {
+      print('Error getting mentee count: $e');
+      return 0;
+    }
   }
 
   @override
@@ -3995,16 +4036,46 @@ class _MenteesPageState extends State<MenteesPage> {
   bool _isLoading = true;
   String _errorMessage = '';
 
+  // Map to store mentee profile images
+  Map<String, String> _menteeProfileImages = {};
+
   @override
   void initState() {
     super.initState();
     _loadMenteesWithAttendance();
   }
-  Future <String>getUsername()async{
-    final uid=FirebaseAuth.instance.currentUser?.uid;
-    DocumentSnapshot doc=await FirebaseFirestore.instance.collection('users').doc(uid).get();
-    return doc['fName']+" " +doc['lName'];
+
+  Future<String> getUsername() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid!).get();
+    return doc['fName'] + " " + doc['lName'];
   }
+
+  // Helper method to build profile avatar with error handling
+  Widget _buildProfileAvatar(String menteeId, {double radius = 25}) {
+    final profileUrl = _menteeProfileImages[menteeId] ?? '';
+
+    if (profileUrl.isNotEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundImage: NetworkImage(profileUrl),
+        onBackgroundImageError: (exception, stackTrace) {
+          // If image fails to load, it will show the default icon
+        },
+      );
+    } else {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: Color(0xFF667eea).withOpacity(0.1),
+        child: Icon(
+          Icons.person,
+          color: Color(0xFF667eea),
+          size: radius,
+        ),
+      );
+    }
+  }
+
   Future<void> _loadMenteesWithAttendance() async {
     try {
       setState(() {
@@ -4030,12 +4101,16 @@ class _MenteesPageState extends State<MenteesPage> {
       print('Found ${meetingsSnapshot.docs.length} meetings');
 
       List<Map<String, dynamic>> menteesData = [];
+      Map<String, String> profileImages = {};
 
       for (var menteeDoc in menteesSnapshot.docs) {
         final mentee = menteeDoc.data() as Map<String, dynamic>;
         final menteeId = menteeDoc.id;
 
         print('Processing mentee: ${mentee['fName']} ${mentee['lName']}');
+
+        // Store profile image
+        profileImages[menteeId] = mentee['profile'] ?? '';
 
         // Calculate attendance for this mentee
         final attendanceData = await _calculateMenteeAttendance(menteeId, meetingsSnapshot.docs);
@@ -4046,13 +4121,14 @@ class _MenteesPageState extends State<MenteesPage> {
           'surname': mentee['lName'] ?? '',
           'studentNumber': mentee['studentNo'] ?? '',
           'email': mentee['email'] ?? '',
-          'profileImage': mentee['profile'] ?? 'https://via.placeholder.com/100',
+          'profileImage': mentee['profile'] ?? '',
           ...attendanceData,
         });
       }
 
       setState(() {
         _menteesWithAttendance = menteesData;
+        _menteeProfileImages = profileImages;
         _isLoading = false;
       });
 
@@ -4102,7 +4178,6 @@ class _MenteesPageState extends State<MenteesPage> {
       'meetings': meetingHistory,
     };
   }
-
 
   void _showMenteeReport(Map<String, dynamic> mentee) {
     showModalBottomSheet(
@@ -4169,7 +4244,6 @@ class _MenteesPageState extends State<MenteesPage> {
                           unselectedLabelColor: Colors.grey,
                           tabs: [
                             Tab(text: 'Overview'),
-
                           ],
                         ),
                         Expanded(
@@ -4190,11 +4264,8 @@ class _MenteesPageState extends State<MenteesPage> {
                                       ),
                                       child: Row(
                                         children: [
-                                          CircleAvatar(
-                                            radius: 30,
-                                            backgroundImage: NetworkImage(mentee['profileImage']),
-                                            backgroundColor: Colors.grey[200],
-                                          ),
+                                          // Use the profile avatar
+                                          _buildProfileAvatar(mentee['id'], radius: 30),
                                           SizedBox(width: 16),
                                           Expanded(
                                             child: Column(
@@ -4343,9 +4414,6 @@ class _MenteesPageState extends State<MenteesPage> {
                                   ],
                                 ),
                               ),
-
-
-
                             ],
                           ),
                         ),
@@ -4505,11 +4573,7 @@ class _MenteesPageState extends State<MenteesPage> {
                         elevation: 2,
                         child: ListTile(
                           contentPadding: EdgeInsets.all(16),
-                          leading: CircleAvatar(
-                            radius: 25,
-                            backgroundImage: NetworkImage(mentee['profileImage']),
-                            backgroundColor: Colors.grey[200],
-                          ),
+                          leading: _buildProfileAvatar(mentee['id'], radius: 25),
                           title: Text(
                             '${mentee['name']} ${mentee['surname']}',
                             style: TextStyle(
