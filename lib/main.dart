@@ -1,15 +1,19 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth_platform_interface/firebase_auth_platform_interface.dart';
 import 'firebase_options.dart';
 import 'package:intl/intl.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:math';
+import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 void main()async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1661,7 +1665,9 @@ Future <String> getKey(String uid)async {
           _buildMenuItem(
             icon: Icons.help_outline,
             title: "Help & Support",
-            onTap: () {},
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_)=>MentorHelpSupportPage()));
+            },
           ),
 
           Divider(height: 20, thickness: 1, color: Colors.grey.shade300),
@@ -2181,14 +2187,12 @@ Future <String>getUsername()async{
           child: Column(
             children: [
               AppBar(
+          iconTheme: IconThemeData(
+          color: Colors.white),
                 title: Row(
                   children: [
-                    CircleAvatar(
-                      backgroundColor: Colors.white,
-                      child: Icon(Icons.person, color: Color(0xFF667eea)),
-                      radius: 20,
-                    ),
-                    SizedBox(width: 12),
+
+                    SizedBox(width: 2),
                     FutureBuilder<String>(
                       future: getUsername(),
                       builder: (context, snapshot) {
@@ -2229,10 +2233,7 @@ Future <String>getUsername()async{
                     icon: Icon(Icons.add, color: Colors.white),
                     onPressed: _showAddContentDialog,
                   ),
-                  IconButton(
-                    icon: Icon(Icons.menu, color: Colors.white),
-                    onPressed: () {},
-                  ),
+
                 ],
               ),
               Expanded(
@@ -4635,16 +4636,14 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
             ),
           ),
           child: AppBar(
+            iconTheme: IconThemeData(
+                color: Colors.white),
             backgroundColor: Colors.transparent,
             elevation: 0,
             title: Row(
               children: [
-                CircleAvatar(
-                  backgroundColor: Colors.white,
-                  child: Icon(Icons.person, color: Color(0xFF667eea)),
-                  radius: 20,
-                ),
-                SizedBox(width: 12),
+
+                SizedBox(width: 2),
                 FutureBuilder<String>(
                   future: getUsername(),
                   builder: (context, snapshot) {
@@ -4802,18 +4801,14 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
               padding: const EdgeInsets.all(16.0),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: Colors.blue.shade100,
-                    child: Icon(Icons.person, color: Colors.blue.shade700),
-                  ),
-                  SizedBox(width: 12),
+
+                  SizedBox(width: 2),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "John Doe", // Replace with actual user name
+                          "Mentor Profile",
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 16,
@@ -4822,7 +4817,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                         ),
                         SizedBox(height: 4),
                         Text(
-                          "Mentor", // Replace with user role
+                          "Mentor",
                           style: TextStyle(
                             color: Colors.grey.shade600,
                             fontSize: 12,
@@ -4831,7 +4826,14 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                       ],
                     ),
                   ),
-                  Icon(Icons.chevron_right, color: Colors.grey.shade500),
+                  GestureDetector(
+                   child: Icon(Icons.chevron_right, color: Colors.grey.shade500),
+                    onTap: (){
+                     Navigator.push(context, MaterialPageRoute(builder: (_)=>ViewMentorPage()));
+                    },
+
+                  ),
+
                 ],
               ),
             ),
@@ -4850,7 +4852,9 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
           _buildMenuItem(
             icon: Icons.help_outline,
             title: "Help & Support",
-            onTap: () {},
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_)=>MenteeHelpSupportPage()));
+            },
           ),
 
           Divider(height: 20, thickness: 1, color: Colors.grey.shade300),
@@ -6242,20 +6246,244 @@ class ProfilePage extends StatefulWidget {
   State<ProfilePage> createState() => _ProfilePageState();
 }
 class _ProfilePageState extends State<ProfilePage> {
-  final TextEditingController _nameController = TextEditingController(text: "John Doe");
-  final TextEditingController _emailController = TextEditingController(text: "john.doe@email.com");
-  final TextEditingController _bioController = TextEditingController(text: "Experienced mobile developer passionate about mentoring and sharing knowledge with aspiring developers.");
-  final TextEditingController _skillsController = TextEditingController(text: "Flutter, Dart, UI/UX, Mobile Development");
-
-  String _role = "Mentor";
-  String _experience = "3-5 years";
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  String _role = "";
   bool _isEditing = false;
-  String _profileImageUrl = ""; // Add your image URL here
+  String _profileImageUrl = "";
+  bool _isLoading = true;
+  final ImagePicker _imagePicker = ImagePicker();
+
+  Future<void> _pickImageFromGallery() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 80,
+      );
+
+      if (image != null) {
+        await _uploadImageToFirebase(File(image.path));
+      }
+    } catch (e) {
+      print('Error picking image: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to pick image'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _uploadImageToFirebase(File imageFile) async {
+    try {
+      final userId = FirebaseAuth.instance.currentUser!.uid;
+
+      // Create a reference to the location you want to upload to in Firebase Storage
+      final Reference storageRef = FirebaseStorage.instance
+          .ref()
+          .child('profile_pictures')
+          .child('$userId.jpg');
+
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              CircularProgressIndicator(color: Colors.white),
+              SizedBox(width: 12),
+              Text('Uploading image...'),
+            ],
+          ),
+          duration: Duration(minutes: 1), // Long duration for upload
+        ),
+      );
+
+      // Upload the file to Firebase Storage
+      final UploadTask uploadTask = storageRef.putFile(imageFile);
+
+      // Wait for the upload to complete
+      final TaskSnapshot snapshot = await uploadTask;
+
+      // Get the download URL
+      final String downloadUrl = await snapshot.ref.getDownloadURL();
+
+      // Save the download URL to Firestore
+      await _saveImageUrlToFirestore(downloadUrl);
+
+      // Update local state
+      setState(() {
+        _profileImageUrl = downloadUrl;
+      });
+
+      // Hide loading indicator
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Profile picture updated successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      print('Error uploading image: $e');
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to upload image'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _saveImageUrlToFirestore(String imageUrl) async {
+    try {
+      final userId = FirebaseAuth.instance.currentUser!.uid;
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .update({
+        'profile': imageUrl,
+      });
+    } catch (e) {
+      print('Error saving image URL: $e');
+      throw e; // Re-throw to handle in the calling method
+    }
+  }
+
+  Future<void> _removeProfilePicture() async {
+    try {
+      final userId = FirebaseAuth.instance.currentUser!.uid;
+
+      // Show confirmation dialog
+      bool? shouldDelete = await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text("Remove Profile Picture"),
+            content: Text("Are you sure you want to remove your profile picture?"),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text("Cancel"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text("Remove", style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (shouldDelete == true) {
+        // Show loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(children: [CircularProgressIndicator(), Text('Removing...')]),
+            duration: Duration(seconds: 30),
+          ),
+        );
+
+        // ONLY THIS PART CHANGES - Remove URL from Firestore
+        await FirebaseFirestore.instance.collection('users').doc(userId).update({
+          'profile': FieldValue.delete(), // ← Just remove the string field
+        });
+
+        // Update UI
+        setState(() {
+          _profileImageUrl = "";
+        });
+
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Profile picture removed!'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      print('Error removing profile picture: $e');
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to remove picture'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _loadProfilePicture() async {
+    try {
+      final userId = FirebaseAuth.instance.currentUser!.uid;
+      final DocumentSnapshot userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+
+      if (userDoc.exists && userDoc['profile'] != null) {
+        setState(() {
+          _profileImageUrl = userDoc['profile'];
+        });
+      }
+    } catch (e) {
+      print('Error loading profile picture: $e');
+    }
+  }
+
+  Future<String> getRole() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    return doc['role'];
+  }
+
+  Future<String> getFullName() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    return doc['fName'] + " " + doc['lName'];
+  }
+
+  Future<String> getEmail() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    return doc['studentNo'] + '@students.wits.ac.za';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+    _loadProfilePicture();
+  }
+
+  Future<void> _loadUserData() async {
+    try {
+      final name = await getFullName();
+      final email = await getEmail();
+      final role = await getRole();
+
+      setState(() {
+        _nameController.text = name;
+        _emailController.text = email;
+        _role = role;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading user data: $e');
+      setState(() {
+        _nameController.text = 'Error loading name';
+        _emailController.text = 'Error loading email';
+        _role = 'Unknown';
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        iconTheme: IconThemeData(color: Colors.white),
         title: Text(
           "My Profile",
           style: TextStyle(
@@ -6271,7 +6499,6 @@ class _ProfilePageState extends State<ProfilePage> {
             onPressed: () {
               setState(() {
                 if (_isEditing) {
-                  // Save profile changes
                   _saveProfile();
                 }
                 _isEditing = !_isEditing;
@@ -6280,7 +6507,9 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
+      body: _isLoading
+          ? Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
         padding: EdgeInsets.all(16),
         child: Column(
           children: [
@@ -6292,8 +6521,6 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildSectionHeader("Personal Information"),
             _buildInfoCard(),
             SizedBox(height: 24),
-
-
           ],
         ),
       ),
@@ -6415,27 +6642,22 @@ class _ProfilePageState extends State<ProfilePage> {
         padding: EdgeInsets.all(16),
         child: Column(
           children: [
-            _buildEditableField(
+            _buildReadOnlyField(
               label: "Full Name",
-              controller: _nameController,
+              value: _nameController.text,
               icon: Icons.person_outline,
             ),
             SizedBox(height: 16),
-            _buildEditableField(
+            _buildReadOnlyField(
               label: "Email Address",
-              controller: _emailController,
+              value: _emailController.text,
               icon: Icons.email_outlined,
-              isEmail: true,
             ),
           ],
         ),
       ),
     );
   }
-
-
-
-
 
   Widget _buildEditableField({
     required String label,
@@ -6507,12 +6729,15 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
               SizedBox(height: 4),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey.shade800,
+              Container(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade800,
+                  ),
                 ),
               ),
             ],
@@ -6573,8 +6798,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-
-
   void _changeProfilePicture() {
     showModalBottomSheet(
       context: context,
@@ -6588,15 +6811,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 title: Text("Choose from Gallery"),
                 onTap: () {
                   Navigator.pop(context);
-                  // Implement image picker from gallery
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.photo_camera),
-                title: Text("Take Photo"),
-                onTap: () {
-                  Navigator.pop(context);
-                  // Implement camera functionality
+                  _pickImageFromGallery();
                 },
               ),
               ListTile(
@@ -6604,9 +6819,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 title: Text("Remove Photo", style: TextStyle(color: Colors.red)),
                 onTap: () {
                   Navigator.pop(context);
-                  setState(() {
-                    _profileImageUrl = "";
-                  });
+                  _removeProfilePicture();
                 },
               ),
             ],
@@ -6617,7 +6830,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _saveProfile() {
-    // Implement your profile saving logic here
+    // Only save bio and skills since name and email are read-only
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text("Profile updated successfully!"),
@@ -6630,8 +6843,1657 @@ class _ProfilePageState extends State<ProfilePage> {
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
-    _bioController.dispose();
-    _skillsController.dispose();
     super.dispose();
+  }
+}
+class ViewMentorPage extends StatefulWidget {
+  const ViewMentorPage({super.key});
+
+  @override
+  State<ViewMentorPage> createState() => _ViewMentorPageState();
+}
+class _ViewMentorPageState extends State<ViewMentorPage> {
+  String mentorName = 'Loading...';
+  String mentorEmail = 'Loading...';
+  String mentorRole = 'Loading...';
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMentorData();
+  }
+  Future<Map<String, dynamic>?> getMentorDoc() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return null;
+
+
+      DocumentSnapshot currentUserDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+
+      if (!currentUserDoc.exists) return null;
+
+      final String signKey = currentUserDoc['signkey'];
+
+      QuerySnapshot mentorQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .where('signkey', isEqualTo: signKey)
+          .where('role', isEqualTo: 'mentor')
+          .limit(1)
+          .get();
+
+      if (mentorQuery.docs.isEmpty) {
+        print('No mentor found with signkey: $signKey');
+        return null;
+      }
+
+
+      DocumentSnapshot mentorDoc = mentorQuery.docs.first;
+
+      return {
+        'id': mentorDoc.id,
+        'name': '${mentorDoc['fName']} ${mentorDoc['lName']}',
+        'email': '${mentorDoc['studentNo']}@students.wits.ac.za',
+        'role': mentorDoc['role'],
+        'signkey': mentorDoc['signkey'],
+
+      };
+    } catch (e) {
+      print('Error getting mentor doc: $e');
+      return null;
+    }
+  }
+  Future<void> _loadMentorData() async {
+    final mentor = await getMentorDoc();
+
+    if (mentor != null) {
+      setState(() {
+        mentorName = mentor['name'];
+        mentorEmail = mentor['email'];
+        mentorRole = mentor['role'];
+        isLoading = false;
+      });
+    } else {
+
+      setState(() {
+        mentorName = 'No Mentor Assigned';
+        mentorEmail = 'N/A';
+        mentorRole = 'Not Available';
+        isLoading = false;
+      });
+    }
+  }
+  Future<void> _sendEmail() async {
+    final Uri emailLaunchUri = Uri(
+      scheme: 'mailto',
+      path: mentorEmail,
+    );
+
+    if (!await launchUrl(emailLaunchUri)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not launch email app'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        iconTheme: IconThemeData(
+            color: Colors.white),
+        title: Text(
+          'My Mentor',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: Color(0xFF667eea),
+        elevation: 0,
+      ),
+      body: isLoading
+          ? _buildLoadingState()
+          : _buildProfileContent(),
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(
+            color: Color(0xFF667eea),
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Loading mentor profile...',
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontSize: 16,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileContent() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(20),
+      child: Column(
+        children: [
+          // Profile Card
+          Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  // Profile Picture
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFF667eea).withOpacity(0.1),
+                      border: Border.all(
+                        color: Color(0xFF667eea),
+                        width: 3,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.person,
+                      size: 50,
+                      color: Color(0xFF667eea),
+                    ),
+                  ),
+                  SizedBox(height: 20),
+
+                  // Mentor Name
+                  Text(
+                    mentorName,
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade800,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 8),
+
+                  // Role Badge
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Color(0xFF667eea).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Color(0xFF667eea).withOpacity(0.3),
+                      ),
+                    ),
+                    child: Text(
+                      mentorRole,
+                      style: TextStyle(
+                        color: Color(0xFF667eea),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 24),
+
+                  // Contact Section
+                  _buildContactSection(),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: 20),
+
+          // Additional Info Card
+          Card(
+            elevation: 3,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Color(0xFF667eea),
+                        size: 20,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'About Your Mentor',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'Your mentor is here to guide you through your learning journey. '
+                        'Feel free to reach out for assistance, guidance, or any questions '
+                        'you may have about your progress.',
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContactSection() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.contact_mail,
+                color: Color(0xFF667eea),
+                size: 20,
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Contact Details',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 16),
+
+          // Email Contact
+          InkWell(
+            onTap: _sendEmail,
+            child: Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Color(0xFF667eea).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.email,
+                      color: Color(0xFF667eea),
+                      size: 20,
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Email',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          mentorEmail,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 16,
+                    color: Colors.grey.shade400,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: 12),
+
+          // Contact Instructions
+          Text(
+            'Tap the email above to contact your mentor directly',
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 12,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+class MentorHelpSupportPage extends StatelessWidget {
+  const MentorHelpSupportPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        iconTheme: IconThemeData(
+            color: Colors.white),
+        title: Text(
+          'Help & Support',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: Color(0xFF667eea),
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Welcome Section
+            _buildSectionHeader('Mentor Dashboard Guide'),
+            _buildInfoCard(
+              'Welcome to your MentorMate dashboard! This comprehensive guide will help you '
+                  'understand all the tools and features available to manage your mentees effectively '
+                  'and create an engaging learning environment.',
+            ),
+            SizedBox(height: 24),
+
+            // Navigation Guide
+            _buildSectionHeader('Navigation Guide'),
+            _buildFeatureItem(
+              icon: Icons.dashboard,
+              title: 'Dashboard Tab',
+              description: 'Overview of your mentorship activities, quick stats, and recent mentee interactions.',
+            ),
+            _buildFeatureItem(
+              icon: Icons.people,
+              title: 'Mentees Tab',
+              description: 'View and manage all your assigned mentees, their progress, and contact information.',
+            ),
+            _buildFeatureItem(
+              icon: Icons.announcement,
+              title: 'Announcements Tab',
+              description: 'Create and manage announcements, meeting notifications, and important updates for your mentees.',
+            ),
+            _buildFeatureItem(
+              icon: Icons.assignment,
+              title: 'Registers Tab',
+              description: 'Create attendance registers, track mentee participation, and manage session attendance.',
+            ),
+            _buildFeatureItem(
+              icon: Icons.calendar_today,
+              title: 'Schedule Tab',
+              description: 'Create and manage meetings, set up sessions, and organize your mentorship calendar.',
+            ),
+            _buildFeatureItem(
+              icon: Icons.auto_awesome,
+              title: 'AI Suggestions Tab',
+              description: 'Generate intelligent topic suggestions using Gemini AI based on your mentees\' interests and learning patterns.',
+            ),
+            SizedBox(height: 24),
+
+            // Mentor Features Explained
+            _buildSectionHeader('Mentor Features Explained'),
+
+            _buildFeatureCard(
+              'Mentee Management',
+              Icons.supervisor_account,
+              'View all your assigned mentees, track their progress, and access their contact information. '
+                  'Monitor attendance patterns and engagement levels.',
+            ),
+
+            _buildFeatureCard(
+              'Announcement System',
+              Icons.campaign,
+              'Create announcements that are automatically sent to all your mentees. '
+                  'Include meeting details, resource links, or general updates. Use different types '
+                  '(general, meeting, resource) for better organization.',
+            ),
+
+            _buildFeatureCard(
+              'Attendance Registers',
+              Icons.assignment_add,
+              'Create digital attendance registers for your sessions. Set questions, options, '
+                  'and expiration times. Track which mentees have responded in real-time.',
+            ),
+
+            _buildFeatureCard(
+              'Meeting Scheduler',
+              Icons.event_note,
+              'Schedule meetings with automatic notifications to mentees. Include details like '
+                  'title, description, date, time, venue, and total expected mentees.',
+            ),
+
+            _buildFeatureCard(
+              'AI Topic Suggestions',
+              Icons.auto_awesome,
+              'Leverage Google\'s Gemini AI to generate intelligent topic suggestions based on:'
+                  '\n• Mentee interests and past suggestions'
+                  '\n• Current learning trends'
+                  '\n• Skill gaps and development areas'
+                  '\n• Industry-relevant topics',
+            ),
+
+            _buildFeatureCard(
+              'Attendance Analytics',
+              Icons.analytics,
+              'View attendance percentages and patterns for your meetings. Identify engaged '
+                  'mentees and those who may need additional support.',
+            ),
+            SizedBox(height: 24),
+
+            // AI Suggestions Feature Deep Dive
+            _buildSectionHeader('AI Topic Suggestions Feature'),
+            Card(
+              elevation: 3,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.auto_awesome_motion, color: Colors.purple.shade600, size: 24),
+                        SizedBox(width: 8),
+                        Text(
+                          'Powered by Gemini AI',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.purple.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                    _buildAIFeatureItem(
+                      'Smart Topic Generation',
+                      'AI analyzes mentee interests, past suggestions, and learning patterns to generate relevant topics.',
+                    ),
+                    _buildAIFeatureItem(
+                      'Personalized Recommendations',
+                      'Get topic suggestions tailored to your specific mentee group and their skill levels.',
+                    ),
+                    _buildAIFeatureItem(
+                      'Trend Integration',
+                      'AI incorporates current industry trends and emerging technologies into suggestions.',
+                    ),
+                    _buildAIFeatureItem(
+                      'Learning Path Optimization',
+                      'Suggestions are designed to create a logical learning progression for your mentees.',
+                    ),
+                    SizedBox(height: 16),
+                    Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.purple.shade100),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'How to Use AI Suggestions:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.purple.shade800,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          _buildAIStep('1. Go to AI Suggestions tab'),
+                          _buildAIStep('2. Click "Generate Topics" button'),
+                          _buildAIStep('3. Review AI-generated suggestions'),
+                          _buildAIStep('4. Save topics you want to use'),
+                          _buildAIStep('5. Schedule meetings around selected topics'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(height: 24),
+
+            // Best Practices
+            _buildSectionHeader('Best Practices for Mentors'),
+            _buildTipItem('✓ Create announcements regularly to keep mentees engaged'),
+            _buildTipItem('✓ Set up attendance registers at least 15 minutes before sessions'),
+            _buildTipItem('✓ Schedule meetings well in advance and send reminders'),
+            _buildTipItem('✓ Use AI suggestions to discover new relevant topics'),
+            _buildTipItem('✓ Monitor attendance patterns to identify mentees needing support'),
+            _buildTipItem('✓ Use different announcement types for better organization'),
+            _buildTipItem('✓ Combine AI suggestions with mentee feedback for optimal topics'),
+            _buildTipItem('✓ Set realistic expiration times for attendance registers'),
+            SizedBox(height: 24),
+
+            // Troubleshooting
+            _buildSectionHeader('Troubleshooting'),
+            _buildTroubleshootingItem(
+              'Mentees not receiving announcements',
+              'Verify your signkey is correctly set and ensure mentees have the same signkey. Check internet connectivity.',
+            ),
+            _buildTroubleshootingItem(
+              'Attendance register not showing for mentees',
+              'Confirm the register hasn\'t expired and check if the mentor ID matches your user ID.',
+            ),
+            _buildTroubleshootingItem(
+              'AI suggestions not generating',
+              'Check your internet connection and ensure the Gemini API is properly configured. Try refreshing the page.',
+            ),
+            _buildTroubleshootingItem(
+              'Meeting notifications not working',
+              'Ensure all meeting details are properly saved and check the meeting date/time is in the future.',
+            ),
+            _buildTroubleshootingItem(
+              'Can\'t view mentee list',
+              'Verify you have assigned mentees and check your internet connection. Refresh the page.',
+            ),
+            SizedBox(height: 24),
+
+            // Quick Actions Guide
+            _buildSectionHeader('Quick Actions Guide'),
+            _buildQuickActionItem(
+              'Create Announcement',
+              'Go to Announcements tab → Tap + button → Fill details → Choose type → Publish',
+            ),
+            _buildQuickActionItem(
+              'Setup Attendance Register',
+              'Go to Registers tab → Create Register → Set question/options → Set expiry → Activate',
+            ),
+            _buildQuickActionItem(
+              'Schedule Meeting',
+              'Go to Schedule tab → Add Meeting → Enter details → Set date/time → Save',
+            ),
+            _buildQuickActionItem(
+              'Generate AI Topics',
+              'Go to AI Suggestions tab → Click Generate → Review suggestions → Save selected topics',
+            ),
+            _buildQuickActionItem(
+              'Check Mentee Progress',
+              'Go to Mentees tab → Select mentee → View profile and attendance history',
+            ),
+            SizedBox(height: 24),
+
+            // AI Best Practices
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.psychology, color: Colors.deepPurple.shade600, size: 24),
+                        SizedBox(width: 8),
+                        Text(
+                          'AI Suggestions Best Practices',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.deepPurple.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      'Maximize the effectiveness of AI-generated topic suggestions with these strategies:',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.deepPurple.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.deepPurple.shade100),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildAITip('Use AI suggestions as starting points for discussion'),
+                          _buildAITip('Combine multiple AI topics into comprehensive sessions'),
+                          _buildAITip('Modify AI suggestions based on your expertise'),
+                          _buildAITip('Use trending topics to keep content current'),
+                          _buildAITip('Balance AI suggestions with mentee-requested topics'),
+                          _buildAITip('Track which AI-generated topics resonate most with mentees'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(height: 24),
+
+            // Support Resources
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.school, color: Color(0xFF667eea), size: 24),
+                        SizedBox(width: 8),
+                        Text(
+                          'Mentor Resources',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      'Maximize your impact as a mentor with these additional resources and tips '
+                          'for effective mentorship and engagement.',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green.shade100),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Effective Mentorship Tips:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green.shade800,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          _buildResourceTip('Set clear expectations with your mentees'),
+                          _buildResourceTip('Provide regular, constructive feedback'),
+                          _buildResourceTip('Encourage mentee participation and questions'),
+                          _buildResourceTip('Use a variety of teaching methods'),
+                          _buildResourceTip('Track progress and celebrate achievements'),
+                          _buildResourceTip('Leverage AI to discover new teaching angles'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(height: 32),
+
+            // Technical Support
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.support_agent, color: Colors.orange.shade600, size: 24),
+                        SizedBox(width: 8),
+                        Text(
+                          'Technical Support',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      'For technical issues, system errors, AI feature problems, or feature requests, please contact the development team. '
+                          'Include detailed information about the issue for faster resolution.',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                    Container(
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.shade100),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber, color: Colors.orange.shade600),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Report AI or system issues immediately to ensure smooth operation for all users',
+                              style: TextStyle(
+                                color: Colors.orange.shade800,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(height: 32),
+
+            // Developer Credit
+            _buildDeveloperCredit(),
+            SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey.shade800,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(String text) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: Colors.grey.shade700,
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureItem({
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Color(0xFF667eea).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: Color(0xFF667eea), size: 20),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  description,
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeatureCard(String title, IconData icon, String description) {
+    return Card(
+      elevation: 2,
+      margin: EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Color(0xFF667eea).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: Color(0xFF667eea), size: 24),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 14,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAIFeatureItem(String feature, String description) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.auto_awesome, color: Colors.purple.shade600, size: 16),
+          SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  feature,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.purple.shade800,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  description,
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAIStep(String step) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 4),
+      child: Text(
+        step,
+        style: TextStyle(
+          color: Colors.purple.shade700,
+          fontSize: 13,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAITip(String tip) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.psychology_outlined, color: Colors.deepPurple.shade600, size: 16),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              tip,
+              style: TextStyle(
+                color: Colors.deepPurple.shade700,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTroubleshootingItem(String issue, String solution) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning_amber, color: Colors.orange.shade600, size: 18),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  issue,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange.shade800,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          Text(
+            solution,
+            style: TextStyle(
+              color: Colors.orange.shade700,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTipItem(String tip) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.check_circle, color: Colors.green.shade600, size: 18),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              tip,
+              style: TextStyle(
+                color: Colors.grey.shade700,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResourceTip(String tip) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.arrow_right, color: Colors.green.shade600, size: 16),
+          SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              tip,
+              style: TextStyle(
+                color: Colors.green.shade700,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionItem(String action, String steps) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            action,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.blue.shade800,
+              fontSize: 14,
+            ),
+          ),
+          SizedBox(height: 6),
+          Text(
+            steps,
+            style: TextStyle(
+              color: Colors.blue.shade700,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeveloperCredit() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.developer_mode,
+            size: 40,
+            color: Colors.grey.shade600,
+          ),
+          SizedBox(height: 12),
+          Text(
+            'MentorMate Platform Developed by',
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontSize: 14,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'Mahlatse Clayton Maredi',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF667eea),
+            ),
+          ),
+
+          SizedBox(height: 4),
+          Text(
+            'Dedicated to enhancing mentorship through technology',
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 12,
+              fontStyle: FontStyle.italic,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+class MenteeHelpSupportPage extends StatelessWidget {
+  const MenteeHelpSupportPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        iconTheme: IconThemeData(
+            color: Colors.white),
+        title: Text(
+          'Help & Support',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: Color(0xFF667eea),
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Welcome Section
+            _buildSectionHeader('Welcome to MentorMate'),
+            _buildInfoCard(
+              'MentorMate is your dedicated platform for connecting with mentors, '
+                  'managing your learning journey, and accessing educational resources. '
+                  'This guide will help you understand all the features available to you.',
+            ),
+            SizedBox(height: 24),
+
+            // Navigation Guide
+            _buildSectionHeader('Navigation Guide'),
+            _buildFeatureItem(
+              icon: Icons.home,
+              title: 'Home Tab',
+              description: 'View your dashboard with announcements, upcoming meetings, and quick overview of your activities.',
+            ),
+            _buildFeatureItem(
+              icon: Icons.assignment,
+              title: 'Register Tab',
+              description: 'Submit attendance for mentor sessions and respond to attendance registers.',
+            ),
+            _buildFeatureItem(
+              icon: Icons.calendar_today,
+              title: 'Schedule Tab',
+              description: 'View your meeting calendar, see upcoming sessions, and manage your schedule.',
+            ),
+            _buildFeatureItem(
+              icon: Icons.lightbulb_outline,
+              title: 'Suggest Tab',
+              description: 'Share topic suggestions with your mentor for future sessions or discussions.',
+            ),
+            SizedBox(height: 24),
+
+            // Features Explained
+            _buildSectionHeader('Key Features Explained'),
+
+            _buildFeatureCard(
+              'Announcements',
+              Icons.announcement,
+              'Stay updated with important notices from your mentor. You\'ll see meeting reminders, '
+                  'resource updates, and general announcements here.',
+            ),
+
+            _buildFeatureCard(
+              'Attendance Registers',
+              Icons.assignment_turned_in,
+              'When your mentor creates an attendance register, you\'ll receive a notification. '
+                  'Tap on the register and select your response to mark your attendance.',
+            ),
+
+            _buildFeatureCard(
+              'Meeting Schedule',
+              Icons.event_available,
+              'View all your scheduled meetings with date, time, and venue details. '
+                  'Never miss an important session with your mentor.',
+            ),
+
+            _buildFeatureCard(
+              'Topic Suggestions',
+              Icons.lightbulb,
+              'Have an idea for a discussion topic? Use the suggest feature to share your '
+                  'learning interests with your mentor.',
+            ),
+
+            _buildFeatureCard(
+              'Profile Management',
+              Icons.person,
+              'Update your personal information, view your mentor\'s details, and manage '
+                  'your account settings.',
+            ),
+            SizedBox(height: 24),
+
+            // Troubleshooting
+            _buildSectionHeader('Troubleshooting'),
+            _buildTroubleshootingItem(
+              'I can\'t see any announcements',
+              'Make sure you\'re connected to the internet and check if your mentor has posted any announcements recently.',
+            ),
+            _buildTroubleshootingItem(
+              'Attendance register not working',
+              'Ensure you\'re submitting before the expiration time. If issues persist, contact your mentor directly.',
+            ),
+            _buildTroubleshootingItem(
+              'Can\'t view meeting schedule',
+              'Check your internet connection and verify that your mentor has scheduled upcoming meetings.',
+            ),
+            SizedBox(height: 24),
+
+            // Quick Tips
+            _buildSectionHeader('Quick Tips'),
+            _buildTipItem('✓ Check the app regularly for new announcements'),
+            _buildTipItem('✓ Submit attendance promptly when registers are available'),
+            _buildTipItem('✓ Use the suggestion feature to guide your learning'),
+            _buildTipItem('✓ Keep your profile information up to date'),
+            _buildTipItem('✓ Contact your mentor directly for urgent matters'),
+            SizedBox(height: 32),
+
+            // Contact Support
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.support_agent, color: Color(0xFF667eea), size: 24),
+                        SizedBox(width: 8),
+                        Text(
+                          'Need More Help?',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      'If you\'re experiencing technical issues or need additional assistance, '
+                          'please contact your mentor directly or reach out to our support team.',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue.shade100),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'For Technical Support:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blue.shade800,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Contact your mentor first for app-related questions',
+                            style: TextStyle(
+                              color: Colors.blue.shade700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(height: 32),
+
+            // Developer Credit
+            _buildDeveloperCredit(),
+            SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey.shade800,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(String text) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: Colors.grey.shade700,
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureItem({
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Color(0xFF667eea).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: Color(0xFF667eea), size: 20),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  description,
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeatureCard(String title, IconData icon, String description) {
+    return Card(
+      elevation: 2,
+      margin: EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Color(0xFF667eea).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: Color(0xFF667eea), size: 24),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 14,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTroubleshootingItem(String issue, String solution) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning_amber, color: Colors.orange.shade600, size: 18),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  issue,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange.shade800,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          Text(
+            solution,
+            style: TextStyle(
+              color: Colors.orange.shade700,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTipItem(String tip) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.check_circle, color: Colors.green.shade600, size: 18),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              tip,
+              style: TextStyle(
+                color: Colors.grey.shade700,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeveloperCredit() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.developer_mode,
+            size: 40,
+            color: Colors.grey.shade600,
+          ),
+          SizedBox(height: 12),
+          Text(
+            'MentorMate Platform Developed by',
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontSize: 14,
+            ),
+          ),
+          SizedBox(height: 4),
+          Text(
+            'Mahlatse Clayton Maredi',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF667eea),
+            ),
+          ),
+
+          SizedBox(height: 4),
+          Text(
+            'Dedicated to enhancing mentorship through technology',
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 12,
+              fontStyle: FontStyle.italic,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
   }
 }
