@@ -15,12 +15,24 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:math';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'services/notification_service.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print("Handling a background message: ${message.messageId}");
+}
 void main()async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
   await dotenv.load(fileName: ".env");
+  await NotificationService.initialize();
 
   runApp(MyApp());
 }
@@ -319,86 +331,98 @@ class _SignUpPageState extends State<SignUpPage> {
     String? imageUrl = "";
 
     if (password != cpassword) {
-      Fluttertoast.showToast(
-        msg: "Passwords do not match",
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,
-      );
+      Fluttertoast.showToast(msg: "Passwords do not match");
       return;
-    } else {
-      try {
-        UserCredential userCredential = await FirebaseAuth.instance
-            .createUserWithEmailAndPassword(email: email, password: password);
-        String? uid = userCredential.user?.uid;
+    }
 
-        if (uid != null) {
-          Map<String, dynamic> userData = {
-            'fName': fName,
-            'lName': lName,
-            'role': _selectedRole,
-            'studentNo': _studentNumberController.text,
-            'profile': imageUrl,
-            'createdAt': FieldValue.serverTimestamp(),
-          };
+    try {
+      // CREATE USER IN FIREBASE AUTH
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
 
-          if (_selectedRole == 'mentor') {
-            String signkey = _generateSignKey();
-            userData['signkey'] = signkey; // Store signkey for mentor
+      User? user = FirebaseAuth.instance.currentUser;
+      String? uid = user?.uid;
 
-            await FirebaseFirestore.instance.collection('users').doc(uid).set(userData);
-            _showMentorSignKeyDialog(signkey);
-          } else if (_selectedRole == 'mentee') {
-            if (_signkeyController.text.isEmpty) {
-              Fluttertoast.showToast(
-                msg: "Please enter your mentor's signkey",
-                gravity: ToastGravity.BOTTOM,
-                toastLength: Toast.LENGTH_SHORT,
-              );
-              return;
-            }
+      if (uid == null) {
+        Fluttertoast.showToast(msg: "Account creation failed.");
+        return;
+      }
 
-            String? mentorId = await _findMentorBySignKey(_signkeyController.text);
-            if (mentorId == null) {
-              Fluttertoast.showToast(
-                msg: "Invalid signkey. Please check with your mentor.",
-                gravity: ToastGravity.BOTTOM,
-                toastLength: Toast.LENGTH_SHORT,
-              );
-              return;
-            }
+      // ----- SAVE USER IN FIRESTORE -----
+      Map<String, dynamic> userData = {
+        'fName': fName,
+        'lName': lName,
+        'role': _selectedRole,
+        'studentNo': _studentNumberController.text,
+        'profile': imageUrl,
+        'createdAt': FieldValue.serverTimestamp(),
+      };
 
-            userData['mentor_id'] = mentorId;
-            userData['signkey'] = _signkeyController.text; // Store signkey for mentee too
+      if (_selectedRole == 'mentor') {
+        // Mentor: generate signkey
+        String signkey = _generateSignKey();
+        userData['signkey'] = signkey;
 
-            await FirebaseFirestore.instance.collection('users').doc(uid).set(userData);
+        await FirebaseFirestore.instance.collection('users').doc(uid).set(userData);
 
-            Fluttertoast.showToast(msg: "Account successfully created!");
-            Navigator.push(context, MaterialPageRoute(builder: (_) => SignInPage()));
-          }
+        // Show mentor code dialog
+        _showMentorSignKeyDialog(signkey);
+
+      } else if (_selectedRole == 'mentee') {
+        // Mentee: validate mentor signkey
+        if (_signkeyController.text.isEmpty) {
+          Fluttertoast.showToast(msg: "Please enter your mentor's signkey");
+          return;
         }
-      } on FirebaseAuthException catch (e) {
-        if (e.code == 'weak-password') {
-          Fluttertoast.showToast(
-            msg: "Password is too weak.",
-            gravity: ToastGravity.BOTTOM,
-            toastLength: Toast.LENGTH_SHORT,
-          );
-        } else if (e.code == 'email-already-in-use') {
-          Fluttertoast.showToast(
-            msg: "Student number already exists.",
-            gravity: ToastGravity.BOTTOM,
-            toastLength: Toast.LENGTH_SHORT,
-          );
-        } else {
-          Fluttertoast.showToast(
-            msg: "${e.message}",
-            gravity: ToastGravity.BOTTOM,
-            toastLength: Toast.LENGTH_SHORT,
-          );
+
+        String? mentorId = await _findMentorBySignKey(_signkeyController.text);
+        if (mentorId == null) {
+          Fluttertoast.showToast(msg: "Invalid signkey. Please check with your mentor.");
+          return;
         }
+
+        userData['mentor_id'] = mentorId;
+        userData['signkey'] = _signkeyController.text;
+
+        await FirebaseFirestore.instance.collection('users').doc(uid).set(userData);
+      }
+
+      // ----- SEND EMAIL VERIFICATION AFTER SAVING -----
+      if (user != null) {
+        await user.sendEmailVerification();
+        await user.reload(); // Refresh user data
+
+        Fluttertoast.showToast(
+          msg: "Account created! Check your email to verify your account.",
+          toastLength: Toast.LENGTH_LONG,
+        );
+
+        print("Verification email sent to $email");
+
+        // SIGN OUT to prevent login before verification
+        await FirebaseAuth.instance.signOut();
+
+        // Redirect to login screen
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => SignInPage()),
+        );
+
+      } else {
+        Fluttertoast.showToast(msg: "Failed to send verification email.");
+      }
+
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'weak-password') {
+        Fluttertoast.showToast(msg: "Password is too weak.");
+      } else if (e.code == 'email-already-in-use') {
+        Fluttertoast.showToast(msg: "Student number already exists.");
+      } else {
+        Fluttertoast.showToast(msg: e.message ?? "Unknown error occurred.");
       }
     }
   }
+
 
   void _showMentorSignKeyDialog(String signkey) {
     showDialog(
@@ -852,7 +876,28 @@ class _SignInPageState extends State<SignInPage> {
   final _formKey = GlobalKey<FormState>();
   final _studentNumberController = TextEditingController();
   final _passwordController = TextEditingController();
+Future<bool> getConfirm()async{
+  User? user= FirebaseAuth.instance.currentUser;
+      bool isConfirm=user?.emailVerified ??false;
+   return isConfirm;
 
+}
+
+  Future<void> initializeFCMToken() async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId != null) {
+      String? token = await FirebaseMessaging.instance.getToken();
+      if (token != null) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .set({
+          'fcmToken': token,
+          'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)); // This merges with existing data
+      }
+    }
+  }
   @override
   void dispose() {
     _studentNumberController.dispose();
@@ -862,15 +907,20 @@ class _SignInPageState extends State<SignInPage> {
   void _login()async{
     String email=_studentNumberController.text+"@students.wits.ac.za";
     String password=_passwordController.text;
-    Fluttertoast.showToast(msg: "Login successful.",
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM);
+    bool  c=await getConfirm();
+
     String? uid;
     try {
+
           await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
           uid=FirebaseAuth.instance.currentUser?.uid;
           DocumentSnapshot doc=await FirebaseFirestore.instance.collection('users').doc(uid).get();
-          if(doc['role']=='mentee'){
+          if(c==true){
+            Fluttertoast.showToast(msg: "Login successful.",
+                toastLength: Toast.LENGTH_SHORT,
+                gravity: ToastGravity.BOTTOM);
+            if(doc['role']=='mentee'){
+
 
               Navigator.push(
                   context, MaterialPageRoute(builder: (_) => MenteeHomePage()));
@@ -878,9 +928,18 @@ class _SignInPageState extends State<SignInPage> {
             else{
               Navigator.push(context, MaterialPageRoute(builder: (_)=>MentorHomePage()));
             }
+            initializeFCMToken();
+          }
+          else{
+            Fluttertoast.showToast(msg: "Verify your email to log in.",
+                toastLength: Toast.LENGTH_SHORT,
+                gravity: ToastGravity.BOTTOM);
+            return;
+          }
+
 
     }on FirebaseAuthException catch(e){
-        Fluttertoast.showToast(msg: "Login failed :${e.message}");
+        Fluttertoast.showToast(msg: "Incorrect password or student number ");
     }
   }
 void _changePass()async{
@@ -1151,7 +1210,96 @@ Future <String> getKey(String uid)async {
   DocumentSnapshot doc= await FirebaseFirestore.instance.collection('users').doc(uid).get();
   return doc['signkey'];
 }
+  Widget showDrawer() {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          // Header with App Bar
+          Container(
+            height: 120,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Colors.blue.shade700, Colors.blue.shade500],
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16, top: 40, bottom: 16),
+              child: Row(
+                children: [
+                  Icon(Icons.people_alt_rounded, color: Colors.white, size: 28),
+                  SizedBox(width: 12),
+                  Text(
+                    "MentorMate",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontSize: 20,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
 
+
+
+          // Menu Items
+          _buildMenuItem(
+            icon: Icons.person_outline,
+            title: "My Profile",
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage()));
+            },
+          ),
+          Divider(height: 20, thickness: 1, color: Colors.grey.shade300),
+
+          _buildMenuItem(
+            icon: Icons.help_outline,
+            title: "Help & Support",
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_)=>MentorHelpSupportPage()));
+            },
+          ),
+
+          Divider(height: 20, thickness: 1, color: Colors.grey.shade300),
+
+          // Logout
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: ListTile(
+              leading: Icon(Icons.logout, color: Colors.red.shade400),
+              title: Text(
+                "Log Out",
+                style: TextStyle(
+                  color: Colors.red.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              onTap: () {
+                _showLogoutDialog();
+              },
+            ),
+          ),
+
+          // Version Info
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              "Version 1.0.0",
+              style: TextStyle(
+                color: Colors.grey.shade500,
+                fontSize: 12,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
   void _showAddContentDialog() {
     showDialog(
       context: context,
@@ -1225,6 +1373,267 @@ Future <String> getKey(String uid)async {
       },
     );
   }
+  void _showScheduleMeetingDialog() {
+    _meetingTitleController.clear();
+    _meetingVenueController.clear();
+    _meetingSelectedDate = DateTime.now();
+    _meetingSelectedTime = TimeOfDay.now();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Dialog(
+              insetPadding: EdgeInsets.all(16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF667eea),
+                      Color(0xFF764ba2),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Text(
+                        'Schedule Meeting',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.only(
+                          bottomLeft: Radius.circular(16),
+                          bottomRight: Radius.circular(16),
+                        ),
+                      ),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextField(
+                              controller: _meetingTitleController,
+                              decoration: InputDecoration(
+                                labelText: 'Meeting Title',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                filled: true,
+                                fillColor: Colors.grey[50],
+                              ),
+                            ),
+                            SizedBox(height: 16),
+                            TextField(
+                              controller: _meetingVenueController,
+                              decoration: InputDecoration(
+                                labelText: 'Venue',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                filled: true,
+                                fillColor: Colors.grey[50],
+                              ),
+                            ),
+                            SizedBox(height: 16),
+                            Container(
+                              padding: EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[50],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey[300]!),
+                              ),
+                              child: Column(
+                                children: [
+                                  ListTile(
+                                    leading: Icon(Icons.calendar_today, color: Color(0xFF667eea)),
+                                    title: Text(
+                                        '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year}'
+                                    ),
+                                    onTap: () async {
+                                      final DateTime? picked = await showDatePicker(
+                                        context: context,
+                                        initialDate: _meetingSelectedDate,
+                                        firstDate: DateTime.now(),
+                                        lastDate: DateTime(2100),
+                                      );
+                                      if (picked != null) {
+                                        setState(() => _meetingSelectedDate = picked);
+                                      }
+                                    },
+                                  ),
+                                  ListTile(
+                                    leading: Icon(Icons.access_time, color: Color(0xFF667eea)),
+                                    title: Text(_meetingSelectedTime.format(context)),
+                                    onTap: () async {
+                                      final TimeOfDay? picked = await showTimePicker(
+                                        context: context,
+                                        initialTime: _meetingSelectedTime,
+                                      );
+                                      if (picked != null) {
+                                        setState(() => _meetingSelectedTime = picked);
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                            SizedBox(height: 20),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    style: TextButton.styleFrom(
+                                      padding: EdgeInsets.symmetric(vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        side: BorderSide(color: Color(0xFF667eea)),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'Cancel',
+                                      style: TextStyle(color: Color(0xFF667eea)),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: () async {
+                                      if (_meetingTitleController.text.isEmpty ||
+                                          _meetingVenueController.text.isEmpty) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Please fill all fields'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                        return;
+                                      }
+
+                                      try {
+                                        // GET MENTOR SIGNKEY
+                                        final signkey = await getKey(currentUserId);
+
+                                        // Create meeting DateTime
+                                        final meetingDateTime = DateTime(
+                                          _meetingSelectedDate.year,
+                                          _meetingSelectedDate.month,
+                                          _meetingSelectedDate.day,
+                                          _meetingSelectedTime.hour,
+                                          _meetingSelectedTime.minute,
+                                        );
+
+                                        final event = {
+                                          'title': _meetingTitleController.text,
+                                          'description': "Meeting: ${_meetingVenueController.text}",
+                                          'signkey': signkey,
+                                          'dateTime': '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year} • ${_meetingSelectedTime.format(context)}',
+                                          'timestamp': Timestamp.fromDate(meetingDateTime), // Add timestamp for notifications
+                                          'uid': FirebaseAuth.instance.currentUser!.uid,
+                                          'type': 'meeting',
+                                          'createdAt': FieldValue.serverTimestamp(),
+                                        };
+
+                                        // GET MENTEES COUNT
+                                        final menteesSnapshot = await FirebaseFirestore.instance
+                                            .collection('users')
+                                            .where('role', isEqualTo: 'mentee')
+                                            .where('mentor_id', isEqualTo: currentUserId)
+                                            .get();
+
+                                        int totalMentees = menteesSnapshot.docs.length;
+
+                                        // SAVE MEETING
+                                        await meetingsRef.add({
+                                          'title': _meetingTitleController.text,
+                                          'venue': _meetingVenueController.text,
+                                          'date': '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year}',
+                                          'time': _meetingSelectedTime.format(context),
+                                          'dateTime': Timestamp.fromDate(meetingDateTime),
+                                          'createdAt': FieldValue.serverTimestamp(),
+                                          'createdBy': currentUserId,
+                                          'signkey': signkey,
+                                          'mentorId': currentUserId,
+                                          'attendedStudents': [],
+                                          'totalMentees': totalMentees,
+                                          'attendancePercentage': 0.0,
+                                        });
+
+                                        await announcementsRef.add({
+                                          'title': _meetingTitleController.text,
+                                          'date': '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year} • ${_meetingSelectedTime.format(context)}',
+                                          'type': 'meeting',
+                                          'venue': _meetingVenueController.text,
+                                          'createdAt': FieldValue.serverTimestamp(),
+                                          'createdBy': currentUserId,
+                                          'signkey': signkey,
+                                        });
+
+                                        // SAVE EVENT FOR NOTIFICATIONS
+                                        await FirebaseFirestore.instance
+                                            .collection('Events')
+                                            .add(event);
+
+                                        Navigator.pop(context);
+
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Meeting scheduled successfully! Notifications will be sent.'),
+                                            backgroundColor: Colors.green,
+                                          ),
+                                        );
+
+                                      } catch (e) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Error scheduling meeting: $e'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Color(0xFF667eea),
+                                      padding: EdgeInsets.symmetric(vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    child: Text('Schedule Meeting'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showAddRegisterDialog() {
     showDialog(
       context: context,
@@ -1292,7 +1701,7 @@ Future <String> getKey(String uid)async {
                             child: ElevatedButton(
                               onPressed: () async {
                                 try {
-                                  // Query meetings for this mentor (no ordering so no index required)
+                                  // Query meetings for this mentor
                                   final meetingSnapshot = await FirebaseFirestore.instance
                                       .collection('meetings')
                                       .where('mentorId', isEqualTo: currentUserId)
@@ -1318,17 +1727,14 @@ Future <String> getKey(String uid)async {
                                     final aTs = aData['createdAt'] as Timestamp?;
                                     final bTs = bData['createdAt'] as Timestamp?;
 
-                                    // Treat null timestamps as very old
                                     final aMillis = aTs?.millisecondsSinceEpoch ?? 0;
                                     final bMillis = bTs?.millisecondsSinceEpoch ?? 0;
 
-                                    return bMillis.compareTo(aMillis); // descending -> latest first
+                                    return bMillis.compareTo(aMillis);
                                   });
 
                                   final chosenDoc = docs.first;
                                   final meetingData = chosenDoc.data() as Map<String, dynamic>;
-
-                                  // IMPORTANT: get the Firestore doc ID from the snapshot, NOT from the fields
                                   final meetingId = chosenDoc.id;
 
                                   final date = meetingData['date'] ?? '';
@@ -1336,33 +1742,41 @@ Future <String> getKey(String uid)async {
 
                                   // Calculate expiration time (24 hours from now)
                                   final expiresAt = DateTime.now().add(Duration(hours: 24));
-                                  final signKey=await getKey(currentUserId);
+                                  final signKey = await getKey(currentUserId);
+
                                   await FirebaseFirestore.instance.collection('registers').add({
                                     'question': 'Did you attend "$title" on $date?',
                                     'options': ['Yes', 'No'],
                                     'title': title,
                                     'date': date,
-                                    'meetingId': meetingId, // <-- correct: doc.id
+                                    'meetingId': meetingId,
                                     'mentorId': currentUserId,
                                     'createdAt': FieldValue.serverTimestamp(),
                                     'expiresAt': Timestamp.fromDate(expiresAt),
                                     'attendedStudents': [],
                                     'attendancePercentage': 0,
                                   });
+
+                                  // Create register reminder event for notifications
                                   final event = {
-                                    'title': title,
-                                    'description':'Register reminder due on $date?',
-                                    'signkey':signKey,
+                                    'title': 'Register for $title',
+                                    'description': 'Attendance register is available. Please mark your attendance.',
+                                    'signkey': signKey,
                                     'dateTime': date,
+                                    'timestamp': Timestamp.fromDate(DateTime.now()), // Immediate notifications
                                     'uid': FirebaseAuth.instance.currentUser!.uid,
+                                    'type': 'register',
+                                    'createdAt': FieldValue.serverTimestamp(),
                                   };
+
                                   await FirebaseFirestore.instance
                                       .collection('Events')
                                       .add(event);
+
                                   Navigator.pop(context);
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text('Register generated - expires in 24 hours'),
+                                      content: Text('Register generated - expires in 24 hours. Notifications sent.'),
                                       backgroundColor: Colors.green,
                                     ),
                                   );
@@ -1384,7 +1798,6 @@ Future <String> getKey(String uid)async {
                               ),
                               child: Text('Generate Register'),
                             ),
-
                           ),
                         ],
                       ),
@@ -1398,6 +1811,7 @@ Future <String> getKey(String uid)async {
       },
     );
   }
+
   void _showAddAnnouncementDialog() {
     _announcementTitleController.clear();
     _announcementDescriptionController.clear();
@@ -1495,7 +1909,6 @@ Future <String> getKey(String uid)async {
                                       firstDate: DateTime.now(),
                                       lastDate: DateTime(2100),
                                     );
-
                                     if (picked != null && picked != _announcementSelectedDate) {
                                       setState(() {
                                         _announcementSelectedDate = picked;
@@ -1544,34 +1957,52 @@ Future <String> getKey(String uid)async {
                               Expanded(
                                 child: ElevatedButton(
                                   onPressed: () async {
-                                    final signKey=await getKey(currentUserId);
+                                    final signKey = await getKey(currentUserId);
                                     if (_announcementTitleController.text.isNotEmpty) {
                                       try {
+                                        // Create announcement DateTime
+                                        final announcementDateTime = DateTime(
+                                          _announcementSelectedDate.year,
+                                          _announcementSelectedDate.month,
+                                          _announcementSelectedDate.day,
+                                          _announcementSelectedTime.hour,
+                                          _announcementSelectedTime.minute,
+                                        );
+
                                         final newAnnouncement = {
                                           'title': _announcementTitleController.text,
                                           'description': _announcementDescriptionController.text,
                                           'date': '${_announcementSelectedDate.day}/${_announcementSelectedDate.month}/${_announcementSelectedDate.year} • ${_announcementSelectedTime.format(context)}',
                                           'type': 'announcement',
                                           'createdAt': FieldValue.serverTimestamp(),
-                                          'signkey':signKey,
+                                          'signkey': signKey,
                                           'createdBy': currentUserId,
                                         };
 
                                         await announcementsRef.add(newAnnouncement);
+
+                                        // Create event for notifications
                                         final event = {
                                           'title': _announcementTitleController.text,
-                                          'description':'Announcement reminder',
-                                          'signkey':signKey,
+                                          'description': _announcementDescriptionController.text.isNotEmpty
+                                              ? _announcementDescriptionController.text
+                                              : 'New announcement',
+                                          'signkey': signKey,
                                           'dateTime': '${_announcementSelectedDate.day}/${_announcementSelectedDate.month}/${_announcementSelectedDate.year} • ${_announcementSelectedTime.format(context)}',
+                                          'timestamp': Timestamp.fromDate(announcementDateTime), // Add timestamp for notifications
                                           'uid': FirebaseAuth.instance.currentUser!.uid,
+                                          'type': 'announcement',
+                                          'createdAt': FieldValue.serverTimestamp(),
                                         };
+
                                         await FirebaseFirestore.instance
                                             .collection('Events')
                                             .add(event);
+
                                         Navigator.pop(context);
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(
-                                            content: Text('Announcement created successfully!'),
+                                            content: Text('Announcement created successfully! Notifications will be sent.'),
                                             backgroundColor: Colors.green,
                                           ),
                                         );
@@ -1616,96 +2047,7 @@ Future <String> getKey(String uid)async {
       },
     );
   }
-  Widget showDrawer() {
-    return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          // Header with App Bar
-          Container(
-            height: 120,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Colors.blue.shade700, Colors.blue.shade500],
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.only(left: 16, top: 40, bottom: 16),
-              child: Row(
-                children: [
-                  Icon(Icons.people_alt_rounded, color: Colors.white, size: 28),
-                  SizedBox(width: 12),
-                  Text(
-                    "MentorMate",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      fontSize: 20,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
 
-
-
-          // Menu Items
-          _buildMenuItem(
-            icon: Icons.person_outline,
-            title: "My Profile",
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage()));
-            },
-          ),
-          Divider(height: 20, thickness: 1, color: Colors.grey.shade300),
-
-          _buildMenuItem(
-            icon: Icons.help_outline,
-            title: "Help & Support",
-            onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_)=>MentorHelpSupportPage()));
-            },
-          ),
-
-          Divider(height: 20, thickness: 1, color: Colors.grey.shade300),
-
-          // Logout
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: ListTile(
-              leading: Icon(Icons.logout, color: Colors.red.shade400),
-              title: Text(
-                "Log Out",
-                style: TextStyle(
-                  color: Colors.red.shade600,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              onTap: () {
-                _showLogoutDialog();
-              },
-            ),
-          ),
-
-          // Version Info
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Text(
-              "Version 1.0.0",
-              style: TextStyle(
-                color: Colors.grey.shade500,
-                fontSize: 12,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -1781,270 +2123,7 @@ Future <String> getKey(String uid)async {
 void _logout()async{
   await FirebaseAuth.instance.signOut();
 }
-  void _showScheduleMeetingDialog() {
-    _meetingTitleController.clear();
-    _meetingVenueController.clear();
-    _meetingSelectedDate = DateTime.now();
-    _meetingSelectedTime = TimeOfDay.now();
 
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return Dialog(
-              insetPadding: EdgeInsets.all(16), // fixes overflow issues
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF667eea),
-                      Color(0xFF764ba2),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Text(
-                        'Schedule Meeting',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-
-                    Container(
-                      padding: EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.only(
-                          bottomLeft: Radius.circular(16),
-                          bottomRight: Radius.circular(16),
-                        ),
-                      ),
-                      child: SingleChildScrollView(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // TITLE
-                            TextField(
-                              controller: _meetingTitleController,
-                              decoration: InputDecoration(
-                                labelText: 'Meeting Title',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                filled: true,
-                                fillColor: Colors.grey[50],
-                              ),
-                            ),
-
-                            SizedBox(height: 16),
-
-                            // VENUE
-                            TextField(
-                              controller: _meetingVenueController,
-                              decoration: InputDecoration(
-                                labelText: 'Venue',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                filled: true,
-                                fillColor: Colors.grey[50],
-                              ),
-                            ),
-
-                            SizedBox(height: 16),
-
-                            // DATE + TIME PICKERS
-                            Container(
-                              padding: EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[50],
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.grey[300]!),
-                              ),
-                              child: Column(
-                                children: [
-                                  // DATE PICKER
-                                  ListTile(
-                                    leading: Icon(Icons.calendar_today, color: Color(0xFF667eea)),
-                                    title: Text(
-                                        '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year}'
-                                    ),
-                                    onTap: () async {
-                                      final DateTime? picked = await showDatePicker(
-                                        context: context, // FIXED
-                                        initialDate: _meetingSelectedDate,
-                                        firstDate: DateTime.now(),
-                                        lastDate: DateTime(2100), // FIXED (was 2025)
-                                      );
-
-                                      if (picked != null) {
-                                        setState(() => _meetingSelectedDate = picked);
-                                      }
-                                    },
-                                  ),
-
-                                  // TIME PICKER
-                                  ListTile(
-                                    leading: Icon(Icons.access_time, color: Color(0xFF667eea)),
-                                    title: Text(_meetingSelectedTime.format(context)),
-                                    onTap: () async {
-                                      final TimeOfDay? picked = await showTimePicker(
-                                        context: context, // FIXED
-                                        initialTime: _meetingSelectedTime,
-                                      );
-
-                                      if (picked != null) {
-                                        setState(() => _meetingSelectedTime = picked);
-                                      }
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            SizedBox(height: 20),
-
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    style: TextButton.styleFrom(
-                                      padding: EdgeInsets.symmetric(vertical: 12),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                        side: BorderSide(color: Color(0xFF667eea)),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      'Cancel',
-                                      style: TextStyle(color: Color(0xFF667eea)),
-                                    ),
-                                  ),
-                                ),
-
-                                SizedBox(width: 12),
-
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: () async {
-                                      if (_meetingTitleController.text.isEmpty ||
-                                          _meetingVenueController.text.isEmpty) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('Please fill all fields'),
-                                            backgroundColor: Colors.red,
-                                          ),
-                                        );
-                                        return;
-                                      }
-
-                                      try {
-                                        // GET MENTOR SIGNKEY
-                                        final signkey = await getKey(currentUserId);
-                                        final event = {
-                                          'title': _meetingTitleController.text,
-                                          'description':"Meeting reminder",
-                                          'signkey':signkey,
-                                          'dateTime': '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year} • ${_meetingSelectedTime.format(context)}',
-                                          'uid': FirebaseAuth.instance.currentUser!.uid,
-                                        };
-                                        // GET MENTEES COUNT
-                                        final menteesSnapshot = await FirebaseFirestore.instance
-                                            .collection('users')
-                                            .where('role', isEqualTo: 'mentee')
-                                            .where('mentor_id', isEqualTo: currentUserId)
-                                            .get();
-
-                                        int totalMentees = menteesSnapshot.docs.length;
-
-                                        // SAVE MEETING
-                                        await meetingsRef.add({
-                                          'title': _meetingTitleController.text,
-                                          'venue': _meetingVenueController.text,
-                                          'date': '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year}',
-                                          'time': _meetingSelectedTime.format(context),
-                                          'dateTime': Timestamp.fromDate(_meetingSelectedDate),
-                                          'createdAt': FieldValue.serverTimestamp(),
-                                          'createdBy': currentUserId,
-                                          'signkey': signkey,
-                                          'mentorId': currentUserId,
-                                          'attendedStudents': [],
-                                          'totalMentees': totalMentees,
-                                          'attendancePercentage': 0.0,
-                                        });
-
-
-                                        await announcementsRef.add({
-                                          'title': _meetingTitleController.text,
-                                          'date': '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year} • ${_meetingSelectedTime.format(context)}',
-                                          'type': 'meeting',
-                                          'venue': _meetingVenueController.text,
-                                          'createdAt': FieldValue.serverTimestamp(),
-                                          'createdBy': currentUserId,
-                                          'signkey': signkey,
-                                        });
-
-
-                                        await FirebaseFirestore.instance
-                                            .collection('Events')
-                                            .add(event);
-
-                                        Navigator.pop(context);
-
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('Meeting scheduled successfully!'),
-                                            backgroundColor: Colors.green,
-                                          ),
-                                        );
-
-                                      } catch (e) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('Error scheduling meeting: $e'),
-                                            backgroundColor: Colors.red,
-                                          ),
-                                        );
-                                      }
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Color(0xFF667eea),
-                                      padding: EdgeInsets.symmetric(vertical: 12),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                    child: Text('Schedule Meeting'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
 Future <String>getUsername()async{
   final uid=FirebaseAuth.instance.currentUser?.uid;
   DocumentSnapshot doc=await FirebaseFirestore.instance.collection('users').doc(uid).get();
@@ -3412,6 +3491,50 @@ class _CalendarPageState extends State<CalendarPage> {
   DateTime? _selectedDay;
   Map<DateTime, List<Map<String, dynamic>>> _events = {};
 
+  @override
+  void initState() {
+    super.initState();
+    _loadEventsFromFirebase();
+    _loadEventsFromFirebase2();
+    _initializeNotifications();
+  }
+
+  Future<void> _initializeNotifications() async {
+    // Request notification permissions
+    final settings = await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      print('Notification permissions granted');
+    }
+
+    // Get FCM token and save it
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token != null) {
+      await _saveFCMToken(token);
+    }
+
+    // Handle token refresh
+    FirebaseMessaging.instance.onTokenRefresh.listen(_saveFCMToken);
+  }
+
+  Future<void> _saveFCMToken(String token) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({
+        'fcmToken': token,
+        'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+      });
+      print('FCM token saved: $token');
+    }
+  }
+
   void _showAddEventDialog() {
     TextEditingController titleController = TextEditingController();
     TextEditingController descriptionController = TextEditingController();
@@ -3589,14 +3712,9 @@ class _CalendarPageState extends State<CalendarPage> {
       },
     );
   }
-  @override
-  void initState() {
-    super.initState();
-    _loadEventsFromFirebase();
-    _loadEventsFromFirebase2();
-  }
-  Future <String> getKey(String uid)async {
-    DocumentSnapshot doc= await FirebaseFirestore.instance.collection('users').doc(uid).get();
+
+  Future<String> getKey(String uid) async {
+    DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
     return doc['signkey'];
   }
 
@@ -3608,27 +3726,49 @@ class _CalendarPageState extends State<CalendarPage> {
       time?.hour ?? 0,
       time?.minute ?? 0,
     );
-    String? uid =await FirebaseAuth.instance.currentUser?.uid;
-    final signKey=await  getKey(uid!);
+
+    String? uid = await FirebaseAuth.instance.currentUser?.uid;
+    final signKey = await getKey(uid!);
+
+    // Format for display
+    String formattedDateTime = '${date.day}/${date.month}/${date.year} • ${time != null ? time.format(context) : 'All Day'}';
 
     final event = {
       'title': title,
       'description': description,
-      'signkey':signKey,
-      'dateTime': finalDateTime,
-      'uid': FirebaseAuth.instance.currentUser!.uid,
+      'signkey': signKey,
+      'dateTime': formattedDateTime, // Changed to string format for consistency
+      'timestamp': Timestamp.fromDate(finalDateTime), // Add timestamp for sorting
+      'uid': uid,
+      'createdAt': FieldValue.serverTimestamp(),
+      'type': 'calendar_event',
     };
 
     try {
       await FirebaseFirestore.instance
-          .collection('events')
+          .collection('Events')
           .add(event);
+
+      // Also add to events collection for the calendar display
+      await FirebaseFirestore.instance
+          .collection('events')
+          .add({
+        'title': title,
+        'description': description,
+        'signkey': signKey,
+        'dateTime': Timestamp.fromDate(finalDateTime),
+        'uid': uid,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
 
       Fluttertoast.showToast(
         msg: "Event added successfully",
         toastLength: Toast.LENGTH_SHORT,
         gravity: ToastGravity.BOTTOM,
       );
+
+      print('Event created - notifications will be scheduled automatically');
+
     } catch (e) {
       Fluttertoast.showToast(
         msg: "Failed to add event: $e",
@@ -3691,32 +3831,52 @@ class _CalendarPageState extends State<CalendarPage> {
                           color: Colors.grey[800],
                         ),
                       ),
-                      SizedBox(height: 8),
-                      if (event['time'] != null)
+                      SizedBox(height: 12),
+                      if (event['dateTime'] != null)
                         Padding(
                           padding: EdgeInsets.only(bottom: 8),
                           child: Row(
                             children: [
-                              Icon(Icons.access_time, size: 16, color: Color(0xFF667eea)),
+                              Icon(Icons.calendar_today, size: 16, color: Color(0xFF667eea)),
                               SizedBox(width: 8),
-                              Text(
-                                (event['time'] as TimeOfDay).format(context),
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[600],
+                              Expanded(
+                                child: Text(
+                                  event['dateTime'] is String
+                                      ? event['dateTime']
+                                      : _formatTimestamp(event['dateTime']),
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[600],
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      Text(
-                        event['description'],
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                          height: 1.4,
+                      if (event['description'] != null && event['description'].isNotEmpty)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(height: 8),
+                            Text(
+                              'Description:',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              event['description'],
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[600],
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
                       SizedBox(height: 20),
                       SizedBox(
                         width: double.infinity,
@@ -3742,6 +3902,19 @@ class _CalendarPageState extends State<CalendarPage> {
       },
     );
   }
+
+  String _formatTimestamp(dynamic timestamp) {
+    try {
+      if (timestamp is Timestamp) {
+        final date = timestamp.toDate();
+        return '${date.day}/${date.month}/${date.year} • ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      }
+      return timestamp.toString();
+    } catch (e) {
+      return 'Date not available';
+    }
+  }
+
   List<Map<String, dynamic>> _getEventsForDay(DateTime day) {
     DateTime dateOnly = DateTime(day.year, day.month, day.day);
     return _events[dateOnly] ?? [];
@@ -3749,33 +3922,18 @@ class _CalendarPageState extends State<CalendarPage> {
 
   void _loadEventsFromFirebase() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-    final signKey=await getKey(uid);
+    final signKey = await getKey(uid);
+
     FirebaseFirestore.instance
         .collection('events')
         .where('uid', isEqualTo: uid)
-        .where('signkey',isEqualTo: signKey)
+        .where('signkey', isEqualTo: signKey)
         .snapshots()
         .listen((snapshot) {
-      Map<DateTime, List<Map<String, dynamic>>> newEvents = {};
-
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        final DateTime dt = (data['dateTime'] as Timestamp).toDate();
-
-        DateTime dayOnly = DateTime(dt.year, dt.month, dt.day);
-
-        if (newEvents[dayOnly] == null) {
-          newEvents[dayOnly] = [data];
-        } else {
-          newEvents[dayOnly]!.add(data);
-        }
-      }
-
-      setState(() {
-        _events = newEvents;
-      });
+      _updateEvents(snapshot.docs);
     });
   }
+
   void _loadEventsFromFirebase2() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
     final signKey = await getKey(uid);
@@ -3785,28 +3943,60 @@ class _CalendarPageState extends State<CalendarPage> {
         .where('signkey', isEqualTo: signKey)
         .snapshots()
         .listen((snapshot) {
-      Map<DateTime, List<Map<String, dynamic>>> newEvents = {};
+      _updateEvents(snapshot.docs);
+    });
+  }
 
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
+  void _updateEvents(List<QueryDocumentSnapshot> docs) {
+    Map<DateTime, List<Map<String, dynamic>>> newEvents = {};
 
-        // Parse the string date instead of treating it as Timestamp
-        final String dateString = data['dateTime'] as String;
-        final DateTime dt = _parseDateString(dateString);
+    for (var doc in docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      DateTime? eventDate;
 
-        DateTime dayOnly = DateTime(dt.year, dt.month, dt.day);
+      // Handle different date formats
+      if (data['dateTime'] is Timestamp) {
+        eventDate = (data['dateTime'] as Timestamp).toDate();
+      } else if (data['dateTime'] is String) {
+        eventDate = _parseDateString(data['dateTime']);
+      } else if (data['timestamp'] is Timestamp) {
+        eventDate = (data['timestamp'] as Timestamp).toDate();
+      }
+
+      if (eventDate != null) {
+        DateTime dayOnly = DateTime(eventDate.year, eventDate.month, eventDate.day);
 
         if (newEvents[dayOnly] == null) {
           newEvents[dayOnly] = [data];
         } else {
-          newEvents[dayOnly]!.add(data);
+          // Avoid duplicates by checking event title and date
+          final existingEvent = newEvents[dayOnly]!.firstWhere(
+                (e) => e['title'] == data['title'] &&
+                _getEventDate(e) == _getEventDate(data),
+            orElse: () => {},
+          );
+
+          if (existingEvent.isEmpty) {
+            newEvents[dayOnly]!.add(data);
+          }
         }
       }
+    }
 
-      setState(() {
-        _events = newEvents;
-      });
+    setState(() {
+      _events = newEvents;
     });
+  }
+
+  DateTime? _getEventDate(Map<String, dynamic> event) {
+    if (event['dateTime'] is Timestamp) {
+      return (event['dateTime'] as Timestamp).toDate();
+    } else if (event['dateTime'] is String) {
+      return _parseDateString(event['dateTime']);
+    } else if (event['timestamp'] is Timestamp) {
+      return (event['timestamp'] as Timestamp).toDate();
+    }
+    return null;
   }
 
   DateTime _parseDateString(String dateString) {
@@ -3837,32 +4027,6 @@ class _CalendarPageState extends State<CalendarPage> {
     }
   }
 
-
-  void _processAndUpdateEvents(List<QueryDocumentSnapshot> docs) {
-    // Remove duplicates by document ID
-    final uniqueDocs = docs.fold<Map<String, QueryDocumentSnapshot>>({}, (map, doc) {
-      map[doc.id] = doc;
-      return map;
-    }).values.toList();
-
-    Map<DateTime, List<Map<String, dynamic>>> newEvents = {};
-
-    for (var doc in uniqueDocs) {
-      final data = doc.data() as Map<String, dynamic>;
-      final DateTime dt = (data['dateTime'] as Timestamp).toDate();
-      DateTime dayOnly = DateTime(dt.year, dt.month, dt.day);
-
-      if (newEvents[dayOnly] == null) {
-        newEvents[dayOnly] = [data];
-      } else {
-        newEvents[dayOnly]!.add(data);
-      }
-    }
-
-    setState(() {
-      _events = newEvents;
-    });
-  }
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -4032,15 +4196,17 @@ class _CalendarPageState extends State<CalendarPage> {
                               )
                                   : Column(
                                 children: _getEventsForDay(_selectedDay!).map((event) {
-                                  final time = event['time'] as TimeOfDay?;
+                                  final dateTime = event['dateTime'];
+                                  final displayTime = dateTime is String
+                                      ? dateTime
+                                      : _formatTimestamp(dateTime);
+
                                   return Card(
                                     margin: EdgeInsets.only(bottom: 8),
                                     child: ListTile(
                                       leading: Icon(Icons.event, color: Color(0xFF667eea)),
                                       title: Text(event['title']),
-                                      subtitle: time != null
-                                          ? Text(time.format(context))
-                                          : null,
+                                      subtitle: Text(displayTime),
                                       onTap: () => _showEventDetails(_selectedDay!, event),
                                     ),
                                   );

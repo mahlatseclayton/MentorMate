@@ -12,15 +12,23 @@ android {
     namespace = "com.example.mentor_mate"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+        // Configure only for each module that uses Java 8
+        // language features (either in its source code or
+        // through dependencies).
+        compileOptions {
+            isCoreLibraryDesugaringEnabled = true
+            sourceCompatibility = JavaVersion.VERSION_1_8
+            targetCompatibility = JavaVersion.VERSION_1_8
+        }
+        // For Kotlin projects
+        kotlinOptions {
+            jvmTarget = "1.8"
+        }
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
-    }
+
+
+
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
@@ -29,6 +37,7 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
+        multiDexEnabled = true
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -45,3 +54,14 @@ android {
 flutter {
     source = "../.."
 }
+
+
+dependencies {
+    // For AGP 7.4+
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
+}
+
+
+
+
