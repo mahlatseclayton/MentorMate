@@ -15,24 +15,15 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:math';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
-import 'services/notification_service.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-  print("Handling a background message: ${message.messageId}");
-}
 void main()async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
   await dotenv.load(fileName: ".env");
-  await NotificationService.initialize();
+
 
   runApp(MyApp());
 }
@@ -282,10 +273,8 @@ class _SignUpPageState extends State<SignUpPage> {
   final _studentNumberController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _signkeyController = TextEditingController(); // NEW: For mentee signkey
-
+  final _signkeyController = TextEditingController();
   String _selectedRole = 'mentee';
-
   @override
   void dispose() {
     _nameController.dispose();
@@ -293,12 +282,12 @@ class _SignUpPageState extends State<SignUpPage> {
     _studentNumberController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _signkeyController.dispose(); // NEW
+    _signkeyController.dispose();
     super.dispose();
   }
 
   String _generateSignKey() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';//hide this key
     final random = Random();
     return List.generate(6, (index) => chars[random.nextInt(chars.length)]).join();
   }
@@ -317,7 +306,7 @@ class _SignUpPageState extends State<SignUpPage> {
       }
       return null;
     } catch (e) {
-      print('Error finding mentor: $e');
+
       return null;
     }
   }
@@ -336,7 +325,7 @@ class _SignUpPageState extends State<SignUpPage> {
     }
 
     try {
-      // CREATE USER IN FIREBASE AUTH
+
       UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(email: email, password: password);
 
@@ -347,29 +336,24 @@ class _SignUpPageState extends State<SignUpPage> {
         Fluttertoast.showToast(msg: "Account creation failed.");
         return;
       }
-
-      // ----- SAVE USER IN FIRESTORE -----
       Map<String, dynamic> userData = {
         'fName': fName,
         'lName': lName,
         'role': _selectedRole,
         'studentNo': _studentNumberController.text,
+        'email':_studentNumberController.text+'@students.wits.ac.za',
         'profile': imageUrl,
         'createdAt': FieldValue.serverTimestamp(),
       };
 
       if (_selectedRole == 'mentor') {
-        // Mentor: generate signkey
         String signkey = _generateSignKey();
         userData['signkey'] = signkey;
 
         await FirebaseFirestore.instance.collection('users').doc(uid).set(userData);
-
-        // Show mentor code dialog
         _showMentorSignKeyDialog(signkey);
 
       } else if (_selectedRole == 'mentee') {
-        // Mentee: validate mentor signkey
         if (_signkeyController.text.isEmpty) {
           Fluttertoast.showToast(msg: "Please enter your mentor's signkey");
           return;
@@ -387,22 +371,14 @@ class _SignUpPageState extends State<SignUpPage> {
         await FirebaseFirestore.instance.collection('users').doc(uid).set(userData);
       }
 
-      // ----- SEND EMAIL VERIFICATION AFTER SAVING -----
       if (user != null) {
         await user.sendEmailVerification();
-        await user.reload(); // Refresh user data
-
+        await user.reload();
         Fluttertoast.showToast(
           msg: "Account created! Check your email to verify your account.",
           toastLength: Toast.LENGTH_LONG,
         );
-
-        print("Verification email sent to $email");
-
-        // SIGN OUT to prevent login before verification
         await FirebaseAuth.instance.signOut();
-
-        // Redirect to login screen
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => SignInPage()),
@@ -720,8 +696,6 @@ class _SignUpPageState extends State<SignUpPage> {
                                     return null;
                                   },
                                 ),
-
-                                // NEW: Signkey Field (only shown for mentees)
                                 if (_selectedRole == 'mentee') ...[
                                   const SizedBox(height: 16),
                                   TextFormField(
@@ -894,7 +868,7 @@ Future<bool> getConfirm()async{
             .set({
           'fcmToken': token,
           'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true)); // This merges with existing data
+        }, SetOptions(merge: true));
       }
     }
   }
@@ -907,7 +881,8 @@ Future<bool> getConfirm()async{
   void _login()async{
     String email=_studentNumberController.text+"@students.wits.ac.za";
     String password=_passwordController.text;
-    bool  c=await getConfirm();
+    // bool  c=await getConfirm();
+    bool c=true;
 
     String? uid;
     try {
@@ -1215,7 +1190,6 @@ Future <String> getKey(String uid)async {
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          // Header with App Bar
           Container(
             height: 120,
             decoration: BoxDecoration(
@@ -1244,9 +1218,6 @@ Future <String> getKey(String uid)async {
             ),
           ),
 
-
-
-          // Menu Items
           _buildMenuItem(
             icon: Icons.person_outline,
             title: "My Profile",
@@ -1265,8 +1236,6 @@ Future <String> getKey(String uid)async {
           ),
 
           Divider(height: 20, thickness: 1, color: Colors.grey.shade300),
-
-          // Logout
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: ListTile(
@@ -1283,8 +1252,6 @@ Future <String> getKey(String uid)async {
               },
             ),
           ),
-
-          // Version Info
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Text(
@@ -1527,10 +1494,8 @@ Future <String> getKey(String uid)async {
                                       }
 
                                       try {
-                                        // GET MENTOR SIGNKEY
-                                        final signkey = await getKey(currentUserId);
 
-                                        // Create meeting DateTime
+                                        final signkey = await getKey(currentUserId);
                                         final meetingDateTime = DateTime(
                                           _meetingSelectedDate.year,
                                           _meetingSelectedDate.month,
@@ -1538,19 +1503,7 @@ Future <String> getKey(String uid)async {
                                           _meetingSelectedTime.hour,
                                           _meetingSelectedTime.minute,
                                         );
-
-                                        final event = {
-                                          'title': _meetingTitleController.text,
-                                          'description': "Meeting: ${_meetingVenueController.text}",
-                                          'signkey': signkey,
-                                          'dateTime': '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year} • ${_meetingSelectedTime.format(context)}',
-                                          'timestamp': Timestamp.fromDate(meetingDateTime), // Add timestamp for notifications
-                                          'uid': FirebaseAuth.instance.currentUser!.uid,
-                                          'type': 'meeting',
-                                          'createdAt': FieldValue.serverTimestamp(),
-                                        };
-
-                                        // GET MENTEES COUNT
+                                        final displayDate = '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year} • ${_meetingSelectedTime.format(context)}';
                                         final menteesSnapshot = await FirebaseFirestore.instance
                                             .collection('users')
                                             .where('role', isEqualTo: 'mentee')
@@ -1558,14 +1511,13 @@ Future <String> getKey(String uid)async {
                                             .get();
 
                                         int totalMentees = menteesSnapshot.docs.length;
-
-                                        // SAVE MEETING
                                         await meetingsRef.add({
                                           'title': _meetingTitleController.text,
                                           'venue': _meetingVenueController.text,
                                           'date': '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year}',
                                           'time': _meetingSelectedTime.format(context),
                                           'dateTime': Timestamp.fromDate(meetingDateTime),
+                                          'isoDateTime': meetingDateTime.toIso8601String(),
                                           'createdAt': FieldValue.serverTimestamp(),
                                           'createdBy': currentUserId,
                                           'signkey': signkey,
@@ -1577,24 +1529,37 @@ Future <String> getKey(String uid)async {
 
                                         await announcementsRef.add({
                                           'title': _meetingTitleController.text,
-                                          'date': '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year} • ${_meetingSelectedTime.format(context)}',
+                                          'date': displayDate,
                                           'type': 'meeting',
                                           'venue': _meetingVenueController.text,
                                           'createdAt': FieldValue.serverTimestamp(),
                                           'createdBy': currentUserId,
                                           'signkey': signkey,
+                                          'isoDate': meetingDateTime.toIso8601String(),
                                         });
 
-                                        // SAVE EVENT FOR NOTIFICATIONS
+                                        final event = {
+                                          'title': _meetingTitleController.text,
+                                          'description': "Meeting: ${_meetingVenueController.text}",
+                                          'signkey': signkey,
+                                          'dateTime': displayDate,
+                                          'timestamp': Timestamp.fromDate(meetingDateTime),
+                                          'isoDate': meetingDateTime.toIso8601String(),
+                                          'uid': FirebaseAuth.instance.currentUser!.uid,
+                                          'type': 'meeting',
+                                          'reminderType': 'immediate',
+                                          'venue': _meetingVenueController.text,
+                                          'createdAt': FieldValue.serverTimestamp(),
+                                        };
+
                                         await FirebaseFirestore.instance
                                             .collection('Events')
                                             .add(event);
 
                                         Navigator.pop(context);
-
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(
-                                            content: Text('Meeting scheduled successfully! Notifications will be sent.'),
+                                            content: Text('Meeting scheduled! Notification sent to all mentees.'),
                                             backgroundColor: Colors.green,
                                           ),
                                         );
@@ -1701,7 +1666,6 @@ Future <String> getKey(String uid)async {
                             child: ElevatedButton(
                               onPressed: () async {
                                 try {
-                                  // Query meetings for this mentor
                                   final meetingSnapshot = await FirebaseFirestore.instance
                                       .collection('meetings')
                                       .where('mentorId', isEqualTo: currentUserId)
@@ -1717,19 +1681,14 @@ Future <String> getKey(String uid)async {
                                     return;
                                   }
 
-                                  // If there are multiple meetings, choose the latest by createdAt locally
                                   final docs = List<QueryDocumentSnapshot>.from(meetingSnapshot.docs);
-
                                   docs.sort((a, b) {
                                     final aData = a.data() as Map<String, dynamic>;
                                     final bData = b.data() as Map<String, dynamic>;
-
                                     final aTs = aData['createdAt'] as Timestamp?;
                                     final bTs = bData['createdAt'] as Timestamp?;
-
                                     final aMillis = aTs?.millisecondsSinceEpoch ?? 0;
                                     final bMillis = bTs?.millisecondsSinceEpoch ?? 0;
-
                                     return bMillis.compareTo(aMillis);
                                   });
 
@@ -1739,8 +1698,8 @@ Future <String> getKey(String uid)async {
 
                                   final date = meetingData['date'] ?? '';
                                   final title = meetingData['title'] ?? 'the meeting';
+                                  final isoDate = meetingData['isoDateTime'] ?? DateTime.now().toIso8601String();
 
-                                  // Calculate expiration time (24 hours from now)
                                   final expiresAt = DateTime.now().add(Duration(hours: 24));
                                   final signKey = await getKey(currentUserId);
 
@@ -1749,6 +1708,7 @@ Future <String> getKey(String uid)async {
                                     'options': ['Yes', 'No'],
                                     'title': title,
                                     'date': date,
+                                    'isoDate': isoDate,
                                     'meetingId': meetingId,
                                     'mentorId': currentUserId,
                                     'createdAt': FieldValue.serverTimestamp(),
@@ -1756,16 +1716,16 @@ Future <String> getKey(String uid)async {
                                     'attendedStudents': [],
                                     'attendancePercentage': 0,
                                   });
-
-                                  // Create register reminder event for notifications
                                   final event = {
                                     'title': 'Register for $title',
-                                    'description': 'Attendance register is available. Please mark your attendance.',
+                                    'description': 'Attendance register is available. Please mark your attendance within 24 hours.',
                                     'signkey': signKey,
                                     'dateTime': date,
-                                    'timestamp': Timestamp.fromDate(DateTime.now()), // Immediate notifications
+                                    'timestamp': Timestamp.fromDate(DateTime.now()),
+                                    'isoDate': DateTime.now().toIso8601String(),
                                     'uid': FirebaseAuth.instance.currentUser!.uid,
                                     'type': 'register',
+                                    'reminderType': 'immediate',
                                     'createdAt': FieldValue.serverTimestamp(),
                                   };
 
@@ -1776,7 +1736,7 @@ Future <String> getKey(String uid)async {
                                   Navigator.pop(context);
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text('Register generated - expires in 24 hours. Notifications sent.'),
+                                      content: Text('Register generated! Notification sent to all mentees.'),
                                       backgroundColor: Colors.green,
                                     ),
                                   );
@@ -1960,7 +1920,6 @@ Future <String> getKey(String uid)async {
                                     final signKey = await getKey(currentUserId);
                                     if (_announcementTitleController.text.isNotEmpty) {
                                       try {
-                                        // Create announcement DateTime
                                         final announcementDateTime = DateTime(
                                           _announcementSelectedDate.year,
                                           _announcementSelectedDate.month,
@@ -1968,30 +1927,30 @@ Future <String> getKey(String uid)async {
                                           _announcementSelectedTime.hour,
                                           _announcementSelectedTime.minute,
                                         );
-
+                                        final displayDate = '${_announcementSelectedDate.day}/${_announcementSelectedDate.month}/${_announcementSelectedDate.year} • ${_announcementSelectedTime.format(context)}';
                                         final newAnnouncement = {
                                           'title': _announcementTitleController.text,
                                           'description': _announcementDescriptionController.text,
-                                          'date': '${_announcementSelectedDate.day}/${_announcementSelectedDate.month}/${_announcementSelectedDate.year} • ${_announcementSelectedTime.format(context)}',
+                                          'date': displayDate,
+                                          'isoDate': announcementDateTime.toIso8601String(),
                                           'type': 'announcement',
                                           'createdAt': FieldValue.serverTimestamp(),
                                           'signkey': signKey,
                                           'createdBy': currentUserId,
                                         };
-
                                         await announcementsRef.add(newAnnouncement);
-
-                                        // Create event for notifications
                                         final event = {
                                           'title': _announcementTitleController.text,
                                           'description': _announcementDescriptionController.text.isNotEmpty
                                               ? _announcementDescriptionController.text
                                               : 'New announcement',
                                           'signkey': signKey,
-                                          'dateTime': '${_announcementSelectedDate.day}/${_announcementSelectedDate.month}/${_announcementSelectedDate.year} • ${_announcementSelectedTime.format(context)}',
-                                          'timestamp': Timestamp.fromDate(announcementDateTime), // Add timestamp for notifications
+                                          'dateTime': displayDate,
+                                          'timestamp': Timestamp.fromDate(announcementDateTime),
+                                          'isoDate': announcementDateTime.toIso8601String(),
                                           'uid': FirebaseAuth.instance.currentUser!.uid,
                                           'type': 'announcement',
+                                          'reminderType': 'immediate',
                                           'createdAt': FieldValue.serverTimestamp(),
                                         };
 
@@ -2002,7 +1961,7 @@ Future <String> getKey(String uid)async {
                                         Navigator.pop(context);
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(
-                                            content: Text('Announcement created successfully! Notifications will be sent.'),
+                                            content: Text('Announcement created! Notification sent to all mentees.'),
                                             backgroundColor: Colors.green,
                                           ),
                                         );
@@ -2047,7 +2006,6 @@ Future <String> getKey(String uid)async {
       },
     );
   }
-
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -2265,25 +2223,18 @@ Future <String>getUsername()async{
 
   Future<int> _getTotalMenteesCount() async {
     try {
-      // Get the mentor's signkey
       final mentorDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUserId)
           .get();
-
       final mentorSignkey = mentorDoc['signkey'];
-
-      // Count mentees with the same signkey and role=mentee
       final menteesSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('role', isEqualTo: 'mentee')
           .where('signkey', isEqualTo: mentorSignkey)
           .get();
-
       return menteesSnapshot.docs.length;
-
     } catch (e) {
-      print('Error getting mentee count: $e');
       return 0;
     }
   }
@@ -2437,7 +2388,6 @@ Future <String>getUsername()async{
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          // Latest Meeting Attendance Card
           FutureBuilder<Map<String, dynamic>>(
             future: _getLatestMeetingWithAttendance(),
             builder: (context, snapshot) {
@@ -2451,8 +2401,7 @@ Future <String>getUsername()async{
                   child: Center(child: CircularProgressIndicator()),
                 );
               }
-
-              if (snapshot.hasError) {
+                 if (snapshot.hasError) {
                 return Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -2462,10 +2411,8 @@ Future <String>getUsername()async{
                   child: Text('Error loading meeting data'),
                 );
               }
-
               final meetingData = snapshot.data!;
               final hasMeetings = meetingData['hasMeetings'] ?? false;
-
               if (!hasMeetings) {
                 return Container(
                   padding: const EdgeInsets.all(20),
@@ -2504,14 +2451,12 @@ Future <String>getUsername()async{
                   ),
                 );
               }
-
               final data = meetingData['meetingData'];
               final attendedCount = (data['attendedStudents'] as List?)?.length ?? 0;
               final totalMentees = meetingData['totalMentees'] ?? 0;
               final percentage = totalMentees > 0
                   ? (attendedCount / totalMentees * 100)
                   : 0.0;
-
               return Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -2608,8 +2553,6 @@ Future <String>getUsername()async{
           ),
 
           SizedBox(height: 20),
-
-          // Announcements & Upcoming Meetings Card
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -2655,7 +2598,6 @@ Future <String>getUsername()async{
                     if (announcements.isEmpty) {
                       return Text('No announcements yet');
                     }
-
                     return Column(
                       children: announcements.map((doc) {
                         final announcement = doc.data() as Map<String, dynamic>;
@@ -2736,26 +2678,20 @@ Future <String>getUsername()async{
 
   Future<Map<String, dynamic>> _getLatestMeetingWithAttendance() async {
     try {
-      // Get latest meeting
       final meetingsSnapshot = await meetingsRef
           .where('createdBy', isEqualTo: currentUserId)
           .orderBy('dateTime', descending: true)
           .limit(1)
           .get();
-
       if (meetingsSnapshot.docs.isEmpty) {
         return {'hasMeetings': false};
       }
-
-      // Get the mentor's signkey
       final mentorDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUserId)
           .get();
 
       final mentorSignkey = mentorDoc['signkey'];
-
-      // Count mentees with the same signkey and role=mentee
       final menteesSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('role', isEqualTo: 'mentee')
@@ -2774,7 +2710,6 @@ Future <String>getUsername()async{
       };
 
     } catch (e) {
-      print('Error getting latest meeting data: $e');
       return {'hasMeetings': false};
     }
   }
@@ -2857,7 +2792,7 @@ Now generate 3 relevant session suggestions based on the above context.
         }
       }
     } catch (e) {
-      print('Error fetching suggestions: $e');
+
     }
   }
   String? apiKey;
@@ -2880,16 +2815,12 @@ Now generate 3 relevant session suggestions based on the above context.
   }
 
   Future<Map<String, dynamic>> _callGeminiAPI(String prompt) async {
-    // Load key
     final String? key = apiKey;
     final String? path=path_url;
 
     if (key == null || key.isEmpty) {
       throw Exception("❌ API key is NULL or EMPTY!");
     }
-
-
-
     final Uri uri = Uri.parse('$path?key=$key');
 
     final Map<String, dynamic> requestBody = {
@@ -2915,10 +2846,6 @@ Now generate 3 relevant session suggestions based on the above context.
       },
       body: jsonEncode(requestBody),
     );
-
-    print("STATUS: ${response.statusCode}");
-    print("BODY: ${response.body}");
-
     if (response.statusCode == 200) {
       final Map<String, dynamic> responseData = jsonDecode(response.body);
       final String textResponse =
@@ -2929,7 +2856,6 @@ Now generate 3 relevant session suggestions based on the above context.
           'Failed to load suggestions: ${response.statusCode} | ${response.body}');
     }
   }
-
   Future<void> _generateAISuggestions() async {
     if (_mentorPromptController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2959,8 +2885,6 @@ Now generate 3 relevant session suggestions based on the above context.
       } else {
         throw Exception('Invalid response format from AI');
       }
-
-      // Auto-scroll to show new suggestions
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scrollController.animateTo(
           0,
@@ -2980,20 +2904,13 @@ Now generate 3 relevant session suggestions based on the above context.
           backgroundColor: Colors.red,
         ),
       );
-
-      print('Error calling Gemini API: $e');
     }
   }
   Map<String, dynamic> _parseGeminiResponse(String textResponse) {
     try {
-      // Clean the response - remove markdown code blocks if present
       String cleanResponse = textResponse.replaceAll('```json', '').replaceAll('```', '').trim();
-
-      // Parse the JSON
       return jsonDecode(cleanResponse);
     } catch (e) {
-      print('Error parsing Gemini response: $e');
-      print('Raw response: $textResponse');
       throw Exception('Failed to parse AI response');
     }
   }
@@ -3021,13 +2938,8 @@ Now generate 3 relevant session suggestions based on the above context.
         child: SafeArea(
           child: Column(
             children: [
-              // Header Section - Always visible
               _buildHeader(),
-
-              // Input Section - Only show when no results
               if (!_showResults) _buildInputSection(),
-
-              // Content Section - Takes full space when results shown
               Expanded(
                 child: _buildContentSection(),
               ),
@@ -3057,7 +2969,6 @@ Now generate 3 relevant session suggestions based on the above context.
                   ),
                 ),
               ),
-              // Mini retry button - Only show when results are visible
               if (_showResults && !_isLoading)
                 IconButton(
                   onPressed: _retryWithNewContext,
@@ -3177,7 +3088,6 @@ Now generate 3 relevant session suggestions based on the above context.
       ),
       child: Column(
         children: [
-          // Section Title - Only show when we have content
           if (_showResults || _isLoading)
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
@@ -3204,8 +3114,6 @@ Now generate 3 relevant session suggestions based on the above context.
                 ],
               ),
             ),
-
-          // Content with proper scrolling
           Expanded(
             child: _buildContent(),
           ),
@@ -3232,7 +3140,6 @@ Now generate 3 relevant session suggestions based on the above context.
               ),
             ),
             SizedBox(height: 8),
-
           ],
         ),
       );
@@ -3282,7 +3189,6 @@ Now generate 3 relevant session suggestions based on the above context.
         padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: Column(
           children: [
-            // Context summary bar
             Container(
               width: double.infinity,
               margin: EdgeInsets.only(bottom: 16),
@@ -3309,8 +3215,6 @@ Now generate 3 relevant session suggestions based on the above context.
                 ],
               ),
             ),
-
-            // Suggestions
             ..._aiSuggestions.asMap().entries.map((entry) {
               final index = entry.key;
               final suggestion = entry.value;
@@ -3318,8 +3222,6 @@ Now generate 3 relevant session suggestions based on the above context.
             }).toList(),
 
             SizedBox(height: 20),
-
-            // Retry button at bottom
             if (_showResults)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -3362,7 +3264,6 @@ Now generate 3 relevant session suggestions based on the above context.
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Topic Header
           Container(
             width: double.infinity,
             padding: EdgeInsets.all(16),
@@ -3389,14 +3290,11 @@ Now generate 3 relevant session suggestions based on the above context.
               ),
             ),
           ),
-
-          // Content
           Padding(
             padding: EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Description
                 Text(
                   suggestion['description'],
                   style: TextStyle(
@@ -3406,16 +3304,12 @@ Now generate 3 relevant session suggestions based on the above context.
                   ),
                 ),
                 SizedBox(height: 20),
-
-                // Ice Breakers
                 _buildSection(
                   icon: Icons.chat_bubble_outline,
                   title: 'Conversation Starters',
                   items: suggestion['iceBreakers'],
                 ),
                 SizedBox(height: 20),
-
-                // Resources
                 _buildSection(
                   icon: Icons.assignment_outlined,
                   title: 'Campus Resources',
@@ -3500,7 +3394,6 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   Future<void> _initializeNotifications() async {
-    // Request notification permissions
     final settings = await FirebaseMessaging.instance.requestPermission(
       alert: true,
       badge: true,
@@ -3508,16 +3401,11 @@ class _CalendarPageState extends State<CalendarPage> {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      print('Notification permissions granted');
     }
-
-    // Get FCM token and save it
     final token = await FirebaseMessaging.instance.getToken();
     if (token != null) {
       await _saveFCMToken(token);
     }
-
-    // Handle token refresh
     FirebaseMessaging.instance.onTokenRefresh.listen(_saveFCMToken);
   }
 
@@ -3531,7 +3419,6 @@ class _CalendarPageState extends State<CalendarPage> {
         'fcmToken': token,
         'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
       });
-      print('FCM token saved: $token');
     }
   }
 
@@ -3729,16 +3616,14 @@ class _CalendarPageState extends State<CalendarPage> {
 
     String? uid = await FirebaseAuth.instance.currentUser?.uid;
     final signKey = await getKey(uid!);
-
-    // Format for display
     String formattedDateTime = '${date.day}/${date.month}/${date.year} • ${time != null ? time.format(context) : 'All Day'}';
-
     final event = {
       'title': title,
       'description': description,
       'signkey': signKey,
-      'dateTime': formattedDateTime, // Changed to string format for consistency
-      'timestamp': Timestamp.fromDate(finalDateTime), // Add timestamp for sorting
+      'dateTime': formattedDateTime,
+      'timestamp': Timestamp.fromDate(finalDateTime),
+      'isoDate': finalDateTime.toIso8601String(), // Add ISO format for consistent parsing
       'uid': uid,
       'createdAt': FieldValue.serverTimestamp(),
       'type': 'calendar_event',
@@ -3748,8 +3633,6 @@ class _CalendarPageState extends State<CalendarPage> {
       await FirebaseFirestore.instance
           .collection('Events')
           .add(event);
-
-      // Also add to events collection for the calendar display
       await FirebaseFirestore.instance
           .collection('events')
           .add({
@@ -3757,6 +3640,7 @@ class _CalendarPageState extends State<CalendarPage> {
         'description': description,
         'signkey': signKey,
         'dateTime': Timestamp.fromDate(finalDateTime),
+        'isoDate': finalDateTime.toIso8601String(),
         'uid': uid,
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -3766,8 +3650,6 @@ class _CalendarPageState extends State<CalendarPage> {
         toastLength: Toast.LENGTH_SHORT,
         gravity: ToastGravity.BOTTOM,
       );
-
-      print('Event created - notifications will be scheduled automatically');
 
     } catch (e) {
       Fluttertoast.showToast(
@@ -3953,14 +3835,21 @@ class _CalendarPageState extends State<CalendarPage> {
     for (var doc in docs) {
       final data = doc.data() as Map<String, dynamic>;
       DateTime? eventDate;
+      if (data['isoDate'] != null) {
+        try {
+          eventDate = DateTime.parse(data['isoDate']);
+        } catch (e) {
 
-      // Handle different date formats
-      if (data['dateTime'] is Timestamp) {
-        eventDate = (data['dateTime'] as Timestamp).toDate();
-      } else if (data['dateTime'] is String) {
-        eventDate = _parseDateString(data['dateTime']);
-      } else if (data['timestamp'] is Timestamp) {
+        }
+      }
+      if (eventDate == null && data['timestamp'] is Timestamp) {
         eventDate = (data['timestamp'] as Timestamp).toDate();
+      }
+      if (eventDate == null && data['dateTime'] is Timestamp) {
+        eventDate = (data['dateTime'] as Timestamp).toDate();
+      }
+      if (eventDate == null && data['dateTime'] is String) {
+        eventDate = _parseDateString(data['dateTime']);
       }
 
       if (eventDate != null) {
@@ -3969,7 +3858,6 @@ class _CalendarPageState extends State<CalendarPage> {
         if (newEvents[dayOnly] == null) {
           newEvents[dayOnly] = [data];
         } else {
-          // Avoid duplicates by checking event title and date
           final existingEvent = newEvents[dayOnly]!.firstWhere(
                 (e) => e['title'] == data['title'] &&
                 _getEventDate(e) == _getEventDate(data),
@@ -3989,29 +3877,47 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   DateTime? _getEventDate(Map<String, dynamic> event) {
-    if (event['dateTime'] is Timestamp) {
-      return (event['dateTime'] as Timestamp).toDate();
-    } else if (event['dateTime'] is String) {
-      return _parseDateString(event['dateTime']);
-    } else if (event['timestamp'] is Timestamp) {
+    if (event['isoDate'] != null) {
+      try {
+        return DateTime.parse(event['isoDate']);
+      } catch (e) {
+
+      }
+    }
+
+    if (event['timestamp'] is Timestamp) {
       return (event['timestamp'] as Timestamp).toDate();
     }
+
+    if (event['dateTime'] is Timestamp) {
+      return (event['dateTime'] as Timestamp).toDate();
+    }
+
+    if (event['dateTime'] is String) {
+      return _parseDateString(event['dateTime']);
+    }
+
     return null;
   }
 
   DateTime _parseDateString(String dateString) {
     try {
-      // Handle "27/11/2025 • 12:01 AM" format
       if (dateString.contains('•')) {
         final parts = dateString.split('•');
-        final datePart = parts[0].trim(); // "27/11/2025"
+        final datePart = parts[0].trim();
         final dateParts = datePart.split('/');
         final day = int.parse(dateParts[0]);
         final month = int.parse(dateParts[1]);
         final year = int.parse(dateParts[2]);
+        if (parts.length > 1) {
+          final timePart = parts[1].trim();
+          final time = _parseTimeString(timePart);
+          return DateTime(year, month, day, time.hour, time.minute);
+        }
+
         return DateTime(year, month, day);
       }
-      // Handle "23/11/2025" format
+
       else if (dateString.contains('/')) {
         final dateParts = dateString.split('/');
         final day = int.parse(dateParts[0]);
@@ -4019,11 +3925,37 @@ class _CalendarPageState extends State<CalendarPage> {
         final year = int.parse(dateParts[2]);
         return DateTime(year, month, day);
       }
-      // Fallback
-      return DateTime.now();
+      else {
+        return DateTime.parse(dateString);
+      }
     } catch (e) {
-      print('Error parsing date: $dateString');
       return DateTime.now();
+    }
+  }
+
+  TimeOfDay _parseTimeString(String timeString) {
+    try {
+      timeString = timeString.trim().toUpperCase();
+
+      if (timeString.contains('AM') || timeString.contains('PM')) {
+        final isPM = timeString.contains('PM');
+        final timePart = timeString.replaceAll(RegExp(r'[APM\s]'), '');
+        final parts = timePart.split(':');
+        var hour = int.parse(parts[0]);
+        final minute = int.parse(parts[1]);
+
+        if (isPM && hour < 12) hour += 12;
+        if (!isPM && hour == 12) hour = 0;
+
+        return TimeOfDay(hour: hour, minute: minute);
+      } else {
+        final parts = timeString.split(':');
+        final hour = int.parse(parts[0]);
+        final minute = int.parse(parts[1]);
+        return TimeOfDay(hour: hour, minute: minute);
+      }
+    } catch (e) {
+      return TimeOfDay.now();
     }
   }
 
@@ -4245,32 +4177,24 @@ class _MenteesPageState extends State<MenteesPage> {
   List<Map<String, dynamic>> _menteesWithAttendance = [];
   bool _isLoading = true;
   String _errorMessage = '';
-
-  // Map to store mentee profile images
   Map<String, String> _menteeProfileImages = {};
-
   @override
   void initState() {
     super.initState();
     _loadMenteesWithAttendance();
   }
-
   Future<String> getUsername() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid!).get();
     return doc['fName'] + " " + doc['lName'];
   }
-
-  // Helper method to build profile avatar with error handling
   Widget _buildProfileAvatar(String menteeId, {double radius = 25}) {
     final profileUrl = _menteeProfileImages[menteeId] ?? '';
-
     if (profileUrl.isNotEmpty) {
       return CircleAvatar(
         radius: radius,
         backgroundImage: NetworkImage(profileUrl),
         onBackgroundImageError: (exception, stackTrace) {
-          // If image fails to load, it will show the default icon
         },
       );
     } else {
@@ -4292,39 +4216,21 @@ class _MenteesPageState extends State<MenteesPage> {
         _isLoading = true;
         _errorMessage = '';
       });
-
-      print('Loading mentees for mentor: $currentUserId');
-
-      // Get all mentees assigned to this mentor using mentor_id
       final menteesSnapshot = await usersRef
           .where('role', isEqualTo: 'mentee')
           .where('mentor_id', isEqualTo: currentUserId)
           .get();
-
-      print('Found ${menteesSnapshot.docs.length} mentees');
-
-      // Get all meetings for this mentor
       final meetingsSnapshot = await meetingsRef
           .where('mentorId', isEqualTo: currentUserId)
           .get();
-
-      print('Found ${meetingsSnapshot.docs.length} meetings');
-
       List<Map<String, dynamic>> menteesData = [];
       Map<String, String> profileImages = {};
 
       for (var menteeDoc in menteesSnapshot.docs) {
         final mentee = menteeDoc.data() as Map<String, dynamic>;
         final menteeId = menteeDoc.id;
-
-        print('Processing mentee: ${mentee['fName']} ${mentee['lName']}');
-
-        // Store profile image
         profileImages[menteeId] = mentee['profile'] ?? '';
-
-        // Calculate attendance for this mentee
         final attendanceData = await _calculateMenteeAttendance(menteeId, meetingsSnapshot.docs);
-
         menteesData.add({
           'id': menteeId,
           'name': mentee['fName'] ?? '',
@@ -4343,7 +4249,6 @@ class _MenteesPageState extends State<MenteesPage> {
       });
 
     } catch (e) {
-      print('Error loading mentees: $e');
       setState(() {
         _errorMessage = 'Error loading mentees: $e';
         _isLoading = false;
@@ -4373,8 +4278,6 @@ class _MenteesPageState extends State<MenteesPage> {
         'venue': meeting['venue'] ?? '',
       });
     }
-
-    // Sort meetings by date (newest first)
     meetingHistory.sort((a, b) => b['date'].compareTo(a['date']));
 
     final attendancePercentage = totalMeetings > 0
@@ -4459,12 +4362,10 @@ class _MenteesPageState extends State<MenteesPage> {
                         Expanded(
                           child: TabBarView(
                             children: [
-                              // Overview Tab
                               SingleChildScrollView(
                                 padding: EdgeInsets.all(16),
                                 child: Column(
                                   children: [
-                                    // Student Info
                                     Container(
                                       padding: EdgeInsets.all(16),
                                       decoration: BoxDecoration(
@@ -4474,7 +4375,6 @@ class _MenteesPageState extends State<MenteesPage> {
                                       ),
                                       child: Row(
                                         children: [
-                                          // Use the profile avatar
                                           _buildProfileAvatar(mentee['id'], radius: 30),
                                           SizedBox(width: 16),
                                           Expanded(
@@ -4512,8 +4412,6 @@ class _MenteesPageState extends State<MenteesPage> {
                                       ),
                                     ),
                                     SizedBox(height: 20),
-
-                                    // Attendance Stats
                                     Container(
                                       padding: EdgeInsets.all(20),
                                       decoration: BoxDecoration(
@@ -4877,10 +4775,8 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
         });
       }
     } catch (e) {
-      print('Error loading mentee data: $e');
     }
   }
-
   CollectionReference get announcementsRef => _firestore.collection('announcements');
   CollectionReference get meetingsRef => _firestore.collection('meetings');
   CollectionReference get registersRef => _firestore.collection('registers');
@@ -4928,7 +4824,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                         child: LinearProgressIndicator(color: Colors.white),
                       );
                     }
-
                     return Text(
                       snapshot.data!,
                       style: TextStyle(
@@ -5018,7 +4913,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
       ),
     );
   }
-
   Widget _getCurrentPage() {
     switch (_currentIndex) {
       case 0:
@@ -5039,7 +4933,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          // Header with App Bar
           Container(
             height: 120,
             decoration: BoxDecoration(
@@ -5067,8 +4960,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
               ),
             ),
           ),
-
-          // User Profile Section
           Container(
             color: Colors.grey.shade50,
             child: Padding(
@@ -5113,7 +5004,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
             ),
           ),
 
-          // Menu Items
           _buildMenuItem(
             icon: Icons.person_outline,
             title: "My Profile",
@@ -5130,10 +5020,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
               Navigator.push(context, MaterialPageRoute(builder: (_)=>MenteeHelpSupportPage()));
             },
           ),
-
           Divider(height: 20, thickness: 1, color: Colors.grey.shade300),
-
-          // Logout
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: ListTile(
@@ -5150,8 +5037,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
               },
             ),
           ),
-
-          // Version Info
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Text(
@@ -5167,8 +5052,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
       ),
     );
   }
-
-  // Helper method to build consistent menu items
   Widget _buildMenuItem({
     required IconData icon,
     required String title,
@@ -5219,7 +5102,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
   void _logout()async{
     await FirebaseAuth.instance.signOut();
   }
-  // Logout confirmation dialog
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -5250,7 +5132,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          // Today's Overview Card
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -5282,7 +5163,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                   ],
                 ),
                 SizedBox(height: 16),
-                // Simplified stats without complex queries
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
@@ -5295,8 +5175,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
             ),
           ),
           SizedBox(height: 20),
-
-          // Latest Announcements Card - SIMPLIFIED QUERY
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -5329,7 +5207,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                 ),
                 SizedBox(height: 16),
                 StreamBuilder<QuerySnapshot>(
-                  stream: announcementsRef.snapshots(), // Simple query without filters
+                  stream: announcementsRef.snapshots(),
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
                       return Text('Error loading announcements');
@@ -5338,10 +5216,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return Center(child: CircularProgressIndicator());
                     }
-
                     final allAnnouncements = snapshot.data!.docs;
-
-                    // Filter locally by signkey
                     final announcements = allAnnouncements.where((doc) {
                       final announcement = doc.data() as Map<String, dynamic>;
                       return announcement['signkey'] == _menteeSignKey;
@@ -5350,8 +5225,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                     if (announcements.isEmpty) {
                       return Text('No announcements yet');
                     }
-
-                    // Sort locally by createdAt
                     announcements.sort((a, b) {
                       final aTime = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
                       final bTime = (b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
@@ -5448,8 +5321,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
             ),
           ),
           SizedBox(height: 20),
-
-          // Upcoming Meetings Card - SIMPLIFIED QUERY
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -5491,10 +5362,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return Center(child: CircularProgressIndicator());
                     }
-
                     final allMeetings = snapshot.data!.docs;
-
-                    // Filter locally by mentorId and future dates
                     final meetings = allMeetings.where((doc) {
                       final meeting = doc.data() as Map<String, dynamic>;
                       final isMyMentor = meeting['mentorId'] == _mentorId;
@@ -5507,16 +5375,12 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                     if (meetings.isEmpty) {
                       return Text('No upcoming meetings');
                     }
-
-                    // Sort locally by dateTime
                     meetings.sort((a, b) {
                       final aTime = (a.data() as Map<String, dynamic>)['dateTime'] as Timestamp?;
                       final bTime = (b.data() as Map<String, dynamic>)['dateTime'] as Timestamp?;
                       return (aTime ?? Timestamp.now()).compareTo(bTime ?? Timestamp.now());
                     });
-
                     final upcomingMeetings = meetings.take(5).toList();
-
                     return Column(
                       children: upcomingMeetings.map((doc) {
                         final meeting = doc.data() as Map<String, dynamic>;
@@ -5592,19 +5456,15 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
 
   Widget _buildRegistersContent() {
     return StreamBuilder<QuerySnapshot>(
-      stream: registersRef.snapshots(), // Simple query without filters
+      stream: registersRef.snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(child: Text('Error loading registers'));
         }
-
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator());
         }
-
         final allRegisters = snapshot.data!.docs;
-
-        // Filter locally by mentorId and expiration
         final registers = allRegisters.where((doc) {
           final register = doc.data() as Map<String, dynamic>;
           final isMyMentor = register['mentorId'] == _mentorId;
@@ -5613,7 +5473,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
               expiresAt.toDate().isAfter(DateTime.now());
           return isMyMentor && isActive;
         }).toList();
-
         if (registers.isEmpty) {
           return Center(
             child: Column(
@@ -5634,7 +5493,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
             ),
           );
         }
-
         return ListView.builder(
           padding: EdgeInsets.all(16),
           itemCount: registers.length,
@@ -5735,29 +5593,19 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
     final userId = _auth.currentUser!.uid;
 
     try {
-      // 1. Update the register table - add user to attendedStudents
       await registersRef.doc(registerId).update({
         'attendedStudents': FieldValue.arrayUnion([userId])
       });
-
-      // 2. Get the meeting ID from register data
       final meetingId = registerData['meetingId'];
       if (meetingId != null) {
-        // 3. Get the current meeting data
         final meetingDoc = await meetingsRef.doc(meetingId).get();
         if (meetingDoc.exists) {
           final meetingData = meetingDoc.data() as Map<String, dynamic>;
           final currentAttendedStudents = List<String>.from(meetingData['attendedStudents'] ?? []);
           final totalMentees = meetingData['totalMentees'] ?? 1;
-
-          // 4. Add user to meeting's attendedStudents if not already there
           if (!currentAttendedStudents.contains(userId)) {
             currentAttendedStudents.add(userId);
-
-            // 5. Calculate new attendance percentage
             final newAttendancePercentage = (currentAttendedStudents.length / totalMentees) * 100;
-
-            // 6. Update meeting table
             await meetingsRef.doc(meetingId).update({
               'attendedStudents': currentAttendedStudents,
               'attendancePercentage': newAttendancePercentage,
@@ -5765,8 +5613,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
           }
         }
       }
-
-      // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Attendance submitted successfully!'),
@@ -5826,8 +5672,6 @@ class _SuggestionsViewState extends State<SuggestionsView> {
     DocumentSnapshot doc=await FirebaseFirestore.instance.collection('users').doc(uid).get();
     return doc['signkey'];
   }
-
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -5846,10 +5690,7 @@ class _SuggestionsViewState extends State<SuggestionsView> {
       ),
       body: Column(
         children: [
-          // Search Section
           _buildSearchSection(),
-
-          // Suggestions List
           Expanded(
             child: _buildSuggestionsList(),
           ),
@@ -5862,7 +5703,6 @@ class _SuggestionsViewState extends State<SuggestionsView> {
       ),
     );
   }
-
   Widget _buildSearchSection() {
     return Container(
       padding: EdgeInsets.all(16),
@@ -5888,9 +5728,8 @@ class _SuggestionsViewState extends State<SuggestionsView> {
 
   Widget _buildSuggestionsList() {
     return FutureBuilder<String>(
-      future: getKey(FirebaseAuth.instance.currentUser!.uid), // Your exact method
+      future: getKey(FirebaseAuth.instance.currentUser!.uid),
       builder: (context, keySnapshot) {
-        // Handle signKey loading states
         if (keySnapshot.connectionState == ConnectionState.waiting) {
           return Center(child: CircularProgressIndicator());
         }
@@ -5902,10 +5741,7 @@ class _SuggestionsViewState extends State<SuggestionsView> {
         if (!keySnapshot.hasData || keySnapshot.data == null) {
           return Center(child: Text('No sign key found'));
         }
-
         final signKey = keySnapshot.data!;
-
-        // Now use the signKey in your StreamBuilder
         return StreamBuilder<QuerySnapshot>(
           stream: _firestore.collection('suggestions')
               .where('signkey', isEqualTo: signKey)
@@ -5925,15 +5761,12 @@ class _SuggestionsViewState extends State<SuggestionsView> {
             }
 
             var suggestions = snapshot.data!.docs;
-
-            // Apply search filter
             if (_searchController.text.isNotEmpty) {
               suggestions = suggestions.where((doc) {
                 final suggestion = doc['suggestion']?.toString().toLowerCase() ?? '';
                 return suggestion.contains(_searchController.text.toLowerCase());
               }).toList();
             }
-
             return ListView.builder(
               padding: EdgeInsets.all(16),
               itemCount: suggestions.length,
@@ -5964,7 +5797,6 @@ class _SuggestionsViewState extends State<SuggestionsView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Suggestion Text
               Text(
                 suggestion,
                 style: TextStyle(
@@ -5974,11 +5806,8 @@ class _SuggestionsViewState extends State<SuggestionsView> {
                 ),
               ),
               SizedBox(height: 12),
-
-              // Date and Delete Button
               Row(
                 children: [
-                  // Date
                   Row(
                     children: [
                       Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
@@ -5993,8 +5822,6 @@ class _SuggestionsViewState extends State<SuggestionsView> {
                     ],
                   ),
                   Spacer(),
-
-                  // Delete Button
                   IconButton(
                     icon: Icon(Icons.delete_outline, size: 20),
                     onPressed: () => _deleteSuggestion(docId),
@@ -6042,7 +5869,6 @@ class _SuggestionsViewState extends State<SuggestionsView> {
 
   void _showAddSuggestionDialog() {
     TextEditingController controller = TextEditingController();
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -6212,19 +6038,13 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
     setState(() {
       _isSubmitting = true;
     });
-
-    // Simulate submission
     Future.delayed(Duration(seconds: 1), () {
       setState(() {
         _isSubmitting = false;
       });
-
-      // Add to recent suggestions
       setState(() {
         submit();
       });
-
-      // Show success
       showDialog(
         context: context,
         builder: (BuildContext context) {
@@ -6365,7 +6185,6 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
                   padding: EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      // Quick examples
                       Container(
                         padding: EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -6423,8 +6242,6 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
                         ),
                       ),
                       SizedBox(height: 20),
-
-                      // Main input area
                       Container(
                         padding: EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -6541,7 +6358,6 @@ class _ProfilePageState extends State<ProfilePage> {
         await _uploadImageToFirebase(File(image.path));
       }
     } catch (e) {
-      print('Error picking image: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to pick image'),
@@ -6554,14 +6370,10 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _uploadImageToFirebase(File imageFile) async {
     try {
       final userId = FirebaseAuth.instance.currentUser!.uid;
-
-      // Create a reference to the location you want to upload to in Firebase Storage
       final Reference storageRef = FirebaseStorage.instance
           .ref()
           .child('profile_pictures')
           .child('$userId.jpg');
-
-      // Show loading indicator
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -6574,25 +6386,13 @@ class _ProfilePageState extends State<ProfilePage> {
           duration: Duration(minutes: 1), // Long duration for upload
         ),
       );
-
-      // Upload the file to Firebase Storage
       final UploadTask uploadTask = storageRef.putFile(imageFile);
-
-      // Wait for the upload to complete
       final TaskSnapshot snapshot = await uploadTask;
-
-      // Get the download URL
       final String downloadUrl = await snapshot.ref.getDownloadURL();
-
-      // Save the download URL to Firestore
       await _saveImageUrlToFirestore(downloadUrl);
-
-      // Update local state
       setState(() {
         _profileImageUrl = downloadUrl;
       });
-
-      // Hide loading indicator
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -6602,7 +6402,6 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
       );
     } catch (e) {
-      print('Error uploading image: $e');
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -6624,16 +6423,13 @@ class _ProfilePageState extends State<ProfilePage> {
         'profile': imageUrl,
       });
     } catch (e) {
-      print('Error saving image URL: $e');
-      throw e; // Re-throw to handle in the calling method
+      throw e;
     }
   }
 
   Future<void> _removeProfilePicture() async {
     try {
       final userId = FirebaseAuth.instance.currentUser!.uid;
-
-      // Show confirmation dialog
       bool? shouldDelete = await showDialog(
         context: context,
         builder: (BuildContext context) {
@@ -6655,31 +6451,24 @@ class _ProfilePageState extends State<ProfilePage> {
       );
 
       if (shouldDelete == true) {
-        // Show loading
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(children: [CircularProgressIndicator(), Text('Removing...')]),
             duration: Duration(seconds: 30),
           ),
         );
-
-        // ONLY THIS PART CHANGES - Remove URL from Firestore
         await FirebaseFirestore.instance.collection('users').doc(userId).update({
-          'profile': FieldValue.delete(), // ← Just remove the string field
+          'profile': FieldValue.delete(),
         });
-
-        // Update UI
         setState(() {
           _profileImageUrl = "";
         });
-
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Profile picture removed!'), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
-      print('Error removing profile picture: $e');
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to remove picture'), backgroundColor: Colors.red),
@@ -6701,7 +6490,6 @@ class _ProfilePageState extends State<ProfilePage> {
         });
       }
     } catch (e) {
-      print('Error loading profile picture: $e');
     }
   }
 
@@ -6743,7 +6531,6 @@ class _ProfilePageState extends State<ProfilePage> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading user data: $e');
       setState(() {
         _nameController.text = 'Error loading name';
         _emailController.text = 'Error loading email';
@@ -6787,11 +6574,8 @@ class _ProfilePageState extends State<ProfilePage> {
         padding: EdgeInsets.all(16),
         child: Column(
           children: [
-            // Profile Header with Picture
             _buildProfileHeader(),
             SizedBox(height: 32),
-
-            // Personal Information
             _buildSectionHeader("Personal Information"),
             _buildInfoCard(),
             SizedBox(height: 24),
@@ -6932,7 +6716,6 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
-
   Widget _buildEditableField({
     required String label,
     required TextEditingController controller,
@@ -7020,7 +6803,6 @@ class _ProfilePageState extends State<ProfilePage> {
       ],
     );
   }
-
   Widget _buildDropdownField({
     required String label,
     required String value,
@@ -7104,7 +6886,6 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _saveProfile() {
-    // Only save bio and skills since name and email are read-only
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text("Profile updated successfully!"),
@@ -7122,7 +6903,6 @@ class _ProfilePageState extends State<ProfilePage> {
 }
 class ViewMentorPage extends StatefulWidget {
   const ViewMentorPage({super.key});
-
   @override
   State<ViewMentorPage> createState() => _ViewMentorPageState();
 }
@@ -7148,7 +6928,6 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
             _profileImageUrl = mentorDoc['profile'];
           });
         } else {
-          // If no profile image is found, set empty to show default icon
           setState(() {
             _profileImageUrl = "";
           });
@@ -7159,7 +6938,6 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
         });
       }
     } catch (e) {
-      print('Error loading profile picture: $e');
       setState(() {
         _profileImageUrl = "";
       });
@@ -7195,7 +6973,6 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
           .get();
 
       if (mentorQuery.docs.isEmpty) {
-        print('No mentor found with signkey: $signKey');
         return null;
       }
 
@@ -7209,7 +6986,6 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
         'signkey': mentorDoc['signkey'],
       };
     } catch (e) {
-      print('Error getting mentor doc: $e');
       return null;
     }
   }
@@ -7297,7 +7073,6 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
       padding: EdgeInsets.all(20),
       child: Column(
         children: [
-          // Profile Card
           Card(
             elevation: 4,
             shape: RoundedRectangleBorder(
@@ -7307,7 +7082,6 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
               padding: EdgeInsets.all(24),
               child: Column(
                 children: [
-                  // Profile Picture
                   Container(
                     width: 120,
                     height: 120,
@@ -7353,8 +7127,6 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
                     ),
                   ),
                   SizedBox(height: 20),
-
-                  // Mentor Name
                   Text(
                     mentorName,
                     style: TextStyle(
@@ -7365,8 +7137,6 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
                     textAlign: TextAlign.center,
                   ),
                   SizedBox(height: 8),
-
-                  // Role Badge
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                     decoration: BoxDecoration(
@@ -7386,16 +7156,12 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
                     ),
                   ),
                   SizedBox(height: 24),
-
-                  // Contact Section
                   _buildContactSection(),
                 ],
               ),
             ),
           ),
           SizedBox(height: 20),
-
-          // Additional Info Card
           Card(
             elevation: 3,
             shape: RoundedRectangleBorder(
@@ -7475,8 +7241,6 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
             ],
           ),
           SizedBox(height: 16),
-
-          // Email Contact
           InkWell(
             onTap: _sendEmail,
             child: Container(
@@ -7534,8 +7298,6 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
             ),
           ),
           SizedBox(height: 12),
-
-          // Contact Instructions
           Text(
             'Tap the email above to contact your mentor directly',
             style: TextStyle(
@@ -7573,7 +7335,6 @@ class MentorHelpSupportPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Welcome Section
             _buildSectionHeader('Mentor Dashboard Guide'),
             _buildInfoCard(
               'Welcome to your MentorMate dashboard! This comprehensive guide will help you '
@@ -7581,8 +7342,6 @@ class MentorHelpSupportPage extends StatelessWidget {
                   'and create an engaging learning environment.',
             ),
             SizedBox(height: 24),
-
-            // Navigation Guide
             _buildSectionHeader('Navigation Guide'),
             _buildFeatureItem(
               icon: Icons.dashboard,
@@ -7615,17 +7374,13 @@ class MentorHelpSupportPage extends StatelessWidget {
               description: 'Generate intelligent topic suggestions using Gemini AI based on your mentees\' interests and learning patterns.',
             ),
             SizedBox(height: 24),
-
-            // Mentor Features Explained
             _buildSectionHeader('Mentor Features Explained'),
-
             _buildFeatureCard(
               'Mentee Management',
               Icons.supervisor_account,
               'View all your assigned mentees, track their progress, and access their contact information. '
                   'Monitor attendance patterns and engagement levels.',
             ),
-
             _buildFeatureCard(
               'Announcement System',
               Icons.campaign,
@@ -7633,7 +7388,6 @@ class MentorHelpSupportPage extends StatelessWidget {
                   'Include meeting details, resource links, or general updates. Use different types '
                   '(general, meeting, resource) for better organization.',
             ),
-
             _buildFeatureCard(
               'Attendance Registers',
               Icons.assignment_add,
@@ -7666,7 +7420,6 @@ class MentorHelpSupportPage extends StatelessWidget {
             ),
             SizedBox(height: 24),
 
-            // AI Suggestions Feature Deep Dive
             _buildSectionHeader('AI Topic Suggestions Feature'),
             Card(
               elevation: 3,
@@ -7741,8 +7494,6 @@ class MentorHelpSupportPage extends StatelessWidget {
               ),
             ),
             SizedBox(height: 24),
-
-            // Best Practices
             _buildSectionHeader('Best Practices for Mentors'),
             _buildTipItem('✓ Create announcements regularly to keep mentees engaged'),
             _buildTipItem('✓ Set up attendance registers at least 15 minutes before sessions'),
@@ -7753,8 +7504,6 @@ class MentorHelpSupportPage extends StatelessWidget {
             _buildTipItem('✓ Combine AI suggestions with mentee feedback for optimal topics'),
             _buildTipItem('✓ Set realistic expiration times for attendance registers'),
             SizedBox(height: 24),
-
-            // Troubleshooting
             _buildSectionHeader('Troubleshooting'),
             _buildTroubleshootingItem(
               'Mentees not receiving announcements',
@@ -7777,8 +7526,6 @@ class MentorHelpSupportPage extends StatelessWidget {
               'Verify you have assigned mentees and check your internet connection. Refresh the page.',
             ),
             SizedBox(height: 24),
-
-            // Quick Actions Guide
             _buildSectionHeader('Quick Actions Guide'),
             _buildQuickActionItem(
               'Create Announcement',
@@ -7801,8 +7548,6 @@ class MentorHelpSupportPage extends StatelessWidget {
               'Go to Mentees tab → Select mentee → View profile and attendance history',
             ),
             SizedBox(height: 24),
-
-            // AI Best Practices
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(
@@ -7862,8 +7607,6 @@ class MentorHelpSupportPage extends StatelessWidget {
               ),
             ),
             SizedBox(height: 24),
-
-            // Support Resources
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(
@@ -7932,8 +7675,6 @@ class MentorHelpSupportPage extends StatelessWidget {
               ),
             ),
             SizedBox(height: 32),
-
-            // Technical Support
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(
@@ -7997,8 +7738,6 @@ class MentorHelpSupportPage extends StatelessWidget {
               ),
             ),
             SizedBox(height: 32),
-
-            // Developer Credit
             _buildDeveloperCredit(),
             SizedBox(height: 20),
           ],
@@ -8006,7 +7745,6 @@ class MentorHelpSupportPage extends StatelessWidget {
       ),
     );
   }
-
   Widget _buildSectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -8020,7 +7758,6 @@ class MentorHelpSupportPage extends StatelessWidget {
       ),
     );
   }
-
   Widget _buildInfoCard(String text) {
     return Card(
       elevation: 2,
@@ -8093,7 +7830,6 @@ class MentorHelpSupportPage extends StatelessWidget {
       ),
     );
   }
-
   Widget _buildFeatureCard(String title, IconData icon, String description) {
     return Card(
       elevation: 2,
@@ -8144,7 +7880,6 @@ class MentorHelpSupportPage extends StatelessWidget {
       ),
     );
   }
-
   Widget _buildAIFeatureItem(String feature, String description) {
     return Container(
       margin: EdgeInsets.only(bottom: 8),
@@ -8405,7 +8140,6 @@ class MenteeHelpSupportPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Welcome Section
             _buildSectionHeader('Welcome to MentorMate'),
             _buildInfoCard(
               'MentorMate is your dedicated platform for connecting with mentors, '
@@ -8413,8 +8147,6 @@ class MenteeHelpSupportPage extends StatelessWidget {
                   'This guide will help you understand all the features available to you.',
             ),
             SizedBox(height: 24),
-
-            // Navigation Guide
             _buildSectionHeader('Navigation Guide'),
             _buildFeatureItem(
               icon: Icons.home,
@@ -8437,8 +8169,6 @@ class MenteeHelpSupportPage extends StatelessWidget {
               description: 'Share topic suggestions with your mentor for future sessions or discussions.',
             ),
             SizedBox(height: 24),
-
-            // Features Explained
             _buildSectionHeader('Key Features Explained'),
 
             _buildFeatureCard(
@@ -8476,8 +8206,6 @@ class MenteeHelpSupportPage extends StatelessWidget {
                   'your account settings.',
             ),
             SizedBox(height: 24),
-
-            // Troubleshooting
             _buildSectionHeader('Troubleshooting'),
             _buildTroubleshootingItem(
               'I can\'t see any announcements',
@@ -8492,8 +8220,6 @@ class MenteeHelpSupportPage extends StatelessWidget {
               'Check your internet connection and verify that your mentor has scheduled upcoming meetings.',
             ),
             SizedBox(height: 24),
-
-            // Quick Tips
             _buildSectionHeader('Quick Tips'),
             _buildTipItem('✓ Check the app regularly for new announcements'),
             _buildTipItem('✓ Submit attendance promptly when registers are available'),
@@ -8501,8 +8227,6 @@ class MenteeHelpSupportPage extends StatelessWidget {
             _buildTipItem('✓ Keep your profile information up to date'),
             _buildTipItem('✓ Contact your mentor directly for urgent matters'),
             SizedBox(height: 32),
-
-            // Contact Support
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(
@@ -8572,8 +8296,6 @@ class MenteeHelpSupportPage extends StatelessWidget {
               ),
             ),
             SizedBox(height: 32),
-
-            // Developer Credit
             _buildDeveloperCredit(),
             SizedBox(height: 20),
           ],
