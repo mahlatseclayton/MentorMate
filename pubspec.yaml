@@ -48,6 +48,9 @@ dev_dependencies:
   http: ^1.1.0
   table_calendar: ^3.0.9
   flutter_launcher_icons: ^0.14.4
+  intl: ^0.19.0
+  uuid: ^4.3.0
+  hexcolor: ^3.0.2
   firebase_core: ^3.0.0
   firebase_auth: ^5.0.0
   cloud_firestore: ^5.0.0

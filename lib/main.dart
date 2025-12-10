@@ -16,6 +16,8 @@ import 'dart:math';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:uuid/uuid.dart';
+import 'package:hexcolor/hexcolor.dart';
 
 void main()async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -2291,6 +2293,12 @@ Future <String>getUsername()async{
                 backgroundColor: Colors.transparent,
                 elevation: 0,
                 actions: [
+                  IconButton(
+                    icon: Icon(Icons.auto_mode, color: Colors.white),
+                    onPressed: (){
+                      Navigator.push(context, MaterialPageRoute(builder: (_)=>SmartMeetingSchedulerPage()));
+                    },
+                  ),
                   IconButton(
                     icon: Icon(Icons.lightbulb_outline, color: Colors.white),
                     onPressed: () {
@@ -6151,7 +6159,7 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
             Container(
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Text(
-                'Suggest Topics',
+                'Suggestions',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -6330,6 +6338,98 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
     );
   }
 }
+class TimetableEvent {
+  final String id;
+  final String userId;
+  final String signkey;
+  final String title;
+  final String description;
+  final DateTime date;
+  final TimeOfDay startTime;
+  final TimeOfDay endTime;
+  final String color;
+  final String day; // Monday, Tuesday, etc.
+
+  TimetableEvent({
+    required this.id,
+    required this.userId,
+    required this.signkey,
+    required this.title,
+    required this.description,
+    required this.date,
+    required this.startTime,
+    required this.endTime,
+    required this.color,
+    required this.day,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'userId': userId,
+      'signkey': signkey,
+      'title': title,
+      'description': description,
+      'date': DateFormat('yyyy-MM-dd').format(date),
+      'day': day,
+      'startTime': '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
+      'endTime': '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
+      'color': color,
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+  }
+
+  factory TimetableEvent.fromMap(Map<String, dynamic> map) {
+    final startParts = (map['startTime'] as String).split(':');
+    final endParts = (map['endTime'] as String).split(':');
+
+    return TimetableEvent(
+      id: map['id'],
+      userId: map['userId'],
+      signkey: map['signkey'],
+      title: map['title'],
+      description: map['description'],
+      date: DateTime.parse(map['date']),
+      startTime: TimeOfDay(
+        hour: int.parse(startParts[0]),
+        minute: int.parse(startParts[1]),
+      ),
+      endTime: TimeOfDay(
+        hour: int.parse(endParts[0]),
+        minute: int.parse(endParts[1]),
+      ),
+      color: map['color'],
+      day: map['day'],
+    );
+  }
+
+  // CopyWith method
+  TimetableEvent copyWith({
+    String? id,
+    String? userId,
+    String? userKey,
+    String? title,
+    String? description,
+    DateTime? date,
+    TimeOfDay? startTime,
+    TimeOfDay? endTime,
+    String? color,
+    String? day,
+  }) {
+    return TimetableEvent(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      signkey: userKey ?? this.signkey,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      date: date ?? this.date,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      color: color ?? this.color,
+      day: day ?? this.day,
+    );
+  }
+}
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -6337,6 +6437,7 @@ class ProfilePage extends StatefulWidget {
   State<ProfilePage> createState() => _ProfilePageState();
 }
 class _ProfilePageState extends State<ProfilePage> {
+  // Profile Controllers
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   String _role = "";
@@ -6345,141 +6446,66 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isLoading = true;
   final ImagePicker _imagePicker = ImagePicker();
 
-  Future<void> _pickImageFromGallery() async {
-    try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 80,
-      );
+  // Timetable Variables
+  DateTime _currentWeekStart = DateTime.now();
+  bool _isEditingTimetable = false;
 
-      if (image != null) {
-        await _uploadImageToFirebase(File(image.path));
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to pick image'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+  // Time slots from 6:00 AM to 6:00 PM
+  final List<String> _timeSlots = [
+    '6:00', '7:00', '8:00', '9:00', '10:00', '11:00',
+    '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'
+  ];
+
+  // Days of the week
+  final List<String> _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  // Full day names
+  final Map<String, String> _fullDayNames = {
+    'Mon': 'Monday',
+    'Tue': 'Tuesday',
+    'Wed': 'Wednesday',
+    'Thu': 'Thursday',
+    'Fri': 'Friday',
+    'Sat': 'Saturday',
+    'Sun': 'Sunday',
+  };
+
+  // Firebase Instances
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final Uuid _uuid = const Uuid();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+    _loadProfilePicture();
+    // Adjust to start of current week (Monday)
+    _currentWeekStart = _getStartOfWeek(DateTime.now());
   }
 
-  Future<void> _uploadImageToFirebase(File imageFile) async {
-    try {
-      final userId = FirebaseAuth.instance.currentUser!.uid;
-      final Reference storageRef = FirebaseStorage.instance
-          .ref()
-          .child('profile_pictures')
-          .child('$userId.jpg');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              CircularProgressIndicator(color: Colors.white),
-              SizedBox(width: 12),
-              Text('Uploading image...'),
-            ],
-          ),
-          duration: Duration(minutes: 1), // Long duration for upload
-        ),
-      );
-      final UploadTask uploadTask = storageRef.putFile(imageFile);
-      final TaskSnapshot snapshot = await uploadTask;
-      final String downloadUrl = await snapshot.ref.getDownloadURL();
-      await _saveImageUrlToFirestore(downloadUrl);
-      setState(() {
-        _profileImageUrl = downloadUrl;
-      });
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Profile picture updated successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to upload image'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+  // Helper to get Monday of the week
+  DateTime _getStartOfWeek(DateTime date) {
+    // Monday is 1 in Dart (Monday = 1, Sunday = 7)
+    int dayOfWeek = date.weekday;
+    return date.subtract(Duration(days: dayOfWeek - 1));
   }
 
-  Future<void> _saveImageUrlToFirestore(String imageUrl) async {
-    try {
-      final userId = FirebaseAuth.instance.currentUser!.uid;
-
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .update({
-        'profile': imageUrl,
-      });
-    } catch (e) {
-      throw e;
+  // Get dates for the current week
+  List<DateTime> _getWeekDates() {
+    List<DateTime> weekDates = [];
+    for (int i = 0; i < 7; i++) {
+      weekDates.add(_currentWeekStart.add(Duration(days: i)));
     }
+    return weekDates;
   }
 
-  Future<void> _removeProfilePicture() async {
-    try {
-      final userId = FirebaseAuth.instance.currentUser!.uid;
-      bool? shouldDelete = await showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            title: Text("Remove Profile Picture"),
-            content: Text("Are you sure you want to remove your profile picture?"),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: Text("Cancel"),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: Text("Remove", style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          );
-        },
-      );
-
-      if (shouldDelete == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(children: [CircularProgressIndicator(), Text('Removing...')]),
-            duration: Duration(seconds: 30),
-          ),
-        );
-        await FirebaseFirestore.instance.collection('users').doc(userId).update({
-          'profile': FieldValue.delete(),
-        });
-        setState(() {
-          _profileImageUrl = "";
-        });
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Profile picture removed!'), backgroundColor: Colors.green),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to remove picture'), backgroundColor: Colors.red),
-      );
-    }
-  }
+  // =============== PROFILE METHODS ===============
 
   Future<void> _loadProfilePicture() async {
     try {
-      final userId = FirebaseAuth.instance.currentUser!.uid;
-      final DocumentSnapshot userDoc = await FirebaseFirestore.instance
+      final userId = _auth.currentUser!.uid;
+      final DocumentSnapshot userDoc = await _firestore
           .collection('users')
           .doc(userId)
           .get();
@@ -6490,32 +6516,33 @@ class _ProfilePageState extends State<ProfilePage> {
         });
       }
     } catch (e) {
+      // Silently fail - use default avatar
     }
   }
 
   Future<String> getRole() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-    return doc['role'];
+    final uid = _auth.currentUser?.uid;
+    DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
+    return doc['role'] ?? 'Student';
   }
 
   Future<String> getFullName() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-    return doc['fName'] + " " + doc['lName'];
+    final uid = _auth.currentUser?.uid;
+    DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
+    return '${doc['fName'] ?? ''} ${doc['lName'] ?? ''}'.trim();
   }
 
   Future<String> getEmail() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-    return doc['studentNo'] + '@students.wits.ac.za';
+    final uid = _auth.currentUser?.uid;
+    DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
+    final studentNo = doc['studentNo'] ?? '';
+    return studentNo.isNotEmpty ? '$studentNo@students.wits.ac.za' : '';
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _loadUserData();
-    _loadProfilePicture();
+  Future<String?> getUserKey() async {
+    final uid = _auth.currentUser?.uid;
+    DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
+    return doc['userKey'];
   }
 
   Future<void> _loadUserData() async {
@@ -6540,12 +6567,296 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _pickImageFromGallery() async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 80,
+      );
+
+      if (image != null) {
+        await _uploadImageToFirebase(File(image.path));
+      }
+    } catch (e) {
+      _showSnackBar('Failed to pick image', isError: true);
+    }
+  }
+
+  Future<void> _uploadImageToFirebase(File imageFile) async {
+    try {
+      final userId = _auth.currentUser!.uid;
+      final Reference storageRef = FirebaseStorage.instance
+          .ref()
+          .child('profile_pictures')
+          .child('$userId.jpg');
+
+      _showSnackBar('Uploading image...', showProgress: true);
+
+      final UploadTask uploadTask = storageRef.putFile(imageFile);
+      final TaskSnapshot snapshot = await uploadTask;
+      final String downloadUrl = await snapshot.ref.getDownloadURL();
+
+      await _saveImageUrlToFirestore(downloadUrl);
+      setState(() {
+        _profileImageUrl = downloadUrl;
+      });
+
+      _hideCurrentSnackBar();
+      _showSnackBar('Profile picture updated successfully!');
+    } catch (e) {
+      _hideCurrentSnackBar();
+      _showSnackBar('Failed to upload image', isError: true);
+    }
+  }
+
+  Future<void> _saveImageUrlToFirestore(String imageUrl) async {
+    try {
+      final userId = _auth.currentUser!.uid;
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .update({'profile': imageUrl});
+    } catch (e) {
+      throw e;
+    }
+  }
+
+  Future<void> _removeProfilePicture() async {
+    try {
+      final userId = _auth.currentUser!.uid;
+      bool? shouldDelete = await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text("Remove Profile Picture"),
+            content: const Text("Are you sure you want to remove your profile picture?"),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text("Cancel"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text("Remove", style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (shouldDelete == true) {
+        _showSnackBar('Removing...', showProgress: true);
+
+        await _firestore.collection('users').doc(userId).update({
+          'profile': FieldValue.delete(),
+        });
+
+        setState(() {
+          _profileImageUrl = "";
+        });
+
+        _hideCurrentSnackBar();
+        _showSnackBar('Profile picture removed!');
+      }
+    } catch (e) {
+      _hideCurrentSnackBar();
+      _showSnackBar('Failed to remove picture', isError: true);
+    }
+  }
+
+  void _changeProfilePicture() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text("Choose from Gallery"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImageFromGallery();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text("Remove Photo", style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _removeProfilePicture();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _saveProfile() {
+    _showSnackBar('Profile updated successfully!');
+  }
+
+  // =============== TIMETABLE METHODS ===============
+
+  Future<void> _addTimetableEvent(TimetableEvent event) async {
+    try {
+      await _firestore.collection('timetable_events').doc(event.id).set(event.toMap());
+    } catch (e) {
+      throw e;
+    }
+  }
+
+  Future<void> _updateTimetableEvent(TimetableEvent event) async {
+    try {
+      await _firestore.collection('timetable_events').doc(event.id).update(event.toMap());
+    } catch (e) {
+      throw e;
+    }
+  }
+
+  Future<void> _deleteTimetableEvent(String eventId) async {
+    try {
+      await _firestore.collection('timetable_events').doc(eventId).delete();
+    } catch (e) {
+      throw e;
+    }
+  }
+
+  // Get all events for the current week
+  Stream<List<TimetableEvent>> _getWeeklyTimetableEvents() {
+    final userId = _auth.currentUser!.uid;
+    final weekStart = DateFormat('yyyy-MM-dd').format(_currentWeekStart);
+    final weekEnd = DateFormat('yyyy-MM-dd').format(_currentWeekStart.add(const Duration(days: 6)));
+
+    return _firestore
+        .collection('timetable_events')
+        .where('userId', isEqualTo: userId)
+        .where('date', isGreaterThanOrEqualTo: weekStart)
+        .where('date', isLessThanOrEqualTo: weekEnd)
+        .orderBy('date')
+        .orderBy('startTime')
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => TimetableEvent.fromMap(doc.data() as Map<String, dynamic>))
+          .toList();
+    });
+  }
+
+  void _showAddEventDialog({TimetableEvent? existingEvent, String? day, TimeOfDay? presetTime}) async {
+    final weekDates = _getWeekDates();
+    final selectedDate = existingEvent?.date ??
+        (day != null ? weekDates[_days.indexOf(day)] : weekDates[0]);
+
+    final result = await showDialog(
+      context: context,
+      builder: (context) => AddTimetableEventDialog(
+        existingEvent: existingEvent,
+        selectedDate: selectedDate,
+        presetTime: presetTime,
+        onSave: _handleSaveEvent,
+        onDelete: existingEvent != null ? () => _handleDeleteEvent(existingEvent.id) : null,
+      ),
+    );
+
+    if (result == true) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _handleSaveEvent(TimetableEvent event) async {
+    try {
+      if (event.id.isEmpty) {
+        event = event.copyWith(id: _uuid.v4());
+        await _addTimetableEvent(event);
+        _showSnackBar('Event added successfully!');
+      } else {
+        await _updateTimetableEvent(event);
+        _showSnackBar('Event updated successfully!');
+      }
+    } catch (e) {
+      _showSnackBar('Error saving event: ${e.toString()}', isError: true);
+    }
+  }
+
+  Future<void> _handleDeleteEvent(String eventId) async {
+    try {
+      bool? shouldDelete = await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text("Delete Event"),
+          content: const Text("Are you sure you want to delete this event?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text("Delete", style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldDelete == true) {
+        await _deleteTimetableEvent(eventId);
+        _showSnackBar('Event deleted successfully!');
+        setState(() {});
+      }
+    } catch (e) {
+      _showSnackBar('Error deleting event', isError: true);
+    }
+  }
+
+  // Helper to format time for display
+  String _formatTimeForDisplay(String time) {
+    final hour = int.parse(time.split(':')[0]);
+    if (hour == 0) return '12 AM';
+    if (hour < 12) return '$time AM';
+    if (hour == 12) return '12 PM';
+    return '${hour - 12}:00 PM';
+  }
+
+  // =============== HELPER METHODS ===============
+
+  void _showSnackBar(String message, {bool isError = false, bool showProgress = false}) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: showProgress
+            ? Row(
+          children: [
+            const CircularProgressIndicator(color: Colors.white),
+            const SizedBox(width: 12),
+            Text(message),
+          ],
+        )
+            : Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        duration: showProgress ? const Duration(minutes: 1) : const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _hideCurrentSnackBar() {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+  }
+
+  // =============== WIDGET BUILDERS ===============
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        iconTheme: IconThemeData(color: Colors.white),
-        title: Text(
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text(
           "My Profile",
           style: TextStyle(
             fontWeight: FontWeight.bold,
@@ -6569,16 +6880,18 @@ class _ProfilePageState extends State<ProfilePage> {
         ],
       ),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             _buildProfileHeader(),
-            SizedBox(height: 32),
+            const SizedBox(height: 32),
             _buildSectionHeader("Personal Information"),
             _buildInfoCard(),
-            SizedBox(height: 24),
+            const SizedBox(height: 32),
+            _buildWeeklyTimetableSection(),
+            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -6637,14 +6950,14 @@ class _ProfilePageState extends State<ProfilePage> {
                   border: Border.all(color: Colors.white, width: 2),
                 ),
                 child: IconButton(
-                  icon: Icon(Icons.camera_alt, size: 18, color: Colors.white),
+                  icon: const Icon(Icons.camera_alt, size: 18, color: Colors.white),
                   onPressed: _changeProfilePicture,
                   padding: EdgeInsets.zero,
                 ),
               ),
           ],
         ),
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
         Text(
           _nameController.text,
           style: TextStyle(
@@ -6653,9 +6966,9 @@ class _ProfilePageState extends State<ProfilePage> {
             color: Colors.grey.shade800,
           ),
         ),
-        SizedBox(height: 4),
+        const SizedBox(height: 4),
         Container(
-          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           decoration: BoxDecoration(
             color: _role == "Mentor" ? Colors.blue.shade50 : Colors.green.shade50,
             borderRadius: BorderRadius.circular(20),
@@ -6678,17 +6991,17 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildSectionHeader(String title) {
     return Container(
-      width: double.infinity,
-      padding: EdgeInsets.only(bottom: 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: Colors.grey.shade800,
+        width: double.infinity,
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey.shade800,
+          ),
+          textAlign: TextAlign.left,
         ),
-        textAlign: TextAlign.left,
-      ),
     );
   }
 
@@ -6697,7 +7010,7 @@ class _ProfilePageState extends State<ProfilePage> {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             _buildReadOnlyField(
@@ -6705,7 +7018,7 @@ class _ProfilePageState extends State<ProfilePage> {
               value: _nameController.text,
               icon: Icons.person_outline,
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             _buildReadOnlyField(
               label: "Email Address",
               value: _emailController.text,
@@ -6714,53 +7027,6 @@ class _ProfilePageState extends State<ProfilePage> {
           ],
         ),
       ),
-    );
-  }
-  Widget _buildEditableField({
-    required String label,
-    required TextEditingController controller,
-    required IconData icon,
-    bool isEmail = false,
-  }) {
-    return Row(
-      children: [
-        Icon(icon, color: Colors.grey.shade600, size: 20),
-        SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              SizedBox(height: 4),
-              TextField(
-                controller: controller,
-                readOnly: !_isEditing,
-                keyboardType: isEmail ? TextInputType.emailAddress : TextInputType.text,
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: EdgeInsets.zero,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  hintStyle: TextStyle(color: Colors.grey.shade400),
-                ),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey.shade800,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
@@ -6772,7 +7038,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return Row(
       children: [
         Icon(icon, color: Colors.grey.shade600, size: 20),
-        SizedBox(width: 12),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -6785,9 +7051,9 @@ class _ProfilePageState extends State<ProfilePage> {
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              SizedBox(height: 4),
+              const SizedBox(height: 4),
               Container(
-                padding: EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Text(
                   value,
                   style: TextStyle(
@@ -6803,93 +7069,312 @@ class _ProfilePageState extends State<ProfilePage> {
       ],
     );
   }
-  Widget _buildDropdownField({
-    required String label,
-    required String value,
-    required IconData icon,
-    required List<String> items,
-    required Function(String?) onChanged,
-  }) {
-    return Row(
+
+  Widget _buildWeeklyTimetableSection() {
+    final weekDates = _getWeekDates();
+    final formattedWeekRange = '${DateFormat('MMM d').format(weekDates.first)} - ${DateFormat('MMM d').format(weekDates.last)}';
+
+    return Column(
       children: [
-        Icon(icon, color: Colors.grey.shade600, size: 20),
-        SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w500,
+        _buildSectionHeader("Weekly Timetable"),
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                // Week navigation and Edit button
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.chevron_left),
+                      onPressed: () {
+                        setState(() {
+                          _currentWeekStart = _currentWeekStart.subtract(const Duration(days: 7));
+                        });
+                      },
+                    ),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Text(
+                            formattedWeekRange,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            DateFormat('yyyy').format(weekDates.first),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.chevron_right),
+                      onPressed: () {
+                        setState(() {
+                          _currentWeekStart = _currentWeekStart.add(const Duration(days: 7));
+                        });
+                      },
+                    ),
+                    IconButton(
+                      icon: Icon(_isEditingTimetable ? Icons.check : Icons.edit),
+                      onPressed: () {
+                        setState(() {
+                          _isEditingTimetable = !_isEditingTimetable;
+                        });
+                      },
+                    ),
+                  ],
                 ),
-              ),
-              SizedBox(height: 4),
-              DropdownButtonFormField<String>(
-                value: value,
-                items: items.map((String item) {
-                  return DropdownMenuItem<String>(
-                    value: item,
-                    child: Text(item),
-                  );
-                }).toList(),
-                onChanged: onChanged,
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 0),
-                  border: InputBorder.none,
+                const SizedBox(height: 16),
+
+                // Weekly Timetable View
+                StreamBuilder<List<TimetableEvent>>(
+                  stream: _getWeeklyTimetableEvents(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Center(child: Text('Error: ${snapshot.error}'));
+                    }
+
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final events = snapshot.data ?? [];
+
+                    return _buildWeeklyTimetableGrid(events, weekDates);
+                  },
                 ),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.grey.shade800,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
     );
   }
 
-  void _changeProfilePicture() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return SafeArea(
+  Widget _buildWeeklyTimetableGrid(List<TimetableEvent> events, List<DateTime> weekDates) {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 700),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.vertical,
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ListTile(
-                leading: Icon(Icons.photo_library),
-                title: Text("Choose from Gallery"),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImageFromGallery();
-                },
+              // Header row with days
+              Container(
+                height: 60,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Empty corner cell
+                    Container(
+                      width: 80,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        color: Colors.grey.shade100,
+                      ),
+                      alignment: Alignment.center,
+                      child: const Text(
+                        'Time',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+
+                    // Day headers
+                    ..._days.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final day = entry.value;
+                      final date = weekDates[index];
+
+                      return Container(
+                        width: 120,
+                        decoration: BoxDecoration(
+                          border: Border(
+                            right: BorderSide(color: Colors.grey.shade300),
+                            bottom: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          color: date.weekday == DateTime.saturday || date.weekday == DateTime.sunday
+                              ? Colors.grey.shade50
+                              : Colors.white,
+                        ),
+                        padding: const EdgeInsets.all(8),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _fullDayNames[day]!,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: date.weekday == DateTime.saturday || date.weekday == DateTime.sunday
+                                    ? Colors.red.shade700
+                                    : Colors.blue.shade700,
+                              ),
+                            ),
+                            Text(
+                              DateFormat('MMM d').format(date),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ],
+                ),
               ),
-              ListTile(
-                leading: Icon(Icons.delete_outline, color: Colors.red),
-                title: Text("Remove Photo", style: TextStyle(color: Colors.red)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _removeProfilePicture();
-                },
-              ),
+
+              // Time slots and events
+              ..._timeSlots.asMap().entries.map((timeEntry) {
+                final timeIndex = timeEntry.key;
+                final time = timeEntry.value;
+                final hour = int.parse(time.split(':')[0]);
+
+                return Container(
+                  height: 80,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Time slot label
+                      Container(
+                        width: 80,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          color: Colors.grey.shade100,
+                        ),
+                        alignment: Alignment.center,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _formatTimeForDisplay(time),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                            if (timeIndex < _timeSlots.length - 1)
+                              Text(
+                                'to ${_formatTimeForDisplay(_timeSlots[timeIndex + 1])}',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+
+                      // Day cells for this time slot
+                      ..._days.asMap().entries.map((dayEntry) {
+                        final dayIndex = dayEntry.key;
+                        final day = dayEntry.value;
+                        final date = weekDates[dayIndex];
+
+                        // Find events for this time slot and day
+                        final cellEvents = events.where((event) {
+                          final eventDay = DateFormat('EEE').format(event.date);
+                          final eventStartHour = event.startTime.hour;
+                          final eventEndHour = event.endTime.hour;
+
+                          return eventDay == day &&
+                              eventStartHour <= hour &&
+                              eventEndHour > hour;
+                        }).toList();
+
+                        return GestureDetector(
+                          onTap: _isEditingTimetable ? () {
+                            final presetTime = TimeOfDay(hour: hour, minute: 0);
+                            _showAddEventDialog(day: day, presetTime: presetTime);
+                          } : null,
+                          child: Container(
+                            width: 120,
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade300),
+                              color: date.weekday == DateTime.saturday || date.weekday == DateTime.sunday
+                                  ? Colors.grey.shade50
+                                  : Colors.white,
+                            ),
+                            padding: const EdgeInsets.all(4),
+                            child: cellEvents.isEmpty
+                                ? _isEditingTimetable
+                                ? Center(
+                              child: Icon(
+                                Icons.add,
+                                color: Colors.blue.shade300,
+                                size: 20,
+                              ),
+                            )
+                                : null
+                                : _buildEventCell(cellEvents.first),
+                          ),
+                        );
+                      }).toList(),
+                    ],
+                  ),
+                );
+              }).toList(),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
-  void _saveProfile() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("Profile updated successfully!"),
-        backgroundColor: Colors.green,
+  Widget _buildEventCell(TimetableEvent event) {
+    return Container(
+      decoration: BoxDecoration(
+        color: HexColor(event.color).withOpacity(0.2),
+        border: Border.all(color: HexColor(event.color)),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            event.title,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: HexColor(event.color),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            '${event.startTime.format(context)} - ${event.endTime.format(context)}',
+            style: TextStyle(
+              fontSize: 8,
+              color: HexColor(event.color),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (event.description.isNotEmpty)
+            Text(
+              event.description,
+              style: TextStyle(
+                fontSize: 8,
+                color: HexColor(event.color),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+        ],
       ),
     );
   }
@@ -6898,6 +7383,321 @@ class _ProfilePageState extends State<ProfilePage> {
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
+    super.dispose();
+  }
+}
+class AddTimetableEventDialog extends StatefulWidget {
+  final TimetableEvent? existingEvent;
+  final DateTime selectedDate;
+  final TimeOfDay? presetTime;
+  final Function(TimetableEvent) onSave;
+  final Function()? onDelete;
+
+  const AddTimetableEventDialog({
+    super.key,
+    this.existingEvent,
+    required this.selectedDate,
+    this.presetTime,
+    required this.onSave,
+    this.onDelete,
+  });
+
+  @override
+  State<AddTimetableEventDialog> createState() => _AddTimetableEventDialogState();
+}
+class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+
+  late TimeOfDay _startTime;
+  late TimeOfDay _endTime;
+  String _selectedColor = '#4CAF50';
+
+  final List<String> _colors = [
+    '#4CAF50', // Green
+    '#2196F3', // Blue
+    '#FF9800', // Orange
+    '#F44336', // Red
+    '#9C27B0', // Purple
+    '#00BCD4', // Cyan
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+
+    if (widget.existingEvent != null) {
+      _titleController.text = widget.existingEvent!.title;
+      _descriptionController.text = widget.existingEvent!.description;
+      _startTime = widget.existingEvent!.startTime;
+      _endTime = widget.existingEvent!.endTime;
+      _selectedColor = widget.existingEvent!.color;
+    } else if (widget.presetTime != null) {
+      _startTime = widget.presetTime!;
+      _endTime = TimeOfDay(
+        hour: widget.presetTime!.hour + 1,
+        minute: widget.presetTime!.minute,
+      );
+    } else {
+      _startTime = const TimeOfDay(hour: 9, minute: 0);
+      _endTime = const TimeOfDay(hour: 10, minute: 0);
+    }
+  }
+
+  Future<void> _selectStartTime() async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _startTime,
+      initialEntryMode: TimePickerEntryMode.input,
+    );
+
+    if (picked != null && picked != _startTime) {
+      setState(() {
+        _startTime = picked;
+        if (_endTime.hour < _startTime.hour ||
+            (_endTime.hour == _startTime.hour && _endTime.minute <= _startTime.minute)) {
+          _endTime = TimeOfDay(
+            hour: _startTime.hour + 1,
+            minute: _startTime.minute,
+          );
+        }
+      });
+    }
+  }
+
+  Future<void> _selectEndTime() async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _endTime,
+      initialEntryMode: TimePickerEntryMode.input,
+    );
+
+    if (picked != null && picked != _endTime) {
+      setState(() {
+        _endTime = picked;
+      });
+    }
+  }
+
+  Future<void> _saveEvent() async {
+    if (_formKey.currentState!.validate()) {
+      try {
+        final auth = FirebaseAuth.instance;
+        final firestore = FirebaseFirestore.instance;
+
+        // Get user key from Firestore
+        final userDoc = await firestore
+            .collection('users')
+            .doc(auth.currentUser!.uid)
+            .get();
+
+        final userKey = userDoc['signkey'] ?? auth.currentUser!.uid;
+
+        final event = TimetableEvent(
+          id: widget.existingEvent?.id ?? '',
+          userId: auth.currentUser!.uid,
+          signkey: userKey,
+          title: _titleController.text.trim(),
+          description: _descriptionController.text.trim(),
+          date: widget.selectedDate,
+          startTime: _startTime,
+          endTime: _endTime,
+          color: _selectedColor,
+          day: DateFormat('EEE').format(widget.selectedDate),
+        );
+
+        await widget.onSave(event);
+        Navigator.of(context).pop(true);
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: 500,
+          maxHeight: 600,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.existingEvent == null ? 'Add Timetable Event' : 'Edit Event',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextFormField(
+                          controller: _titleController,
+                          decoration: const InputDecoration(
+                            labelText: 'Title *',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter a title';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _descriptionController,
+                          decoration: const InputDecoration(
+                            labelText: 'Description (Optional)',
+                            border: OutlineInputBorder(),
+                          ),
+                          maxLines: 3,
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Start Time *'),
+                                  const SizedBox(height: 8),
+                                  OutlinedButton(
+                                    onPressed: _selectStartTime,
+                                    child: Text(
+                                      _startTime.format(context),
+                                      style: const TextStyle(fontSize: 16),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('End Time *'),
+                                  const SizedBox(height: 8),
+                                  OutlinedButton(
+                                    onPressed: _selectEndTime,
+                                    child: Text(
+                                      _endTime.format(context),
+                                      style: const TextStyle(fontSize: 16),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Color'),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              height: 50,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: _colors.length,
+                                separatorBuilder: (context, index) => const SizedBox(width: 8),
+                                itemBuilder: (context, index) {
+                                  final color = _colors[index];
+                                  return GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedColor = color;
+                                      });
+                                    },
+                                    child: Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: HexColor(color),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: _selectedColor == color
+                                              ? Colors.black
+                                              : Colors.transparent,
+                                          width: 3,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Date: ${DateFormat('EEE, MMM d, yyyy').format(widget.selectedDate)}',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (widget.onDelete != null)
+                    TextButton(
+                      onPressed: () {
+                        widget.onDelete!();
+                        Navigator.of(context).pop(true);
+                      },
+                      child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                    ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _saveEvent,
+                    child: const Text('Save'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
     super.dispose();
   }
 }
@@ -8549,6 +9349,1862 @@ class MenteeHelpSupportPage extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
         ],
+      ),
+    );
+  }
+}
+
+const String GEMINI_API_KEY ='' ;
+enum MeetingFrequency {
+  daily('Daily', Icons.event_repeat, 'Every day'),
+  weekly('Weekly', Icons.calendar_today, 'Once a week'),
+  biWeekly('Bi-Weekly', Icons.calendar_view_week, 'Every two weeks'),
+  monthly('Monthly', Icons.date_range, 'Once a month'),
+  quarterly('Quarterly', Icons.calendar_view_month, 'Every 3 months'),
+  custom('Custom', Icons.settings, 'Custom schedule');
+
+  final String title;
+  final IconData icon;
+  final String description;
+
+  const MeetingFrequency(this.title, this.icon, this.description);
+}
+
+class TimePreferences {
+  final TimeOfDay? preferredStartTime;
+  final TimeOfDay? preferredEndTime;
+  final Duration? meetingDuration;
+
+  const TimePreferences({
+    this.preferredStartTime,
+    this.preferredEndTime,
+    this.meetingDuration,
+  });
+
+  bool get hasTimeRange => preferredStartTime != null && preferredEndTime != null;
+  bool get hasDuration => meetingDuration != null;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'preferredStartTime': preferredStartTime?.format24Hour(),
+      'preferredEndTime': preferredEndTime?.format24Hour(),
+      'meetingDurationMinutes': meetingDuration?.inMinutes,
+    };
+  }
+}
+
+class CombinedScheduleEvent {
+  final DateTime date;
+  final String startTime;
+  final String endTime;
+  final String title;
+  final String source;
+  final String? signkey;
+
+  CombinedScheduleEvent({
+    required this.date,
+    required this.startTime,
+    required this.endTime,
+    required this.title,
+    required this.source,
+    this.signkey,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'date': DateFormat('yyyy-MM-dd').format(date),
+      'startTime': startTime,
+      'endTime': endTime,
+      'title': title,
+      'source': source,
+      'signkey': signkey,
+    };
+  }
+}
+
+class GeminiMeetingSuggestionEngine {
+  static Future<List<Map<String, dynamic>>> findOptimalTimesWithAI({
+    required List<CombinedScheduleEvent> allEvents,
+    required MeetingFrequency frequency,
+    required String userSignkey,
+    required String meetingTitle,
+    required TimePreferences timePreferences,
+    int numberOfSuggestions = 3,
+  }) async {
+    try {
+      final now = DateTime.now();
+      final next30Days = List.generate(
+        30,
+            (i) => DateTime(now.year, now.month, now.day + i + 1),
+      );
+
+      // Prepare data for Gemini
+      final eventsJson = allEvents.map((e) => e.toJson()).toList();
+      final preferencesJson = timePreferences.toJson();
+
+      final durationMinutes = timePreferences.meetingDuration?.inMinutes ?? 60;
+      final hasTimeRange = timePreferences.hasTimeRange;
+
+      final prompt = '''
+You are an AI meeting scheduler. Analyze the provided schedule data and suggest the ${numberOfSuggestions} best meeting times.
+
+Current Date: ${DateFormat('yyyy-MM-dd').format(now)}
+Meeting Title: $meetingTitle
+Meeting Frequency: ${frequency.title} (${frequency.description})
+User Signkey: $userSignkey
+Meeting Duration: $durationMinutes minutes
+
+User Preferences:
+- Preferred Time Range: ${hasTimeRange ? '${timePreferences.preferredStartTime!.format24Hour()} to ${timePreferences.preferredEndTime!.format24Hour()}' : 'Any time'}
+- Meeting Duration: $durationMinutes minutes
+
+Schedule Data (next 30 days):
+${jsonEncode(eventsJson)}
+
+Available dates to consider:
+${next30Days.map((d) => DateFormat('yyyy-MM-dd (EEEE)').format(d)).join(', ')}
+
+ANALYSIS REQUIREMENTS:
+1. CRITICAL: Consider PARTIALLY BOOKED days - find available time slots between existing events
+2. STRICT PRIORITY: Find slots that can accommodate the FULL $durationMinutes minutes meeting duration
+3. When checking partially booked days:
+   - Look for gaps between existing events that are at least $durationMinutes minutes long
+   - Consider time before first event of the day (if it starts late enough)
+   - Consider time after last event of the day (if it ends early enough)
+   - Consider gaps between consecutive events
+4. Ensure the time slot has no conflicts for the ENTIRE duration
+5. Try to match user preferences exactly first
+6. If exact preferences not available, fall back to intelligent scheduling
+7. Avoid dates with existing events for the same signkey (especially timetable_events)
+8. Consider the meeting frequency pattern:
+   - Daily: Any available day
+   - Weekly: Same weekday each week
+   - Bi-Weekly: Every 2 weeks on the same weekday
+   - Monthly: Same day of month
+   - Quarterly: Every 3 months
+9. Avoid dates where mentees (same signkey) have timetable events
+10. Calculate a confidence score (0-100) based on:
+    - Slot accommodates full $durationMinutes minutes: +50 points
+    - Matches exact time preference: +30 points
+    - Within preferred time range: +25 points
+    - No conflicts: +40 points
+    - Found gap in partially booked day: +35 points
+    - Weekday (Monday-Friday): +20 points
+    - Weekend: -30 points
+    - Each existing event on that date: -15 points (but still consider gaps)
+    - Mentee conflicts: -40 points each
+    - Proximity to today (sooner is better): +10 for within 7 days
+    - Outside preferred time range: -15 points
+    - Slot too short for $durationMinutes minutes: -100 points
+
+TIME SLOT ANALYSIS RULES:
+- For each day, sort events by start time
+- Check if there's enough time BEFORE the first event (if first event starts after 8:00 AM)
+- Check gaps BETWEEN consecutive events (end time of event 1 to start time of event 2)
+- Check if there's enough time AFTER the last event (if last event ends before 8:00 PM)
+- Minimum gap needed: $durationMinutes minutes
+
+OUTPUT FORMAT (JSON only, no markdown):
+{
+  "suggestions": [
+    {
+      "date": "2025-12-15",
+      "time": "10:00",
+      "score": 95,
+      "conflicts": 0,
+      "reasoning": "Brief explanation including gap analysis",
+      "matchesPreferences": true/false,
+      "preferenceMatches": ["time", "duration"],
+      "foundInGap": true/false  // Whether this slot was found in a gap between events
+    }
+  ]
+}
+
+Return exactly ${numberOfSuggestions} suggestions sorted by score (highest first).
+IMPORTANT: 
+1. Keep reasoning text SHORT (max 50 words)
+2. Clearly mention if found in a gap between events
+3. Ensure suggestions can fit $durationMinutes minutes meeting
+4. Check ALL days, including partially booked ones
+''';
+
+      final response = await http.post(
+        Uri.parse(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$GEMINI_API_KEY',
+        ),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'contents': [
+            {
+              'parts': [
+                {'text': prompt}
+              ]
+            }
+          ],
+          'generationConfig': {
+            'temperature': 0.7,
+            'topK': 40,
+            'topP': 0.95,
+            'maxOutputTokens': 1024,
+          }
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final text = data['candidates'][0]['content']['parts'][0]['text'];
+
+        // Extract JSON from response
+        String cleanedText = text.trim();
+        cleanedText = cleanedText.replaceAll('```json', '');
+        cleanedText = cleanedText.replaceAll('```', '');
+        cleanedText = cleanedText.trim();
+
+        final suggestions = jsonDecode(cleanedText);
+
+        // Parse suggestions with null safety
+        final List<Map<String, dynamic>> results = [];
+        for (var suggestion in suggestions['suggestions']) {
+          final date = DateTime.parse(suggestion['date']);
+          results.add({
+            'date': date,
+            'time': suggestion['time'],
+            'score': suggestion['score'] ?? 0,
+            'conflicts': suggestion['conflicts'] ?? 0,
+            'reasoning': suggestion['reasoning'] ?? '',
+            'matchesPreferences': suggestion['matchesPreferences'] ?? false,
+            'preferenceMatches': List<String>.from(suggestion['preferenceMatches'] ?? []),
+            'foundInGap': suggestion['foundInGap'] ?? false,
+          });
+        }
+
+        return results;
+      } else {
+        print('Gemini API error: ${response.statusCode} - ${response.body}');
+        return _getFallbackSuggestions(allEvents, frequency, timePreferences, next30Days);
+      }
+    } catch (e) {
+      print('Error calling Gemini API: $e');
+      return _getFallbackSuggestions(
+        allEvents,
+        frequency,
+        timePreferences,
+        List.generate(30, (i) => DateTime.now().add(Duration(days: i + 1))),
+      );
+    }
+  }
+
+  static List<Map<String, dynamic>> _getFallbackSuggestions(
+      List<CombinedScheduleEvent> allEvents,
+      MeetingFrequency frequency,
+      TimePreferences timePreferences,
+      List<DateTime> candidateDates,
+      ) {
+    final results = <Map<String, dynamic>>[];
+
+    // Get duration in minutes (default 60)
+    final durationMinutes = timePreferences.meetingDuration?.inMinutes ?? 60;
+
+    // Try to find times within preferred range
+    for (var date in candidateDates) {
+      if (results.length >= 3) break;
+
+      // Get all events for this date
+      final dateEvents = allEvents.where((event) =>
+      event.date.year == date.year &&
+          event.date.month == date.month &&
+          event.date.day == date.day
+      ).toList();
+
+      // Check for available gaps in partially booked day
+      TimeOfDay? suggestedTime;
+      bool matchesPreferences = false;
+      bool foundInGap = false;
+      List<String> matchedPrefs = [];
+      String reasoning = '';
+
+      if (dateEvents.isEmpty) {
+        // Day is completely free
+        if (timePreferences.hasTimeRange) {
+          suggestedTime = timePreferences.preferredStartTime;
+          matchesPreferences = true;
+          matchedPrefs.add('time');
+          reasoning = 'Completely free day, matches your preferences';
+        } else {
+          suggestedTime = const TimeOfDay(hour: 10, minute: 0);
+          reasoning = 'Completely free day, morning slot available';
+        }
+      } else {
+        // Day has events, check for gaps
+        // Sort events by start time
+        dateEvents.sort((a, b) => a.startTime.compareTo(b.startTime));
+
+        // Check morning slot (before first event)
+        final firstEventStart = _parseTimeString(dateEvents.first.startTime);
+        if (firstEventStart != null) {
+          final morningSlotStart = const TimeOfDay(hour: 8, minute: 0);
+          final morningSlotEnd = firstEventStart;
+
+          if (_hasSufficientGap(morningSlotStart, morningSlotEnd, durationMinutes)) {
+            suggestedTime = morningSlotStart;
+            foundInGap = true;
+            reasoning = 'Found morning slot before first event';
+          }
+        }
+
+        // Check gaps between events
+        if (suggestedTime == null && dateEvents.length > 1) {
+          for (int i = 0; i < dateEvents.length - 1; i++) {
+            final currentEventEnd = _parseTimeString(dateEvents[i].endTime);
+            final nextEventStart = _parseTimeString(dateEvents[i + 1].startTime);
+
+            if (currentEventEnd != null && nextEventStart != null) {
+              if (_hasSufficientGap(currentEventEnd, nextEventStart, durationMinutes)) {
+                suggestedTime = currentEventEnd;
+                foundInGap = true;
+                reasoning = 'Found gap between events';
+                break;
+              }
+            }
+          }
+        }
+
+        // Check evening slot (after last event)
+        if (suggestedTime == null) {
+          final lastEventEnd = _parseTimeString(dateEvents.last.endTime);
+          if (lastEventEnd != null) {
+            final eveningSlotStart = lastEventEnd;
+            final eveningSlotEnd = const TimeOfDay(hour: 20, minute: 0);
+
+            if (_hasSufficientGap(eveningSlotStart, eveningSlotEnd, durationMinutes)) {
+              suggestedTime = eveningSlotStart;
+              foundInGap = true;
+              reasoning = 'Found evening slot after last event';
+            }
+          }
+        }
+
+        // If no gap found but matches time preferences, use preferred time anyway
+        if (suggestedTime == null && timePreferences.hasTimeRange) {
+          suggestedTime = timePreferences.preferredStartTime;
+          matchesPreferences = true;
+          matchedPrefs.add('time');
+          reasoning = 'Using preferred time despite conflicts';
+        }
+      }
+
+      if (suggestedTime != null) {
+        final score = _calculateFallbackScore(
+          matchesPreferences,
+          foundInGap,
+          dateEvents.length,
+          date.weekday <= 5,
+        );
+
+        results.add({
+          'date': date,
+          'time': '${suggestedTime.hour.toString().padLeft(2, '0')}:${suggestedTime.minute.toString().padLeft(2, '0')}',
+          'score': score,
+          'conflicts': dateEvents.length,
+          'reasoning': '$reasoning for $durationMinutes minutes',
+          'matchesPreferences': matchesPreferences,
+          'preferenceMatches': matchedPrefs,
+          'foundInGap': foundInGap,
+        });
+      }
+    }
+
+    // If no results with preferences, try without preferences
+    if (results.isEmpty) {
+      for (var date in candidateDates) {
+        if (results.length >= 3) break;
+
+        final dateEvents = allEvents.where((event) =>
+        event.date.year == date.year &&
+            event.date.month == date.month &&
+            event.date.day == date.day
+        ).toList();
+
+        if (dateEvents.isEmpty && date.weekday <= 5) {
+          results.add({
+            'date': date,
+            'time': '10:00',
+            'score': 60,
+            'conflicts': 0,
+            'reasoning': 'No conflicts for $durationMinutes minutes',
+            'matchesPreferences': false,
+            'preferenceMatches': [],
+            'foundInGap': false,
+          });
+        }
+      }
+    }
+
+    return results;
+  }
+
+  static TimeOfDay? _parseTimeString(String timeString) {
+    try {
+      final parts = timeString.split(':');
+      if (parts.length >= 2) {
+        final hour = int.tryParse(parts[0]);
+        final minute = int.tryParse(parts[1]);
+        if (hour != null && minute != null) {
+          return TimeOfDay(hour: hour, minute: minute);
+        }
+      }
+    } catch (e) {
+      print('Error parsing time string: $timeString');
+    }
+    return null;
+  }
+
+  static bool _hasSufficientGap(TimeOfDay start, TimeOfDay end, int durationMinutes) {
+    final startInMinutes = start.hour * 60 + start.minute;
+    final endInMinutes = end.hour * 60 + end.minute;
+    return (endInMinutes - startInMinutes) >= durationMinutes;
+  }
+
+  static int _calculateFallbackScore(bool matchesPrefs, bool foundInGap, int conflicts, bool isWeekday) {
+    int score = 70; // Base score
+
+    if (matchesPrefs) score += 20;
+    if (foundInGap) score += 25;
+    if (isWeekday) score += 15;
+
+    // Penalize for conflicts
+    score -= (conflicts * 5);
+
+    return score.clamp(0, 100);
+  }
+}
+
+class SmartMeetingSchedulerPage extends StatefulWidget {
+  const SmartMeetingSchedulerPage({super.key});
+
+  @override
+  State<SmartMeetingSchedulerPage> createState() =>
+      _SmartMeetingSchedulerPageState();
+}
+
+class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _venueController = TextEditingController();
+  final TextEditingController _durationController = TextEditingController(text: '60');
+  final FocusNode _titleFocusNode = FocusNode();
+  final FocusNode _venueFocusNode = FocusNode();
+  final FocusNode _durationFocusNode = FocusNode();
+
+  MeetingFrequency _selectedFrequency = MeetingFrequency.weekly;
+  List<Map<String, dynamic>> _availableDates = [];
+  bool _isFindingDates = false;
+  int _retryCount = 0;
+  final int _maxRetries = 5;
+  String? _userSignkey;
+  List<CombinedScheduleEvent> _allEvents = [];
+
+  // Time preferences
+  TimeOfDay? _preferredStartTime;
+  TimeOfDay? _preferredEndTime;
+  bool _showTimePreferences = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _getUserSignkey();
+    _durationController.text = '60';
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _venueController.dispose();
+    _durationController.dispose();
+    _titleFocusNode.dispose();
+    _venueFocusNode.dispose();
+    _durationFocusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _getUserSignkey() async {
+    try {
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) return;
+
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        setState(() {
+          _userSignkey = userDoc.data()?['signkey'];
+        });
+      }
+    } catch (e) {
+      print('Error getting user signkey: $e');
+    }
+  }
+
+  Future<List<CombinedScheduleEvent>> _getAllScheduleEvents() async {
+    final List<CombinedScheduleEvent> allEvents = [];
+
+    try {
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) return allEvents;
+
+      final now = DateTime.now();
+      final nextMonth = now.add(const Duration(days: 30));
+
+      // 1. Get user's timetable events
+      final timetableSnapshot = await _firestore
+          .collection('timetable_events')
+          .where('userId', isEqualTo: userId)
+          .get();
+
+      for (final doc in timetableSnapshot.docs) {
+        final data = doc.data();
+        try {
+          final date = DateTime.parse(data['date']);
+          if (date.isAfter(now) && date.isBefore(nextMonth)) {
+            allEvents.add(CombinedScheduleEvent(
+              date: date,
+              startTime: data['startTime'] ?? '09:00',
+              endTime: data['endTime'] ?? '10:00',
+              title: data['title'] ?? 'Event',
+              source: 'timetable',
+              signkey: data['signkey'],
+            ));
+          }
+        } catch (e) {
+          print('Error parsing timetable event: $e');
+        }
+      }
+
+      // 2. Get Events with matching signkey
+      if (_userSignkey != null) {
+        final eventsSnapshot = await _firestore
+            .collection('Events')
+            .where('signkey', isEqualTo: _userSignkey)
+            .get();
+
+        for (final doc in eventsSnapshot.docs) {
+          final data = doc.data();
+          try {
+            final timestamp = data['timestamp'] as Timestamp?;
+            if (timestamp != null) {
+              final dateTime = timestamp.toDate();
+              if (dateTime.isAfter(now) && dateTime.isBefore(nextMonth)) {
+                allEvents.add(CombinedScheduleEvent(
+                  date: DateTime(dateTime.year, dateTime.month, dateTime.day),
+                  startTime: DateFormat('HH:mm').format(dateTime),
+                  endTime: DateFormat('HH:mm').format(
+                    dateTime.add(const Duration(hours: 1)),
+                  ),
+                  title: data['title'] ?? 'Event',
+                  source: 'events',
+                  signkey: data['signkey'],
+                ));
+              }
+            }
+          } catch (e) {
+            print('Error parsing Events entry: $e');
+          }
+        }
+      }
+
+      // 3. Get personal calendar events
+      final calendarSnapshot = await _firestore
+          .collection('events')
+          .where('uid', isEqualTo: userId)
+          .get();
+
+      for (final doc in calendarSnapshot.docs) {
+        final data = doc.data();
+        try {
+          final dateTime = (data['dateTime'] as Timestamp?)?.toDate();
+          if (dateTime != null &&
+              dateTime.isAfter(now) &&
+              dateTime.isBefore(nextMonth)) {
+            allEvents.add(CombinedScheduleEvent(
+              date: DateTime(dateTime.year, dateTime.month, dateTime.day),
+              startTime: '09:00',
+              endTime: '17:00',
+              title: data['title'] ?? 'Event',
+              source: 'calendar',
+              signkey: _userSignkey,
+            ));
+          }
+        } catch (e) {
+          print('Error parsing calendar event: $e');
+        }
+      }
+
+      // 4. Get mentee timetable events (same signkey, different userId)
+      if (_userSignkey != null) {
+        final menteeSnapshot = await _firestore
+            .collection('timetable_events')
+            .where('signkey', isEqualTo: _userSignkey)
+            .get();
+
+        for (final doc in menteeSnapshot.docs) {
+          final data = doc.data();
+          if (data['userId'] != userId) {
+            try {
+              final date = DateTime.parse(data['date']);
+              if (date.isAfter(now) && date.isBefore(nextMonth)) {
+                allEvents.add(CombinedScheduleEvent(
+                  date: date,
+                  startTime: data['startTime'] ?? '09:00',
+                  endTime: data['endTime'] ?? '10:00',
+                  title: '${data['title']} (Mentee)',
+                  source: 'timetable',
+                  signkey: data['signkey'],
+                ));
+              }
+            } catch (e) {
+              print('Error parsing mentee event: $e');
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error fetching schedule events: $e');
+    }
+
+    return allEvents;
+  }
+
+  Future<void> _findAvailableDates() async {
+    // Dismiss keyboard before searching
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    if (_userSignkey == null) {
+      _showSnackBar('Unable to find your schedule information', isError: true);
+      return;
+    }
+
+    if (GEMINI_API_KEY == 'YOUR_GEMINI_API_KEY_HERE') {
+      _showSnackBar('Please add your Gemini API key to use AI suggestions',
+          isError: true);
+      return;
+    }
+
+    setState(() {
+      _isFindingDates = true;
+      _availableDates = [];
+    });
+
+    try {
+      _allEvents = await _getAllScheduleEvents();
+
+      // Parse duration from controller
+      final durationText = _durationController.text.trim();
+      final durationMinutes = int.tryParse(durationText) ?? 60;
+
+      if (durationMinutes <= 0) {
+        _showSnackBar('Please enter a valid duration (positive number)', isError: true);
+        setState(() { _isFindingDates = false; });
+        return;
+      }
+
+      // Create time preferences
+      final timePreferences = TimePreferences(
+        preferredStartTime: _preferredStartTime,
+        preferredEndTime: _preferredEndTime,
+        meetingDuration: Duration(minutes: durationMinutes),
+      );
+
+      final suggestions =
+      await GeminiMeetingSuggestionEngine.findOptimalTimesWithAI(
+        allEvents: _allEvents,
+        frequency: _selectedFrequency,
+        userSignkey: _userSignkey!,
+        meetingTitle: _titleController.text.isEmpty
+            ? 'Meeting'
+            : _titleController.text,
+        timePreferences: timePreferences,
+        numberOfSuggestions: 3,
+      );
+
+      setState(() {
+        _availableDates = suggestions;
+        _isFindingDates = false;
+        _retryCount = 0;
+      });
+
+      if (suggestions.isEmpty) {
+        _showSnackBar('No optimal dates found for $durationMinutes minutes. Try changing duration or time preferences.');
+      } else {
+        final matchesCount = suggestions.where((s) => (s['matchesPreferences'] as bool?) ?? false).length;
+        final gapCount = suggestions.where((s) => (s['foundInGap'] as bool?) ?? false).length;
+        String extraInfo = '';
+        if (matchesCount > 0) extraInfo += '($matchesCount match preferences) ';
+        if (gapCount > 0) extraInfo += '($gapCount found in gaps)';
+
+        _showSnackBar('Found ${suggestions.length} optimal meeting times for $durationMinutes minutes! $extraInfo');
+      }
+    } catch (e) {
+      setState(() {
+        _isFindingDates = false;
+      });
+      _showSnackBar('Error finding available dates: ${e.toString()}',
+          isError: true);
+    }
+  }
+
+  Future<void> _retryFindDates() async {
+    if (_retryCount >= _maxRetries) {
+      _showSnackBar('Maximum retries reached. Try changing the frequency or preferences.');
+      return;
+    }
+
+    setState(() {
+      _isFindingDates = true;
+      _retryCount++;
+    });
+
+    await Future.delayed(const Duration(seconds: 1));
+    await _findAvailableDates();
+  }
+
+  void _onFrequencyChanged(MeetingFrequency frequency) {
+    setState(() {
+      _selectedFrequency = frequency;
+    });
+    if (_availableDates.isNotEmpty) {
+      _findAvailableDates();
+    }
+  }
+
+  Future<void> _scheduleMeeting(Map<String, dynamic> dateInfo) async {
+    if (_titleController.text.isEmpty) {
+      _showSnackBar('Please enter a meeting title', isError: true);
+      return;
+    }
+
+    try {
+      final userId = _auth.currentUser!.uid;
+      final date = dateInfo['date'] as DateTime;
+      final timeSlot = dateInfo['time'] as String;
+      final timeParts = timeSlot.split(':');
+      final startTime = TimeOfDay(
+        hour: int.parse(timeParts[0]),
+        minute: int.parse(timeParts[1]),
+      );
+
+      final durationText = _durationController.text.trim();
+      final durationMinutes = int.tryParse(durationText) ?? 60;
+
+      final totalMinutes = startTime.hour * 60 + startTime.minute + durationMinutes;
+      final endTime = TimeOfDay(
+        hour: totalMinutes ~/ 60,
+        minute: totalMinutes % 60,
+      );
+
+      final meetingDateTime = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        startTime.hour,
+        startTime.minute,
+      );
+
+      // Create event in Events collection
+      final eventId =
+          '${DateTime.now().millisecondsSinceEpoch}_${date.millisecondsSinceEpoch}';
+      await _firestore.collection('Events').doc(eventId).set({
+        'id': eventId,
+        'uid': userId,
+        'signkey': _userSignkey,
+        'title': _titleController.text.trim(),
+        'description':
+        'Meeting: ${_venueController.text.isNotEmpty ? _venueController.text : "No venue specified"}\nDuration: ${durationMinutes} minutes',
+        'venue': _venueController.text.trim(),
+        'type': 'meeting',
+        'duration': durationMinutes,
+        'timestamp': Timestamp.fromDate(meetingDateTime),
+        'isoDate': DateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS").format(meetingDateTime),
+        'dateTime': DateFormat('d/M/yyyy • HH:mm').format(meetingDateTime),
+        'reminderType': 'immediate',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // Add to timetable
+      final timetableId = 'timetable_$eventId';
+      await _firestore.collection('timetable_events').doc(timetableId).set({
+        'id': timetableId,
+        'userId': userId,
+        'signkey': _userSignkey,
+        'title': _titleController.text.trim(),
+        'description':
+        'Meeting: ${_venueController.text.isNotEmpty ? _venueController.text : "No venue specified"}\nDuration: ${durationMinutes} minutes',
+        'date': DateFormat('yyyy-MM-dd').format(date),
+        'day': DateFormat('EEE').format(date),
+        'startTime':
+        '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
+        'endTime':
+        '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
+        'duration': durationMinutes,
+        'color': '#2196F3',
+        'isMeeting': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      _showSnackBar(
+        'Meeting scheduled for ${DateFormat('EEE, MMM d').format(date)} at ${startTime.format(context)} (${durationMinutes} min)!',
+      );
+
+      _titleController.clear();
+      _venueController.clear();
+      _findAvailableDates();
+    } catch (e) {
+      _showSnackBar('Error scheduling meeting: ${e.toString()}', isError: true);
+    }
+  }
+
+  void _ignoreDate(int index) {
+    setState(() {
+      _availableDates.removeAt(index);
+    });
+    if (_availableDates.isEmpty) {
+      _showSnackBar('Date ignored. Finding new dates...');
+      _findAvailableDates();
+    }
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _showFrequencySelectionDialog() {
+    FocusManager.instance.primaryFocus?.unfocus(); // Dismiss keyboard before showing dialog
+    showDialog(
+      context: context,
+      builder: (context) => _FrequencySelectionDialog(
+        selectedFrequency: _selectedFrequency,
+        onFrequencySelected: _onFrequencyChanged,
+      ),
+    );
+  }
+
+  void _showTimeRangeSelectionDialog() {
+    FocusManager.instance.primaryFocus?.unfocus(); // Dismiss keyboard before showing dialog
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Preferred Time Range'),
+        content: SizedBox(
+          height: 200,
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.access_time),
+                title: Text(_preferredStartTime != null
+                    ? 'From: ${_preferredStartTime!.format(context)}'
+                    : 'Select start time'
+                ),
+                onTap: () async {
+                  final picked = await showTimePicker(
+                    context: context,
+                    initialTime: _preferredStartTime ?? const TimeOfDay(hour: 9, minute: 0),
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      _preferredStartTime = picked;
+                    });
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.timer),
+                title: Text(_preferredEndTime != null
+                    ? 'To: ${_preferredEndTime!.format(context)}'
+                    : 'Select end time'
+                ),
+                onTap: () async {
+                  final picked = await showTimePicker(
+                    context: context,
+                    initialTime: _preferredEndTime ?? const TimeOfDay(hour: 17, minute: 0),
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      _preferredEndTime = picked;
+                    });
+                  }
+                },
+              ),
+              if (_preferredStartTime != null && _preferredEndTime != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Text(
+                    'Selected: ${_preferredStartTime!.format(context)} - ${_preferredEndTime!.format(context)}',
+                    style: TextStyle(color: Colors.green.shade700),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getConfidenceLabel(int score) {
+    if (score >= 80) return 'High';
+    if (score >= 50) return 'Medium';
+    return 'Low';
+  }
+
+  Color _getConfidenceColor(int score) {
+    if (score >= 80) return Colors.green;
+    if (score >= 50) return Colors.orange;
+    return Colors.red;
+  }
+
+  String? _getTimeRangeText() {
+    if (_preferredStartTime != null && _preferredEndTime != null) {
+      return '${_preferredStartTime!.format(context)} - ${_preferredEndTime!.format(context)}';
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final timeRangeText = _getTimeRangeText();
+    final durationText = _durationController.text.trim();
+    final durationMinutes = int.tryParse(durationText) ?? 60;
+
+    return GestureDetector(
+      onTap: () {
+        // Only dismiss keyboard if user taps outside of text fields
+        if (!_titleFocusNode.hasFocus &&
+            !_venueFocusNode.hasFocus &&
+            !_durationFocusNode.hasFocus) {
+          FocusManager.instance.primaryFocus?.unfocus();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text(
+            'AI Meeting Scheduler',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          backgroundColor: Colors.blue.shade700,
+          elevation: 0,
+          iconTheme: const IconThemeData(color: Colors.white),
+          actions: [
+            if (_availableDates.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: _findAvailableDates,
+                tooltip: 'Refresh dates',
+              ),
+          ],
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              Icons.psychology,
+                              color: Colors.blue.shade700,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'AI-Powered Meeting Scheduler',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Powered by Google Gemini',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _userSignkey != null
+                            ? 'Analyzing schedule for signkey: $_userSignkey'
+                            : 'Loading your schedule information...',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Meeting Details',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _titleController,
+                        focusNode: _titleFocusNode,
+                        decoration: InputDecoration(
+                          hintText: 'Meeting title...',
+                          prefixIcon: const Icon(Icons.title),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        onChanged: (value) => setState(() {}),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _venueController,
+                        focusNode: _venueFocusNode,
+                        decoration: InputDecoration(
+                          hintText: 'Meeting venue (optional)...',
+                          prefixIcon: const Icon(Icons.location_on),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _durationController,
+                              focusNode: _durationFocusNode,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                hintText: 'Duration (minutes)...',
+                                prefixIcon: const Icon(Icons.timer),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                              ),
+                              onChanged: (value) => setState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('min'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Time Preferences',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              _showTimePreferences ? Icons.expand_less : Icons.expand_more,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _showTimePreferences = !_showTimePreferences;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      if (_showTimePreferences) ...[
+                        const SizedBox(height: 12),
+                        InkWell(
+                          onTap: _showTimeRangeSelectionDialog,
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    Icons.access_time,
+                                    color: Colors.blue.shade700,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Preferred Time Range',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Text(
+                                        timeRangeText ?? 'Tap to set preferred time',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(
+                                  timeRangeText != null
+                                      ? Icons.check_circle
+                                      : Icons.arrow_drop_down,
+                                  color: timeRangeText != null
+                                      ? Colors.green
+                                      : Colors.grey,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (timeRangeText != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Text(
+                              'AI will prioritize $timeRangeText',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.blue.shade700,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Meeting Frequency',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          InkWell(
+                            onTap: _showFrequencySelectionDialog,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _selectedFrequency.icon,
+                                    size: 16,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _selectedFrequency.title,
+                                    style: TextStyle(
+                                      color: Colors.blue.shade700,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _selectedFrequency.description,
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'AI-Suggested Meeting Times',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          if (!_isFindingDates)
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.search, size: 18),
+                              label: const Text('Find Times'),
+                              onPressed: _findAvailableDates,
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 8),
+                                backgroundColor: Colors.blue.shade700,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                        ],
+                      ),
+                      if (_isFindingDates)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 40),
+                          child: Column(
+                            children: [
+                              const CircularProgressIndicator(),
+                              const SizedBox(height: 16),
+                              Column(
+                                children: [
+                                  Text(
+                                    'AI is analyzing your schedule...',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Finding $durationMinutes minute slots (including gaps between events)...',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
+                                  if (timeRangeText != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Text(
+                                        'Prioritizing $timeRangeText',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.blue.shade600,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (!_isFindingDates && _availableDates.isNotEmpty)
+                        Column(
+                          children: [
+                            const SizedBox(height: 16),
+                            Text(
+                              'Found optimal times for $durationMinutes minutes:',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                            const SizedBox(height: 16),
+                            ..._availableDates.asMap().entries.map((entry) {
+                              final index = entry.key;
+                              final dateInfo = entry.value;
+                              final date = dateInfo['date'] as DateTime;
+                              final time = dateInfo['time'] as String;
+                              final score = dateInfo['score'] as int;
+                              final conflicts = dateInfo['conflicts'] as int;
+                              final reasoning = dateInfo['reasoning'] as String;
+                              final matchesPreferences = (dateInfo['matchesPreferences'] as bool?) ?? false;
+                              final preferenceMatches = List<String>.from(dateInfo['preferenceMatches'] ?? []);
+                              final foundInGap = (dateInfo['foundInGap'] as bool?) ?? false;
+                              final isRecommended = index == 0 && matchesPreferences;
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                child: _buildAIDateCard(
+                                  date,
+                                  time,
+                                  score,
+                                  conflicts,
+                                  reasoning,
+                                  matchesPreferences,
+                                  preferenceMatches,
+                                  foundInGap,
+                                  isRecommended,
+                                  index,
+                                  durationMinutes,
+                                ),
+                              );
+                            }).toList(),
+                            if (_retryCount < _maxRetries)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: OutlinedButton.icon(
+                                  icon: const Icon(Icons.refresh),
+                                  label: Text(
+                                    'Find Different Times (${_maxRetries - _retryCount} left)',
+                                  ),
+                                  onPressed: _retryFindDates,
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.orange.shade700,
+                                    side: BorderSide(
+                                        color: Colors.orange.shade300),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      if (!_isFindingDates &&
+                          _availableDates.isEmpty &&
+                          _retryCount > 0)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 40),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.schedule_send,
+                                size: 64,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'No optimal times found',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'No $durationMinutes minute slots available. Try changing duration or time preferences',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 40),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAIDateCard(
+      DateTime date,
+      String time,
+      int score,
+      int conflicts,
+      String reasoning,
+      bool matchesPreferences,
+      List<String> preferenceMatches,
+      bool foundInGap,
+      bool isRecommended,
+      int index,
+      int durationMinutes,
+      ) {
+    final timeParts = time.split(':');
+    final startTime = TimeOfDay(
+        hour: int.parse(timeParts[0]), minute: int.parse(timeParts[1]));
+
+    final totalMinutes = startTime.hour * 60 + startTime.minute + durationMinutes;
+    final endTime = TimeOfDay(
+      hour: totalMinutes ~/ 60,
+      minute: totalMinutes % 60,
+    );
+
+    return Card(
+      elevation: isRecommended ? 4 : (matchesPreferences || foundInGap) ? 3 : 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isRecommended
+              ? Colors.green.shade300
+              : matchesPreferences
+              ? Colors.blue.shade300
+              : foundInGap
+              ? Colors.purple.shade300
+              : Colors.grey.shade200,
+          width: isRecommended ? 2 : (matchesPreferences || foundInGap) ? 1.5 : 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: matchesPreferences
+                        ? Colors.blue.shade50
+                        : foundInGap
+                        ? Colors.purple.shade50
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    matchesPreferences ? Icons.thumb_up
+                        : foundInGap ? Icons.schedule
+                        : Icons.calendar_today,
+                    color: matchesPreferences
+                        ? Colors.blue.shade700
+                        : foundInGap
+                        ? Colors.purple.shade700
+                        : Colors.grey.shade700,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        DateFormat('EEE, MMM d').format(date),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: matchesPreferences
+                              ? Colors.blue.shade800
+                              : foundInGap
+                              ? Colors.purple.shade800
+                              : Colors.grey.shade800,
+                        ),
+                      ),
+                      Text(
+                        '${startTime.format(context)} - ${endTime.format(context)} ($durationMinutes min)',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (matchesPreferences)
+                  Container(
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'PREFERRED',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade800,
+                      ),
+                    ),
+                  )
+                else if (foundInGap)
+                  Container(
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'GAP FOUND',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.purple.shade800,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Container(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _getConfidenceColor(score).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${_getConfidenceLabel(score)} Confidence',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: _getConfidenceColor(score),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (conflicts > 0)
+                  Container(
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.event,
+                          size: 12,
+                          color: Colors.orange.shade700,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$conflicts event${conflicts == 1 ? '' : 's'}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.orange.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const Spacer(),
+                Text(
+                  '$score%',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade700,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            if (reasoning.isNotEmpty && reasoning.length < 100) ...[
+              const SizedBox(height: 8),
+              Text(
+                reasoning,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: matchesPreferences
+                      ? Colors.blue.shade800
+                      : foundInGap
+                      ? Colors.purple.shade800
+                      : Colors.grey.shade700,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            if (_titleController.text.isNotEmpty)
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.close, size: 18),
+                      label: const Text('Ignore'),
+                      onPressed: () => _ignoreDate(index),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey.shade700,
+                        side: BorderSide(color: Colors.grey.shade300),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.schedule, size: 18),
+                      label: const Text('Schedule'),
+                      onPressed: () => _scheduleMeeting(_availableDates[index]),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: matchesPreferences
+                            ? Colors.blue.shade600
+                            : foundInGap
+                            ? Colors.purple.shade600
+                            : Colors.green.shade600,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info, color: Colors.orange.shade700, size: 16),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Enter meeting title to schedule',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Helper extension for TimeOfDay
+extension TimeOfDayExtension on TimeOfDay {
+  String format24Hour() {
+    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _FrequencySelectionDialog extends StatelessWidget {
+  final MeetingFrequency selectedFrequency;
+  final Function(MeetingFrequency) onFrequencySelected;
+
+  const _FrequencySelectionDialog({
+    required this.selectedFrequency,
+    required this.onFrequencySelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: SingleChildScrollView(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 400),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.repeat,
+                      color: Colors.blue.shade700,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Select Frequency',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'How often should meetings occur?',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: MeetingFrequency.values.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final frequency = MeetingFrequency.values[index];
+                  final isSelected = selectedFrequency == frequency;
+
+                  return ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? Colors.blue.shade100
+                            : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        frequency.icon,
+                        color: isSelected
+                            ? Colors.blue.shade700
+                            : Colors.grey.shade700,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      frequency.title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: isSelected
+                            ? Colors.blue.shade700
+                            : Colors.grey.shade800,
+                      ),
+                    ),
+                    subtitle: Text(
+                      frequency.description,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    trailing: isSelected
+                        ? Icon(
+                      Icons.check_circle,
+                      color: Colors.blue.shade700,
+                    )
+                        : null,
+                    onTap: () {
+                      onFrequencySelected(frequency);
+                      Navigator.pop(context);
+                    },
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    tileColor: isSelected ? Colors.blue.shade50 : null,
+                  );
+                },
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
