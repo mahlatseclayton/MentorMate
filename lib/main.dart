@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:core';
 import 'dart:io';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/material.dart';
@@ -9354,7 +9355,7 @@ class MenteeHelpSupportPage extends StatelessWidget {
   }
 }
 
-const String GEMINI_API_KEY ='' ;
+
 enum MeetingFrequency {
   daily('Daily', Icons.event_repeat, 'Every day'),
   weekly('Weekly', Icons.calendar_today, 'Once a week'),
@@ -9368,28 +9369,22 @@ enum MeetingFrequency {
   final String description;
 
   const MeetingFrequency(this.title, this.icon, this.description);
-}
 
-class TimePreferences {
-  final TimeOfDay? preferredStartTime;
-  final TimeOfDay? preferredEndTime;
-  final Duration? meetingDuration;
-
-  const TimePreferences({
-    this.preferredStartTime,
-    this.preferredEndTime,
-    this.meetingDuration,
-  });
-
-  bool get hasTimeRange => preferredStartTime != null && preferredEndTime != null;
-  bool get hasDuration => meetingDuration != null;
-
-  Map<String, dynamic> toJson() {
-    return {
-      'preferredStartTime': preferredStartTime?.format24Hour(),
-      'preferredEndTime': preferredEndTime?.format24Hour(),
-      'meetingDurationMinutes': meetingDuration?.inMinutes,
-    };
+  int get minDaysAhead {
+    switch (this) {
+      case MeetingFrequency.daily:
+        return 2; // At least tomorrow
+      case MeetingFrequency.weekly:
+        return 7; // At least 1 week ahead
+      case MeetingFrequency.biWeekly:
+        return 14; // At least 2 weeks ahead
+      case MeetingFrequency.monthly:
+        return 30; // At least 1 month ahead
+      case MeetingFrequency.quarterly:
+        return 90; // At least 3 months ahead
+      case MeetingFrequency.custom:
+        return 7; // Default 1 week ahead
+    }
   }
 }
 
@@ -9411,10 +9406,19 @@ class CombinedScheduleEvent {
   });
 
   Map<String, dynamic> toJson() {
+    // Convert times to 24-hour format
+    String formatTime(String timeStr) {
+      final time = GeminiMeetingSuggestionEngine._parseTimeString(timeStr);
+      if (time != null) {
+        return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+      }
+      return timeStr;
+    }
+
     return {
       'date': DateFormat('yyyy-MM-dd').format(date),
-      'startTime': startTime,
-      'endTime': endTime,
+      'startTime': formatTime(startTime),
+      'endTime': formatTime(endTime),
       'title': title,
       'source': source,
       'signkey': signkey,
@@ -9422,7 +9426,90 @@ class CombinedScheduleEvent {
   }
 }
 
+class TimePreferences {
+  final TimeOfDay? preferredStartTime;
+  final TimeOfDay? preferredEndTime;
+  final Duration? meetingDuration;
+
+  TimePreferences({
+    this.preferredStartTime,
+    this.preferredEndTime,
+    this.meetingDuration,
+  });
+
+  bool get hasTimeRange => preferredStartTime != null && preferredEndTime != null;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'hasTimeRange': hasTimeRange,
+      'preferredStartTime': preferredStartTime?.format24Hour(),
+      'preferredEndTime': preferredEndTime?.format24Hour(),
+      'meetingDuration': meetingDuration?.inMinutes,
+    };
+  }
+}
+
+extension TimeOfDayExtension on TimeOfDay {
+  String format24Hour() {
+    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+  }
+}
+
 class GeminiMeetingSuggestionEngine {
+  static String? _apiKey;
+  static bool _isInitialized = false;
+  static bool _isInitializing = false;
+
+  // Private initialization method
+  static Future<void> _initializeApiKey() async {
+    if (_isInitialized || _isInitializing) return;
+
+    _isInitializing = true;
+
+    try {
+      // Load environment variables
+      await dotenv.load(fileName: ".env");
+
+      // Get API key from environment
+      _apiKey = dotenv.get('GEMINI_API_KEY');
+
+      // Validate API key
+      if (_apiKey == null || _apiKey!.isEmpty) {
+        print('GEMINI_API_KEY not found in .env file');
+        throw Exception('GEMINI_API_KEY not found in .env file');
+      }
+
+      // Check if API key looks valid
+      if (!_apiKey!.startsWith('AIza')) {
+        print('Warning: API key may be invalid. Expected to start with "AIza"');
+      }
+
+      _isInitialized = true;
+      print('GeminiMeetingSuggestionEngine initialized successfully');
+    } catch (e) {
+      print('Error initializing Gemini API key: $e');
+      _apiKey = null;
+    } finally {
+      _isInitializing = false;
+    }
+  }
+
+  // Public method to ensure API key is loaded
+  static Future<void> ensureInitialized() async {
+    if (!_isInitialized) {
+      await _initializeApiKey();
+    }
+  }
+
+  // Getter for API key that ensures initialization
+  static Future<String?> get apiKey async {
+    if (!_isInitialized) {
+      await ensureInitialized();
+    }
+    return _apiKey;
+  }
+
+  // Main method to find optimal meeting times
   static Future<List<Map<String, dynamic>>> findOptimalTimesWithAI({
     required List<CombinedScheduleEvent> allEvents,
     required MeetingFrequency frequency,
@@ -9431,106 +9518,45 @@ class GeminiMeetingSuggestionEngine {
     required TimePreferences timePreferences,
     int numberOfSuggestions = 3,
   }) async {
+    // Ensure API key is initialized
+    try {
+      await ensureInitialized();
+    } catch (e) {
+      print('Failed to initialize Gemini: $e');
+    }
+
+    final currentApiKey = await _getValidApiKey();
+    if (currentApiKey == null) {
+      print('Cannot proceed without valid API key, using fallback suggestions');
+      return _getFallbackSuggestions(
+        allEvents,
+        frequency,
+        timePreferences,
+        _generateCandidateDates(frequency),
+        numberOfSuggestions,
+      );
+    }
+
     try {
       final now = DateTime.now();
-      final next30Days = List.generate(
-        30,
-            (i) => DateTime(now.year, now.month, now.day + i + 1),
-      );
+      final candidateDates = _generateCandidateDates(frequency);
 
       // Prepare data for Gemini
-      final eventsJson = allEvents.map((e) => e.toJson()).toList();
-      final preferencesJson = timePreferences.toJson();
+      final prompt = _buildPrompt(
+        allEvents: allEvents,
+        frequency: frequency,
+        userSignkey: userSignkey,
+        meetingTitle: meetingTitle,
+        timePreferences: timePreferences,
+        numberOfSuggestions: numberOfSuggestions,
+        now: now,
+        candidateDates: candidateDates,
+      );
 
-      final durationMinutes = timePreferences.meetingDuration?.inMinutes ?? 60;
-      final hasTimeRange = timePreferences.hasTimeRange;
-
-      final prompt = '''
-You are an AI meeting scheduler. Analyze the provided schedule data and suggest the ${numberOfSuggestions} best meeting times.
-
-Current Date: ${DateFormat('yyyy-MM-dd').format(now)}
-Meeting Title: $meetingTitle
-Meeting Frequency: ${frequency.title} (${frequency.description})
-User Signkey: $userSignkey
-Meeting Duration: $durationMinutes minutes
-
-User Preferences:
-- Preferred Time Range: ${hasTimeRange ? '${timePreferences.preferredStartTime!.format24Hour()} to ${timePreferences.preferredEndTime!.format24Hour()}' : 'Any time'}
-- Meeting Duration: $durationMinutes minutes
-
-Schedule Data (next 30 days):
-${jsonEncode(eventsJson)}
-
-Available dates to consider:
-${next30Days.map((d) => DateFormat('yyyy-MM-dd (EEEE)').format(d)).join(', ')}
-
-ANALYSIS REQUIREMENTS:
-1. CRITICAL: Consider PARTIALLY BOOKED days - find available time slots between existing events
-2. STRICT PRIORITY: Find slots that can accommodate the FULL $durationMinutes minutes meeting duration
-3. When checking partially booked days:
-   - Look for gaps between existing events that are at least $durationMinutes minutes long
-   - Consider time before first event of the day (if it starts late enough)
-   - Consider time after last event of the day (if it ends early enough)
-   - Consider gaps between consecutive events
-4. Ensure the time slot has no conflicts for the ENTIRE duration
-5. Try to match user preferences exactly first
-6. If exact preferences not available, fall back to intelligent scheduling
-7. Avoid dates with existing events for the same signkey (especially timetable_events)
-8. Consider the meeting frequency pattern:
-   - Daily: Any available day
-   - Weekly: Same weekday each week
-   - Bi-Weekly: Every 2 weeks on the same weekday
-   - Monthly: Same day of month
-   - Quarterly: Every 3 months
-9. Avoid dates where mentees (same signkey) have timetable events
-10. Calculate a confidence score (0-100) based on:
-    - Slot accommodates full $durationMinutes minutes: +50 points
-    - Matches exact time preference: +30 points
-    - Within preferred time range: +25 points
-    - No conflicts: +40 points
-    - Found gap in partially booked day: +35 points
-    - Weekday (Monday-Friday): +20 points
-    - Weekend: -30 points
-    - Each existing event on that date: -15 points (but still consider gaps)
-    - Mentee conflicts: -40 points each
-    - Proximity to today (sooner is better): +10 for within 7 days
-    - Outside preferred time range: -15 points
-    - Slot too short for $durationMinutes minutes: -100 points
-
-TIME SLOT ANALYSIS RULES:
-- For each day, sort events by start time
-- Check if there's enough time BEFORE the first event (if first event starts after 8:00 AM)
-- Check gaps BETWEEN consecutive events (end time of event 1 to start time of event 2)
-- Check if there's enough time AFTER the last event (if last event ends before 8:00 PM)
-- Minimum gap needed: $durationMinutes minutes
-
-OUTPUT FORMAT (JSON only, no markdown):
-{
-  "suggestions": [
-    {
-      "date": "2025-12-15",
-      "time": "10:00",
-      "score": 95,
-      "conflicts": 0,
-      "reasoning": "Brief explanation including gap analysis",
-      "matchesPreferences": true/false,
-      "preferenceMatches": ["time", "duration"],
-      "foundInGap": true/false  // Whether this slot was found in a gap between events
-    }
-  ]
-}
-
-Return exactly ${numberOfSuggestions} suggestions sorted by score (highest first).
-IMPORTANT: 
-1. Keep reasoning text SHORT (max 50 words)
-2. Clearly mention if found in a gap between events
-3. Ensure suggestions can fit $durationMinutes minutes meeting
-4. Check ALL days, including partially booked ones
-''';
-
+      print('Sending request to Gemini API...');
       final response = await http.post(
         Uri.parse(
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$GEMINI_API_KEY',
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$currentApiKey',
         ),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
@@ -9551,37 +9577,25 @@ IMPORTANT:
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final text = data['candidates'][0]['content']['parts'][0]['text'];
-
-        // Extract JSON from response
-        String cleanedText = text.trim();
-        cleanedText = cleanedText.replaceAll('```json', '');
-        cleanedText = cleanedText.replaceAll('```', '');
-        cleanedText = cleanedText.trim();
-
-        final suggestions = jsonDecode(cleanedText);
-
-        // Parse suggestions with null safety
-        final List<Map<String, dynamic>> results = [];
-        for (var suggestion in suggestions['suggestions']) {
-          final date = DateTime.parse(suggestion['date']);
-          results.add({
-            'date': date,
-            'time': suggestion['time'],
-            'score': suggestion['score'] ?? 0,
-            'conflicts': suggestion['conflicts'] ?? 0,
-            'reasoning': suggestion['reasoning'] ?? '',
-            'matchesPreferences': suggestion['matchesPreferences'] ?? false,
-            'preferenceMatches': List<String>.from(suggestion['preferenceMatches'] ?? []),
-            'foundInGap': suggestion['foundInGap'] ?? false,
-          });
-        }
-
-        return results;
+        print('Gemini API response received successfully');
+        return _parseGeminiResponse(
+          response.body,
+          now,
+          frequency,
+          numberOfSuggestions,
+          allEvents,
+          timePreferences,
+          candidateDates,
+        );
       } else {
         print('Gemini API error: ${response.statusCode} - ${response.body}');
-        return _getFallbackSuggestions(allEvents, frequency, timePreferences, next30Days);
+        return _getFallbackSuggestions(
+          allEvents,
+          frequency,
+          timePreferences,
+          candidateDates,
+          numberOfSuggestions,
+        );
       }
     } catch (e) {
       print('Error calling Gemini API: $e');
@@ -9589,25 +9603,272 @@ IMPORTANT:
         allEvents,
         frequency,
         timePreferences,
-        List.generate(30, (i) => DateTime.now().add(Duration(days: i + 1))),
+        _generateCandidateDates(frequency),
+        numberOfSuggestions,
       );
     }
   }
 
+  // Helper method to get valid API key
+  static Future<String?> _getValidApiKey() async {
+    if (!_isInitialized) {
+      try {
+        await ensureInitialized();
+      } catch (e) {
+        print('Failed to ensure initialization: $e');
+        return null;
+      }
+    }
+
+    // Check if API key is valid
+    if (_apiKey == null || _apiKey!.isEmpty) {
+      print('API key is null or empty');
+      return null;
+    }
+
+    // Additional validation
+    if (_apiKey!.length < 20) {
+      print('API key appears too short: ${_apiKey!.length} characters');
+      return null;
+    }
+
+    return _apiKey;
+  }
+
+  // Generate candidate dates
+  static List<DateTime> _generateCandidateDates(MeetingFrequency frequency) {
+    final now = DateTime.now();
+    final minStartDate = now.add(Duration(days: frequency.minDaysAhead));
+    final List<DateTime> dates = [];
+
+    for (int i = frequency.minDaysAhead; i <= 90; i++) {
+      final date = DateTime(now.year, now.month, now.day + i);
+      if (date.weekday != DateTime.sunday) {
+        dates.add(date);
+      }
+    }
+
+    return dates;
+  }
+
+  // Build prompt for Gemini
+  static String _buildPrompt({
+    required List<CombinedScheduleEvent> allEvents,
+    required MeetingFrequency frequency,
+    required String userSignkey,
+    required String meetingTitle,
+    required TimePreferences timePreferences,
+    required int numberOfSuggestions,
+    required DateTime now,
+    required List<DateTime> candidateDates,
+  }) {
+    final eventsJson = allEvents.map((e) => e.toJson()).toList();
+    final durationMinutes = timePreferences.meetingDuration?.inMinutes ?? 60;
+    final hasTimeRange = timePreferences.hasTimeRange;
+    final startTimeStr = hasTimeRange ? timePreferences.preferredStartTime!.format24Hour() : '';
+    final endTimeStr = hasTimeRange ? timePreferences.preferredEndTime!.format24Hour() : '';
+    final minStartDate = now.add(Duration(days: frequency.minDaysAhead));
+
+    return '''
+You are an AI meeting scheduler. Analyze the provided schedule data and suggest the ${numberOfSuggestions} best meeting times.
+
+CRITICAL RULES:
+1. NEVER suggest meetings on Sundays (weekday == 7)
+2. ${hasTimeRange ? 'Only suggest times within the preferred time range: $startTimeStr to $endTimeStr' : 'Any time between 8:00 and 20:00 is acceptable'}
+3. All suggestions MUST be at least ${frequency.minDaysAhead} days ahead of today
+4. Use 24-hour format for all times (e.g., "14:30" not "2:30 PM")
+
+Meeting Frequency: ${frequency.title} (${frequency.description})
+Minimum days ahead required: ${frequency.minDaysAhead} days
+Earliest acceptable date: ${DateFormat('yyyy-MM-dd').format(minStartDate)}
+Plan meetings sufficiently ahead for proper scheduling
+
+Current Date: ${DateFormat('yyyy-MM-dd').format(now)}
+Meeting Title: $meetingTitle
+User Signkey: $userSignkey
+Meeting Duration: $durationMinutes minutes
+
+User Preferences:
+- Preferred Time Range: ${hasTimeRange ? '$startTimeStr to $endTimeStr' : 'Any time'}
+- Meeting Duration: $durationMinutes minutes
+
+Schedule Data (next 90 days):
+${jsonEncode(eventsJson)}
+
+ANALYSIS REQUIREMENTS:
+1. CRITICAL: Consider PARTIALLY BOOKED days - find available time slots between existing events
+2. STRICT PRIORITY: Find slots that can accommodate the FULL $durationMinutes minutes meeting duration
+3. When checking partially booked days:
+   - Look for gaps between existing events that are at least $durationMinutes minutes long
+   - Consider time before first event of the day (if it starts late enough)
+   - Consider time after last event of the day (if it ends early enough)
+   - Consider gaps between consecutive events
+4. Ensure the time slot has no conflicts for the ENTIRE duration
+5. Try to match user preferences exactly first
+6. If exact preferences not available, fall back to intelligent scheduling
+7. Avoid dates with existing events for the same signkey (especially timetable_events)
+8. Avoid dates where mentees (same signkey) have timetable events
+9. Calculate a confidence score (0-100) based on:
+    - Slot accommodates full $durationMinutes minutes: +50 points
+    - Matches exact time preference: +30 points
+    - Within preferred time range: +25 points
+    - No conflicts: +40 points
+    - Found gap in partially booked day: +35 points
+    - Weekday (Monday-Friday): +20 points
+    - Weekend (Saturday): -30 points
+    - Sunday: -100 points (NOT ALLOWED)
+    - Each existing event on that date: -15 points (but still consider gaps)
+    - Mentee conflicts: -40 points each
+    - Proximity to ideal scheduling time (not too soon, not too late): 
+        - ${frequency.minDaysAhead} to ${frequency.minDaysAhead * 2} days ahead: +30 points
+        - ${frequency.minDaysAhead * 2 + 1} to ${frequency.minDaysAhead * 3} days ahead: +25 points
+        - More than ${frequency.minDaysAhead * 3} days ahead: +15 points
+        - Less than ${frequency.minDaysAhead} days ahead: -100 points (NOT ALLOWED)
+    - ${hasTimeRange ? 'Outside preferred time range: -15 points' : 'No penalty for time range'}
+    - Slot too short for $durationMinutes minutes: -100 points
+
+TIME SLOT ANALYSIS RULES:
+- For each day, sort events by start time
+- Check if there's enough time BEFORE the first event (if first event starts after 8:00 AM)
+- Check gaps BETWEEN consecutive events (end time of event 1 to start time of event 2)
+- Check if there's enough time AFTER the last event (if last event ends before 8:00 PM)
+- Minimum gap needed: $durationMinutes minutes
+- Time range constraint: ${hasTimeRange ? 'MUST be between $startTimeStr and $endTimeStr' : 'Should be between 8:00 and 20:00'}
+
+OUTPUT FORMAT (JSON only, no markdown):
+{
+  "suggestions": [
+    {
+      "date": "2025-12-22",  // MUST be after ${DateFormat('yyyy-MM-dd').format(minStartDate)} and NOT Sunday
+      "time": "10:00",  // MUST be in 24-hour format
+      "score": 95,
+      "conflicts": 0,
+      "reasoning": "Brief explanation including why this date fits the frequency pattern",
+      "matchesPreferences": true/false,
+      "preferenceMatches": ["time", "duration"],
+      "foundInGap": true/false,
+      "daysAhead": 14  // How many days from today
+    }
+  ]
+}
+
+Return exactly ${numberOfSuggestions} suggestions sorted by score (highest first).
+CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead of today and NOT on Sundays.
+''';
+  }
+
+  // Parse Gemini response
+  static Future<List<Map<String, dynamic>>> _parseGeminiResponse(
+      String responseBody,
+      DateTime now,
+      MeetingFrequency frequency,
+      int numberOfSuggestions,
+      List<CombinedScheduleEvent> allEvents,
+      TimePreferences timePreferences,
+      List<DateTime> candidateDates,
+      ) async {
+    try {
+      print('Parsing Gemini response...');
+      final data = jsonDecode(responseBody);
+      final text = data['candidates'][0]['content']['parts'][0]['text'];
+
+      // Extract JSON from response
+      String cleanedText = text.trim();
+      cleanedText = cleanedText.replaceAll('```json', '');
+      cleanedText = cleanedText.replaceAll('```', '');
+      cleanedText = cleanedText.trim();
+
+      final suggestions = jsonDecode(cleanedText);
+
+      // Parse suggestions with null safety
+      final List<Map<String, dynamic>> results = [];
+      for (var suggestion in suggestions['suggestions']) {
+        try {
+          final date = DateTime.parse(suggestion['date']);
+          final daysAhead = suggestion['daysAhead'] ?? date.difference(now).inDays;
+
+          // Verify date is not too soon and not Sunday
+          if (daysAhead < frequency.minDaysAhead || date.weekday == DateTime.sunday) {
+            print('Warning: Suggestion $date is invalid (days ahead: $daysAhead, Sunday: ${date.weekday == DateTime.sunday}), skipping');
+            continue;
+          }
+
+          // Verify time is in 24-hour format
+          final timeStr = suggestion['time'] as String;
+          if (!RegExp(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$').hasMatch(timeStr)) {
+            print('Warning: Invalid time format: $timeStr, skipping');
+            continue;
+          }
+
+          results.add({
+            'date': date,
+            'time': timeStr,
+            'score': suggestion['score'] ?? 0,
+            'conflicts': suggestion['conflicts'] ?? 0,
+            'reasoning': suggestion['reasoning'] ?? '',
+            'matchesPreferences': suggestion['matchesPreferences'] ?? false,
+            'preferenceMatches': List<String>.from(suggestion['preferenceMatches'] ?? []),
+            'foundInGap': suggestion['foundInGap'] ?? false,
+            'daysAhead': daysAhead,
+          });
+        } catch (e) {
+          print('Error parsing suggestion: $e');
+        }
+      }
+
+      // Ensure we have enough suggestions
+      if (results.length < numberOfSuggestions) {
+        print('Got ${results.length} suggestions, adding ${numberOfSuggestions - results.length} fallback suggestions');
+        final fallbackResults = _getFallbackSuggestions(
+          allEvents,
+          frequency,
+          timePreferences,
+          candidateDates,
+          numberOfSuggestions - results.length,
+        );
+        results.addAll(fallbackResults);
+      }
+
+      return results.take(numberOfSuggestions).toList();
+    } catch (e) {
+      print('Error parsing Gemini response: $e');
+      print('Response body was: $responseBody');
+      return _getFallbackSuggestions(
+        allEvents,
+        frequency,
+        timePreferences,
+        candidateDates,
+        numberOfSuggestions,
+      );
+    }
+  }
+
+  // Fallback suggestions when API fails
   static List<Map<String, dynamic>> _getFallbackSuggestions(
       List<CombinedScheduleEvent> allEvents,
       MeetingFrequency frequency,
       TimePreferences timePreferences,
       List<DateTime> candidateDates,
+      int numberOfSuggestions,
       ) {
+    print('Using fallback suggestions engine');
     final results = <Map<String, dynamic>>[];
-
-    // Get duration in minutes (default 60)
     final durationMinutes = timePreferences.meetingDuration?.inMinutes ?? 60;
+    final now = DateTime.now();
 
     // Try to find times within preferred range
     for (var date in candidateDates) {
-      if (results.length >= 3) break;
+      if (results.length >= numberOfSuggestions) break;
+
+      // Skip Sundays
+      if (date.weekday == DateTime.sunday) continue;
+
+      final daysAhead = date.difference(DateTime(now.year, now.month, now.day)).inDays;
+
+      // Skip if too soon for this frequency
+      if (daysAhead < frequency.minDaysAhead) {
+        continue;
+      }
 
       // Get all events for this date
       final dateEvents = allEvents.where((event) =>
@@ -9616,7 +9877,14 @@ IMPORTANT:
           event.date.day == date.day
       ).toList();
 
-      // Check for available gaps in partially booked day
+      // Define working hours (8 AM to 8 PM)
+      final workingStart = const TimeOfDay(hour: 8, minute: 0);
+      final workingEnd = const TimeOfDay(hour: 20, minute: 0);
+
+      // Use preferred time range if available
+      final effectiveStartTime = timePreferences.preferredStartTime ?? workingStart;
+      final effectiveEndTime = timePreferences.preferredEndTime ?? workingEnd;
+
       TimeOfDay? suggestedTime;
       bool matchesPreferences = false;
       bool foundInGap = false;
@@ -9625,29 +9893,36 @@ IMPORTANT:
 
       if (dateEvents.isEmpty) {
         // Day is completely free
-        if (timePreferences.hasTimeRange) {
-          suggestedTime = timePreferences.preferredStartTime;
-          matchesPreferences = true;
-          matchedPrefs.add('time');
-          reasoning = 'Completely free day, matches your preferences';
-        } else {
-          suggestedTime = const TimeOfDay(hour: 10, minute: 0);
-          reasoning = 'Completely free day, morning slot available';
+        // Check if we can fit the meeting in preferred time range
+        if (_hasSufficientGap(effectiveStartTime, effectiveEndTime, durationMinutes)) {
+          suggestedTime = effectiveStartTime;
+          matchesPreferences = timePreferences.hasTimeRange;
+          if (matchesPreferences) matchedPrefs.add('time');
+          reasoning = 'Completely free day';
         }
       } else {
         // Day has events, check for gaps
         // Sort events by start time
-        dateEvents.sort((a, b) => a.startTime.compareTo(b.startTime));
+        dateEvents.sort((a, b) {
+          final timeA = _parseTimeString(a.startTime);
+          final timeB = _parseTimeString(b.startTime);
+          if (timeA == null || timeB == null) return 0;
+          return (timeA.hour * 60 + timeA.minute).compareTo(timeB.hour * 60 + timeB.minute);
+        });
 
         // Check morning slot (before first event)
         final firstEventStart = _parseTimeString(dateEvents.first.startTime);
         if (firstEventStart != null) {
-          final morningSlotStart = const TimeOfDay(hour: 8, minute: 0);
-          final morningSlotEnd = firstEventStart;
+          // Calculate the earliest we can start (max of preferred start time and working start)
+          final earliestStart = _maxTimeOfDay(effectiveStartTime, workingStart);
 
-          if (_hasSufficientGap(morningSlotStart, morningSlotEnd, durationMinutes)) {
-            suggestedTime = morningSlotStart;
+          // Only suggest if the gap is sufficient and within working hours
+          if (_hasSufficientGap(earliestStart, firstEventStart, durationMinutes) &&
+              _isTimeInRange(earliestStart, workingStart, workingEnd)) {
+            suggestedTime = earliestStart;
             foundInGap = true;
+            matchesPreferences = _isTimeInRange(suggestedTime!, effectiveStartTime, effectiveEndTime);
+            if (matchesPreferences) matchedPrefs.add('time');
             reasoning = 'Found morning slot before first event';
           }
         }
@@ -9659,9 +9934,14 @@ IMPORTANT:
             final nextEventStart = _parseTimeString(dateEvents[i + 1].startTime);
 
             if (currentEventEnd != null && nextEventStart != null) {
-              if (_hasSufficientGap(currentEventEnd, nextEventStart, durationMinutes)) {
+              // Ensure the gap is within working hours and preferred range
+              if (_hasSufficientGap(currentEventEnd, nextEventStart, durationMinutes) &&
+                  _isTimeInRange(currentEventEnd, workingStart, workingEnd) &&
+                  _isTimeInRange(currentEventEnd, effectiveStartTime, effectiveEndTime)) {
                 suggestedTime = currentEventEnd;
                 foundInGap = true;
+                matchesPreferences = true;
+                matchedPrefs.add('time');
                 reasoning = 'Found gap between events';
                 break;
               }
@@ -9673,32 +9953,48 @@ IMPORTANT:
         if (suggestedTime == null) {
           final lastEventEnd = _parseTimeString(dateEvents.last.endTime);
           if (lastEventEnd != null) {
-            final eveningSlotStart = lastEventEnd;
-            final eveningSlotEnd = const TimeOfDay(hour: 20, minute: 0);
+            // Calculate the latest we can end (min of preferred end time and working end)
+            final latestEnd = _minTimeOfDay(effectiveEndTime, workingEnd);
 
-            if (_hasSufficientGap(eveningSlotStart, eveningSlotEnd, durationMinutes)) {
-              suggestedTime = eveningSlotStart;
+            if (_hasSufficientGap(lastEventEnd, latestEnd, durationMinutes) &&
+                _isTimeInRange(lastEventEnd, workingStart, workingEnd) &&
+                _isTimeInRange(lastEventEnd, effectiveStartTime, effectiveEndTime)) {
+              suggestedTime = lastEventEnd;
               foundInGap = true;
+              matchesPreferences = true;
+              matchedPrefs.add('time');
               reasoning = 'Found evening slot after last event';
             }
           }
         }
 
-        // If no gap found but matches time preferences, use preferred time anyway
-        if (suggestedTime == null && timePreferences.hasTimeRange) {
-          suggestedTime = timePreferences.preferredStartTime;
-          matchesPreferences = true;
-          matchedPrefs.add('time');
-          reasoning = 'Using preferred time despite conflicts';
+        // If no gap found in preferred range, look for any available slot in working hours
+        if (suggestedTime == null) {
+          // Try to find any slot in working hours
+          suggestedTime = _findAnyAvailableSlot(
+              dateEvents,
+              durationMinutes,
+              workingStart,
+              workingEnd
+          );
+          if (suggestedTime != null) {
+            matchesPreferences = _isTimeInRange(suggestedTime!, effectiveStartTime, effectiveEndTime);
+            if (matchesPreferences) matchedPrefs.add('time');
+            reasoning = 'Available slot found${matchesPreferences ? ' in preferred range' : ''}';
+          }
         }
       }
 
       if (suggestedTime != null) {
+        final isInTimeRange = _isTimeInRange(suggestedTime, effectiveStartTime, effectiveEndTime);
         final score = _calculateFallbackScore(
           matchesPreferences,
           foundInGap,
           dateEvents.length,
           date.weekday <= 5,
+          daysAhead,
+          frequency.minDaysAhead,
+          isInTimeRange,
         );
 
         results.add({
@@ -9706,18 +10002,25 @@ IMPORTANT:
           'time': '${suggestedTime.hour.toString().padLeft(2, '0')}:${suggestedTime.minute.toString().padLeft(2, '0')}',
           'score': score,
           'conflicts': dateEvents.length,
-          'reasoning': '$reasoning for $durationMinutes minutes',
+          'reasoning': '$reasoning ($daysAhead days ahead)',
           'matchesPreferences': matchesPreferences,
           'preferenceMatches': matchedPrefs,
           'foundInGap': foundInGap,
+          'daysAhead': daysAhead,
         });
       }
     }
 
-    // If no results with preferences, try without preferences
+    // If no results with preferences, try without strict range
     if (results.isEmpty) {
       for (var date in candidateDates) {
-        if (results.length >= 3) break;
+        if (results.length >= numberOfSuggestions) break;
+
+        // Skip Sundays
+        if (date.weekday == DateTime.sunday) continue;
+
+        final daysAhead = date.difference(DateTime(now.year, now.month, now.day)).inDays;
+        if (daysAhead < frequency.minDaysAhead) continue;
 
         final dateEvents = allEvents.where((event) =>
         event.date.year == date.year &&
@@ -9726,35 +10029,171 @@ IMPORTANT:
         ).toList();
 
         if (dateEvents.isEmpty && date.weekday <= 5) {
+          // Default to 10:00 AM if in range, otherwise 9:00 AM
+          TimeOfDay defaultTime;
+          if (timePreferences.hasTimeRange) {
+            final preferredTime = timePreferences.preferredStartTime!;
+            defaultTime = _isTimeInRange(preferredTime,
+                timePreferences.preferredStartTime!, timePreferences.preferredEndTime!)
+                ? preferredTime
+                : const TimeOfDay(hour: 9, minute: 0);
+          } else {
+            defaultTime = const TimeOfDay(hour: 10, minute: 0);
+          }
+
+          final isInPreferredRange = timePreferences.hasTimeRange ?
+          _isTimeInRange(defaultTime, timePreferences.preferredStartTime!, timePreferences.preferredEndTime!) : false;
+
           results.add({
             'date': date,
-            'time': '10:00',
-            'score': 60,
+            'time': '${defaultTime.hour.toString().padLeft(2, '0')}:${defaultTime.minute.toString().padLeft(2, '0')}',
+            'score': isInPreferredRange ? 70 : 60,
             'conflicts': 0,
-            'reasoning': 'No conflicts for $durationMinutes minutes',
-            'matchesPreferences': false,
-            'preferenceMatches': [],
+            'reasoning': 'No conflicts for $durationMinutes minutes ($daysAhead days ahead)',
+            'matchesPreferences': isInPreferredRange,
+            'preferenceMatches': isInPreferredRange ? ['time'] : [],
             'foundInGap': false,
+            'daysAhead': daysAhead,
           });
         }
       }
     }
 
+    print('Fallback engine found ${results.length} suggestions');
     return results;
+  }
+
+  static TimeOfDay? _findAnyAvailableSlot(
+      List<CombinedScheduleEvent> events,
+      int durationMinutes,
+      TimeOfDay startBoundary,
+      TimeOfDay endBoundary
+      ) {
+    if (events.isEmpty) {
+      return startBoundary;
+    }
+
+    // Sort events by start time
+    events.sort((a, b) {
+      final timeA = _parseTimeString(a.startTime);
+      final timeB = _parseTimeString(b.startTime);
+      if (timeA == null || timeB == null) return 0;
+      return (timeA.hour * 60 + timeA.minute).compareTo(timeB.hour * 60 + timeB.minute);
+    });
+
+    // Check before first event
+    final firstEventStart = _parseTimeString(events.first.startTime);
+    if (firstEventStart != null) {
+      if (_hasSufficientGap(startBoundary, firstEventStart, durationMinutes)) {
+        return startBoundary;
+      }
+    }
+
+    // Check gaps between events
+    for (int i = 0; i < events.length - 1; i++) {
+      final currentEventEnd = _parseTimeString(events[i].endTime);
+      final nextEventStart = _parseTimeString(events[i + 1].startTime);
+
+      if (currentEventEnd != null && nextEventStart != null) {
+        if (_hasSufficientGap(currentEventEnd, nextEventStart, durationMinutes)) {
+          return currentEventEnd;
+        }
+      }
+    }
+
+    // Check after last event
+    final lastEventEnd = _parseTimeString(events.last.endTime);
+    if (lastEventEnd != null) {
+      if (_hasSufficientGap(lastEventEnd, endBoundary, durationMinutes)) {
+        return lastEventEnd;
+      }
+    }
+
+    return null;
+  }
+
+  static bool _isTimeInRange(TimeOfDay time, TimeOfDay start, TimeOfDay end) {
+    final timeInMinutes = time.hour * 60 + time.minute;
+    final startInMinutes = start.hour * 60 + start.minute;
+    final endInMinutes = end.hour * 60 + end.minute;
+
+    return timeInMinutes >= startInMinutes && timeInMinutes <= endInMinutes;
+  }
+
+  static TimeOfDay _maxTimeOfDay(TimeOfDay a, TimeOfDay b) {
+    final aMinutes = a.hour * 60 + a.minute;
+    final bMinutes = b.hour * 60 + b.minute;
+    return aMinutes >= bMinutes ? a : b;
+  }
+
+  static TimeOfDay _minTimeOfDay(TimeOfDay a, TimeOfDay b) {
+    final aMinutes = a.hour * 60 + a.minute;
+    final bMinutes = b.hour * 60 + b.minute;
+    return aMinutes <= bMinutes ? a : b;
   }
 
   static TimeOfDay? _parseTimeString(String timeString) {
     try {
-      final parts = timeString.split(':');
-      if (parts.length >= 2) {
-        final hour = int.tryParse(parts[0]);
-        final minute = int.tryParse(parts[1]);
+      // Remove any whitespace and convert to lowercase
+      timeString = timeString.trim().toLowerCase();
+
+      // Handle 24-hour format (e.g., "14:30")
+      if (timeString.contains(':')) {
+        final parts = timeString.split(':');
+        if (parts.length >= 2) {
+          var hour = int.tryParse(parts[0]);
+          var minute = int.tryParse(parts[1].replaceAll(RegExp(r'[^0-9]'), ''));
+
+          if (hour != null && minute != null) {
+            // Check for AM/PM in the second part
+            if (parts[1].contains('pm') && hour < 12) {
+              hour += 12;
+            } else if (parts[1].contains('am') && hour == 12) {
+              hour = 0;
+            }
+
+            // Validate hour range
+            if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+              return TimeOfDay(hour: hour, minute: minute);
+            }
+          }
+        }
+      }
+
+      // Handle AM/PM format (e.g., "2:30 PM")
+      final regex = RegExp(r'(\d+):(\d+)\s*(am|pm)');
+      final match = regex.firstMatch(timeString);
+      if (match != null) {
+        var hour = int.tryParse(match.group(1)!);
+        var minute = int.tryParse(match.group(2)!);
+        final period = match.group(3)!;
+
         if (hour != null && minute != null) {
+          if (period == 'pm' && hour < 12) {
+            hour += 12;
+          } else if (period == 'am' && hour == 12) {
+            hour = 0;
+          }
+
+          // Validate hour range
+          if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+            return TimeOfDay(hour: hour, minute: minute);
+          }
+        }
+      }
+
+      // Try simple hour:minute format
+      final simpleMatch = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(timeString);
+      if (simpleMatch != null) {
+        final hour = int.tryParse(simpleMatch.group(1)!);
+        final minute = int.tryParse(simpleMatch.group(2)!);
+
+        if (hour != null && minute != null && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
           return TimeOfDay(hour: hour, minute: minute);
         }
       }
     } catch (e) {
-      print('Error parsing time string: $timeString');
+      print('Error parsing time string: $timeString - $e');
     }
     return null;
   }
@@ -9765,16 +10204,42 @@ IMPORTANT:
     return (endInMinutes - startInMinutes) >= durationMinutes;
   }
 
-  static int _calculateFallbackScore(bool matchesPrefs, bool foundInGap, int conflicts, bool isWeekday) {
-    int score = 70; // Base score
+  static int _calculateFallbackScore(
+      bool matchesPrefs,
+      bool foundInGap,
+      int conflicts,
+      bool isWeekday,
+      int daysAhead,
+      int minDaysAhead,
+      bool isInTimeRange
+      ) {
+    // Start with a base score of 50 (mid-range)
+    int score = 50;
 
-    if (matchesPrefs) score += 20;
-    if (foundInGap) score += 25;
-    if (isWeekday) score += 15;
+    // Add moderate bonuses for positive factors
+    if (matchesPrefs) score += 15; // Reduced from 20
+    if (foundInGap) score += 10; // Reduced from 25
+    if (isWeekday) score += 10; // Reduced from 15
+    if (isInTimeRange) score += 10; // Reduced from 20
 
-    // Penalize for conflicts
-    score -= (conflicts * 5);
+    // Score based on how far ahead (moderate adjustments)
+    if (daysAhead >= minDaysAhead && daysAhead <= minDaysAhead * 2) {
+      score += 15; // Reduced from 30 - Optimal timing
+    } else if (daysAhead > minDaysAhead * 2 && daysAhead <= minDaysAhead * 3) {
+      score += 10; // Reduced from 20 - Good timing
+    } else if (daysAhead > minDaysAhead * 3) {
+      score += 5; // Reduced from 10 - Acceptable but far ahead
+    } else {
+      score = 0; // Set to 0 instead of subtracting 100
+    }
 
+    // Penalize for conflicts (moderate penalty)
+    score -= (conflicts * 3); // Reduced from 5
+
+    // Penalize for weekends (Sunday already filtered, Saturday gets moderate penalty)
+    if (!isWeekday) score -= 15; // Reduced from 30
+
+    // Ensure score stays within 0-100 range
     return score.clamp(0, 100);
   }
 }
@@ -9804,6 +10269,8 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   final int _maxRetries = 5;
   String? _userSignkey;
   List<CombinedScheduleEvent> _allEvents = [];
+  bool _isLoadingSignkey = false;
+  bool _hasLoadError = false;
 
   // Time preferences
   TimeOfDay? _preferredStartTime;
@@ -9813,8 +10280,64 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   @override
   void initState() {
     super.initState();
-    _getUserSignkey();
-    _durationController.text = '60';
+    _initializeSignkey();
+    _initializeGeminiEngine();
+  }
+
+  Future<void> _initializeGeminiEngine() async {
+    try {
+      await GeminiMeetingSuggestionEngine.ensureInitialized();
+    } catch (e) {
+      print('Error initializing Gemini engine: $e');
+    }
+  }
+
+  Future<void> _initializeSignkey() async {
+    if (_isLoadingSignkey) return;
+
+    setState(() {
+      _isLoadingSignkey = true;
+      _hasLoadError = false;
+    });
+
+    try {
+      // Ensure user is authenticated
+      final user = _auth.currentUser;
+      if (user == null) {
+        throw Exception('User not authenticated. Please sign in again.');
+      }
+
+      // Get user document
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+
+      if (userDoc.exists) {
+        final userData = userDoc.data();
+        final signkey = userData?['signkey'] as String?;
+
+        if (signkey != null && signkey.isNotEmpty) {
+          setState(() {
+            _userSignkey = signkey;
+            _hasLoadError = false;
+          });
+          print('Signkey loaded successfully: $signkey');
+        } else {
+          throw Exception('Signkey not found in user profile. Please update your profile.');
+        }
+      } else {
+        throw Exception('User profile not found. Please complete your profile setup.');
+      }
+    } catch (e) {
+      print('Error loading signkey: $e');
+      setState(() {
+        _hasLoadError = true;
+        _userSignkey = null;
+      });
+      _showSnackBar('Failed to load profile: ${e.toString().replaceAll('Exception: ', '')}', isError: true);
+    } finally {
+      setState(() {
+        _isLoadingSignkey = false;
+      });
+    }
   }
 
   @override
@@ -9828,63 +10351,73 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     super.dispose();
   }
 
-  Future<void> _getUserSignkey() async {
-    try {
-      final userId = _auth.currentUser?.uid;
-      if (userId == null) return;
-
-      final userDoc = await _firestore.collection('users').doc(userId).get();
-      if (userDoc.exists) {
-        setState(() {
-          _userSignkey = userDoc.data()?['signkey'];
-        });
-      }
-    } catch (e) {
-      print('Error getting user signkey: $e');
-    }
-  }
-
   Future<List<CombinedScheduleEvent>> _getAllScheduleEvents() async {
     final List<CombinedScheduleEvent> allEvents = [];
 
     try {
       final userId = _auth.currentUser?.uid;
-      if (userId == null) return allEvents;
+      if (userId == null) {
+        _showSnackBar('User not authenticated. Please sign in again.', isError: true);
+        return allEvents;
+      }
+
+      if (_userSignkey == null) {
+        _showSnackBar('User profile not loaded. Please wait or retry.', isError: true);
+        return allEvents;
+      }
 
       final now = DateTime.now();
-      final nextMonth = now.add(const Duration(days: 30));
+      final next90Days = now.add(const Duration(days: 90));
+
+      print('Fetching schedule events for user: $userId, signkey: $_userSignkey');
 
       // 1. Get user's timetable events
-      final timetableSnapshot = await _firestore
-          .collection('timetable_events')
-          .where('userId', isEqualTo: userId)
-          .get();
+      try {
+        final timetableSnapshot = await _firestore
+            .collection('timetable_events')
+            .where('userId', isEqualTo: userId)
+            .where('date', isGreaterThanOrEqualTo: DateFormat('yyyy-MM-dd').format(now))
+            .limit(100)
+            .get();
 
-      for (final doc in timetableSnapshot.docs) {
-        final data = doc.data();
-        try {
-          final date = DateTime.parse(data['date']);
-          if (date.isAfter(now) && date.isBefore(nextMonth)) {
-            allEvents.add(CombinedScheduleEvent(
-              date: date,
-              startTime: data['startTime'] ?? '09:00',
-              endTime: data['endTime'] ?? '10:00',
-              title: data['title'] ?? 'Event',
-              source: 'timetable',
-              signkey: data['signkey'],
-            ));
+        print('Found ${timetableSnapshot.docs.length} timetable events');
+
+        for (final doc in timetableSnapshot.docs) {
+          final data = doc.data();
+          try {
+            final dateString = data['date'] as String?;
+            if (dateString != null) {
+              final date = DateTime.parse(dateString);
+              if (date.isBefore(next90Days)) {
+                allEvents.add(CombinedScheduleEvent(
+                  date: date,
+                  startTime: data['startTime']?.toString() ?? '09:00',
+                  endTime: data['endTime']?.toString() ?? '10:00',
+                  title: data['title']?.toString() ?? 'Timetable Event',
+                  source: 'timetable',
+                  signkey: data['signkey']?.toString(),
+                ));
+              }
+            }
+          } catch (e) {
+            print('Error parsing timetable event ${doc.id}: $e');
           }
-        } catch (e) {
-          print('Error parsing timetable event: $e');
         }
+      } catch (e) {
+        print('Error fetching timetable events: $e');
       }
 
       // 2. Get Events with matching signkey
-      if (_userSignkey != null) {
+      try {
         final eventsSnapshot = await _firestore
             .collection('Events')
             .where('signkey', isEqualTo: _userSignkey)
+            .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(now))
+            .where('timestamp', isLessThan: Timestamp.fromDate(next90Days))
+            .limit(100)
             .get();
+
+        print('Found ${eventsSnapshot.docs.length} Events');
 
         for (final doc in eventsSnapshot.docs) {
           final data = doc.data();
@@ -9892,99 +10425,127 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
             final timestamp = data['timestamp'] as Timestamp?;
             if (timestamp != null) {
               final dateTime = timestamp.toDate();
-              if (dateTime.isAfter(now) && dateTime.isBefore(nextMonth)) {
-                allEvents.add(CombinedScheduleEvent(
-                  date: DateTime(dateTime.year, dateTime.month, dateTime.day),
-                  startTime: DateFormat('HH:mm').format(dateTime),
-                  endTime: DateFormat('HH:mm').format(
-                    dateTime.add(const Duration(hours: 1)),
-                  ),
-                  title: data['title'] ?? 'Event',
-                  source: 'events',
-                  signkey: data['signkey'],
-                ));
-              }
+              final title = data['title']?.toString() ?? 'Event';
+              final startTime = data['startTime']?.toString() ?? DateFormat('HH:mm').format(dateTime);
+              final endTime = data['endTime']?.toString() ??
+                  DateFormat('HH:mm').format(dateTime.add(const Duration(hours: 1)));
+
+              allEvents.add(CombinedScheduleEvent(
+                date: DateTime(dateTime.year, dateTime.month, dateTime.day),
+                startTime: startTime,
+                endTime: endTime,
+                title: title,
+                source: 'events',
+                signkey: data['signkey']?.toString(),
+              ));
             }
           } catch (e) {
-            print('Error parsing Events entry: $e');
+            print('Error parsing Events entry ${doc.id}: $e');
           }
         }
+      } catch (e) {
+        print('Error fetching Events: $e');
       }
 
       // 3. Get personal calendar events
-      final calendarSnapshot = await _firestore
-          .collection('events')
-          .where('uid', isEqualTo: userId)
-          .get();
+      try {
+        final calendarSnapshot = await _firestore
+            .collection('events')
+            .where('uid', isEqualTo: userId)
+            .where('dateTime', isGreaterThanOrEqualTo: Timestamp.fromDate(now))
+            .where('dateTime', isLessThan: Timestamp.fromDate(next90Days))
+            .limit(100)
+            .get();
 
-      for (final doc in calendarSnapshot.docs) {
-        final data = doc.data();
-        try {
-          final dateTime = (data['dateTime'] as Timestamp?)?.toDate();
-          if (dateTime != null &&
-              dateTime.isAfter(now) &&
-              dateTime.isBefore(nextMonth)) {
-            allEvents.add(CombinedScheduleEvent(
-              date: DateTime(dateTime.year, dateTime.month, dateTime.day),
-              startTime: '09:00',
-              endTime: '17:00',
-              title: data['title'] ?? 'Event',
-              source: 'calendar',
-              signkey: _userSignkey,
-            ));
+        print('Found ${calendarSnapshot.docs.length} calendar events');
+
+        for (final doc in calendarSnapshot.docs) {
+          final data = doc.data();
+          try {
+            final dateTime = (data['dateTime'] as Timestamp?)?.toDate();
+            if (dateTime != null) {
+              allEvents.add(CombinedScheduleEvent(
+                date: DateTime(dateTime.year, dateTime.month, dateTime.day),
+                startTime: data['startTime']?.toString() ?? '09:00',
+                endTime: data['endTime']?.toString() ?? '17:00',
+                title: data['title']?.toString() ?? 'Calendar Event',
+                source: 'calendar',
+                signkey: _userSignkey,
+              ));
+            }
+          } catch (e) {
+            print('Error parsing calendar event ${doc.id}: $e');
           }
-        } catch (e) {
-          print('Error parsing calendar event: $e');
         }
+      } catch (e) {
+        print('Error fetching calendar events: $e');
       }
 
       // 4. Get mentee timetable events (same signkey, different userId)
-      if (_userSignkey != null) {
+      try {
         final menteeSnapshot = await _firestore
             .collection('timetable_events')
             .where('signkey', isEqualTo: _userSignkey)
+            .where('date', isGreaterThanOrEqualTo: DateFormat('yyyy-MM-dd').format(now))
+            .limit(100)
             .get();
+
+        print('Found ${menteeSnapshot.docs.length} mentee events');
 
         for (final doc in menteeSnapshot.docs) {
           final data = doc.data();
-          if (data['userId'] != userId) {
+          final menteeUserId = data['userId']?.toString();
+          if (menteeUserId != null && menteeUserId != userId) {
             try {
-              final date = DateTime.parse(data['date']);
-              if (date.isAfter(now) && date.isBefore(nextMonth)) {
-                allEvents.add(CombinedScheduleEvent(
-                  date: date,
-                  startTime: data['startTime'] ?? '09:00',
-                  endTime: data['endTime'] ?? '10:00',
-                  title: '${data['title']} (Mentee)',
-                  source: 'timetable',
-                  signkey: data['signkey'],
-                ));
+              final dateString = data['date'] as String?;
+              if (dateString != null) {
+                final date = DateTime.parse(dateString);
+                if (date.isBefore(next90Days)) {
+                  allEvents.add(CombinedScheduleEvent(
+                    date: date,
+                    startTime: data['startTime']?.toString() ?? '09:00',
+                    endTime: data['endTime']?.toString() ?? '10:00',
+                    title: '${data['title']?.toString() ?? 'Event'} (Mentee)',
+                    source: 'timetable',
+                    signkey: data['signkey']?.toString(),
+                  ));
+                }
               }
             } catch (e) {
-              print('Error parsing mentee event: $e');
+              print('Error parsing mentee event ${doc.id}: $e');
             }
           }
         }
+      } catch (e) {
+        print('Error fetching mentee events: $e');
       }
+
+      print('Total events loaded: ${allEvents.length}');
     } catch (e) {
       print('Error fetching schedule events: $e');
+      _showSnackBar('Error loading schedule events: ${e.toString().replaceAll('Exception: ', '')}', isError: true);
     }
 
     return allEvents;
   }
 
   Future<void> _findAvailableDates() async {
+    // Check if signkey is loaded
+    if (_userSignkey == null || _userSignkey!.isEmpty) {
+      _showSnackBar('Please wait, still loading your profile...', isError: true);
+      await _initializeSignkey();
+      if (_userSignkey == null) {
+        return;
+      }
+    }
+
     // Dismiss keyboard before searching
     FocusManager.instance.primaryFocus?.unfocus();
 
-    if (_userSignkey == null) {
-      _showSnackBar('Unable to find your schedule information', isError: true);
-      return;
-    }
-
-    if (GEMINI_API_KEY == 'YOUR_GEMINI_API_KEY_HERE') {
-      _showSnackBar('Please add your Gemini API key to use AI suggestions',
-          isError: true);
+    // Validate meeting title
+    if (_titleController.text.trim().isEmpty) {
+      _showSnackBar('Please enter a meeting title first', isError: true);
+      _titleFocusNode.requestFocus();
       return;
     }
 
@@ -9994,6 +10555,9 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     });
 
     try {
+      // Initialize Gemini engine if not already done
+      await GeminiMeetingSuggestionEngine.ensureInitialized();
+
       _allEvents = await _getAllScheduleEvents();
 
       // Parse duration from controller
@@ -10013,17 +10577,18 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         meetingDuration: Duration(minutes: durationMinutes),
       );
 
-      final suggestions =
-      await GeminiMeetingSuggestionEngine.findOptimalTimesWithAI(
+      print('Finding optimal times with ${_allEvents.length} events...');
+
+      final suggestions = await GeminiMeetingSuggestionEngine.findOptimalTimesWithAI(
         allEvents: _allEvents,
         frequency: _selectedFrequency,
         userSignkey: _userSignkey!,
-        meetingTitle: _titleController.text.isEmpty
-            ? 'Meeting'
-            : _titleController.text,
+        meetingTitle: _titleController.text.trim(),
         timePreferences: timePreferences,
         numberOfSuggestions: 3,
       );
+
+      print('Found ${suggestions.length} suggestions');
 
       setState(() {
         _availableDates = suggestions;
@@ -10032,7 +10597,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
       });
 
       if (suggestions.isEmpty) {
-        _showSnackBar('No optimal dates found for $durationMinutes minutes. Try changing duration or time preferences.');
+        _showSnackBar('No optimal dates found for $durationMinutes minutes. Try changing duration, time preferences, or frequency.');
       } else {
         final matchesCount = suggestions.where((s) => (s['matchesPreferences'] as bool?) ?? false).length;
         final gapCount = suggestions.where((s) => (s['foundInGap'] as bool?) ?? false).length;
@@ -10040,14 +10605,18 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         if (matchesCount > 0) extraInfo += '($matchesCount match preferences) ';
         if (gapCount > 0) extraInfo += '($gapCount found in gaps)';
 
-        _showSnackBar('Found ${suggestions.length} optimal meeting times for $durationMinutes minutes! $extraInfo');
+        // Show when meetings are scheduled
+        final earliestDate = suggestions.map((s) => s['date'] as DateTime).reduce((a, b) => a.isBefore(b) ? a : b);
+        final earliestDays = earliestDate.difference(DateTime.now()).inDays;
+
+        _showSnackBar('Found ${suggestions.length} optimal meeting times! Earliest: $earliestDays days ahead. $extraInfo');
       }
     } catch (e) {
+      print('Error in _findAvailableDates: $e');
       setState(() {
         _isFindingDates = false;
       });
-      _showSnackBar('Error finding available dates: ${e.toString()}',
-          isError: true);
+      _showSnackBar('Error finding available dates: ${e.toString().replaceAll('Exception: ', '')}', isError: true);
     }
   }
 
@@ -10081,8 +10650,18 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
       return;
     }
 
+    if (_userSignkey == null) {
+      _showSnackBar('User profile not loaded', isError: true);
+      return;
+    }
+
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) {
+      _showSnackBar('User not authenticated', isError: true);
+      return;
+    }
+
     try {
-      final userId = _auth.currentUser!.uid;
       final date = dateInfo['date'] as DateTime;
       final timeSlot = dateInfo['time'] as String;
       final timeParts = timeSlot.split(':');
@@ -10109,55 +10688,60 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
       );
 
       // Create event in Events collection
-      final eventId =
-          '${DateTime.now().millisecondsSinceEpoch}_${date.millisecondsSinceEpoch}';
-      await _firestore.collection('Events').doc(eventId).set({
+      final eventId = '${DateTime.now().millisecondsSinceEpoch}_${date.millisecondsSinceEpoch}';
+      final eventData = {
         'id': eventId,
         'uid': userId,
         'signkey': _userSignkey,
         'title': _titleController.text.trim(),
-        'description':
-        'Meeting: ${_venueController.text.isNotEmpty ? _venueController.text : "No venue specified"}\nDuration: ${durationMinutes} minutes',
+        'description': 'Meeting: ${_venueController.text.isNotEmpty ? _venueController.text : "No venue specified"}\nDuration: ${durationMinutes} minutes\nFrequency: ${_selectedFrequency.title}',
         'venue': _venueController.text.trim(),
         'type': 'meeting',
         'duration': durationMinutes,
+        'frequency': _selectedFrequency.title,
         'timestamp': Timestamp.fromDate(meetingDateTime),
         'isoDate': DateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS").format(meetingDateTime),
         'dateTime': DateFormat('d/M/yyyy • HH:mm').format(meetingDateTime),
         'reminderType': 'immediate',
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      print('Creating event with data: $eventData');
+
+      await _firestore.collection('Events').doc(eventId).set(eventData);
 
       // Add to timetable
       final timetableId = 'timetable_$eventId';
-      await _firestore.collection('timetable_events').doc(timetableId).set({
+      final timetableData = {
         'id': timetableId,
         'userId': userId,
         'signkey': _userSignkey,
         'title': _titleController.text.trim(),
-        'description':
-        'Meeting: ${_venueController.text.isNotEmpty ? _venueController.text : "No venue specified"}\nDuration: ${durationMinutes} minutes',
+        'description': 'Meeting: ${_venueController.text.isNotEmpty ? _venueController.text : "No venue specified"}\nDuration: ${durationMinutes} minutes\nFrequency: ${_selectedFrequency.title}',
         'date': DateFormat('yyyy-MM-dd').format(date),
         'day': DateFormat('EEE').format(date),
-        'startTime':
-        '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
-        'endTime':
-        '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
+        'startTime': '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
+        'endTime': '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
         'duration': durationMinutes,
+        'frequency': _selectedFrequency.title,
         'color': '#2196F3',
         'isMeeting': true,
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      };
 
+      await _firestore.collection('timetable_events').doc(timetableId).set(timetableData);
+
+      final daysAhead = date.difference(DateTime.now()).inDays;
       _showSnackBar(
-        'Meeting scheduled for ${DateFormat('EEE, MMM d').format(date)} at ${startTime.format(context)} (${durationMinutes} min)!',
+        '${_selectedFrequency.title} meeting scheduled for ${DateFormat('EEE, MMM d').format(date)} at ${startTime.format(context)} (${durationMinutes} min, $daysAhead days ahead)!',
       );
 
       _titleController.clear();
       _venueController.clear();
       _findAvailableDates();
     } catch (e) {
-      _showSnackBar('Error scheduling meeting: ${e.toString()}', isError: true);
+      print('Error scheduling meeting: $e');
+      _showSnackBar('Error scheduling meeting: ${e.toString().replaceAll('Exception: ', '')}', isError: true);
     }
   }
 
@@ -10177,12 +10761,13 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         content: Text(message),
         backgroundColor: isError ? Colors.red : Colors.green,
         duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
   void _showFrequencySelectionDialog() {
-    FocusManager.instance.primaryFocus?.unfocus(); // Dismiss keyboard before showing dialog
+    FocusManager.instance.primaryFocus?.unfocus();
     showDialog(
       context: context,
       builder: (context) => _FrequencySelectionDialog(
@@ -10193,7 +10778,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   }
 
   void _showTimeRangeSelectionDialog() {
-    FocusManager.instance.primaryFocus?.unfocus(); // Dismiss keyboard before showing dialog
+    FocusManager.instance.primaryFocus?.unfocus();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -10280,15 +10865,23 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     return null;
   }
 
+  String _getFrequencyTimingInfo() {
+    final now = DateTime.now();
+    final minDate = now.add(Duration(days: _selectedFrequency.minDaysAhead));
+    return 'Planning meetings after ${DateFormat('MMM d').format(minDate)}';
+  }
+
+
+
   @override
   Widget build(BuildContext context) {
     final timeRangeText = _getTimeRangeText();
     final durationText = _durationController.text.trim();
     final durationMinutes = int.tryParse(durationText) ?? 60;
+    final frequencyTimingInfo = _getFrequencyTimingInfo();
 
     return GestureDetector(
       onTap: () {
-        // Only dismiss keyboard if user taps outside of text fields
         if (!_titleFocusNode.hasFocus &&
             !_venueFocusNode.hasFocus &&
             !_durationFocusNode.hasFocus) {
@@ -10298,7 +10891,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text(
-            'AI Meeting Scheduler',
+            'Smart Scheduler',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: Colors.white,
@@ -10308,7 +10901,8 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
           elevation: 0,
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
-            if (_availableDates.isNotEmpty)
+            const SizedBox(width: 8),
+            if (_availableDates.isNotEmpty && !_isFindingDates)
               IconButton(
                 icon: const Icon(Icons.refresh),
                 onPressed: _findAvailableDates,
@@ -10372,8 +10966,8 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                       const SizedBox(height: 12),
                       Text(
                         _userSignkey != null
-                            ? 'Analyzing schedule for signkey: $_userSignkey'
-                            : 'Loading your schedule information...',
+                            ? 'Ready to analyze your schedule'
+                            : 'Loading your profile information...',
                         style: TextStyle(
                           color: Colors.grey.shade600,
                           fontSize: 14,
@@ -10629,6 +11223,33 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                           fontSize: 14,
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.schedule,
+                              size: 16,
+                              color: Colors.orange.shade700,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                frequencyTimingInfo,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange.shade800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -10667,12 +11288,20 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                             ),
                         ],
                       ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Looking for ${_selectedFrequency.title.toLowerCase()} meetings',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 13,
+                        ),
+                      ),
                       if (_isFindingDates)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 40),
                           child: Column(
                             children: [
-                              const CircularProgressIndicator(),
+                              CircularProgressIndicator(color: Colors.blue.shade700),
                               const SizedBox(height: 16),
                               Column(
                                 children: [
@@ -10685,7 +11314,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    'Finding $durationMinutes minute slots (including gaps between events)...',
+                                    'Finding $durationMinutes minute slots...',
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontSize: 12,
@@ -10728,6 +11357,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                               final matchesPreferences = (dateInfo['matchesPreferences'] as bool?) ?? false;
                               final preferenceMatches = List<String>.from(dateInfo['preferenceMatches'] ?? []);
                               final foundInGap = (dateInfo['foundInGap'] as bool?) ?? false;
+                              final daysAhead = (dateInfo['daysAhead'] as int?) ?? date.difference(DateTime.now()).inDays;
                               final isRecommended = index == 0 && matchesPreferences;
 
                               return Container(
@@ -10744,6 +11374,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                                   isRecommended,
                                   index,
                                   durationMinutes,
+                                  daysAhead,
                                 ),
                               );
                             }).toList(),
@@ -10787,7 +11418,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'No $durationMinutes minute slots available. Try changing duration or time preferences',
+                                'No $durationMinutes minute slots available. Try changing duration, time preferences, or frequency',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: Colors.grey.shade600,
@@ -10820,6 +11451,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
       bool isRecommended,
       int index,
       int durationMinutes,
+      int daysAhead,
       ) {
     final timeParts = time.split(':');
     final startTime = TimeOfDay(
@@ -10896,6 +11528,26 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                         '${startTime.format(context)} - ${endTime.format(context)} ($durationMinutes min)',
                         style: TextStyle(
                           color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: daysAhead >= _selectedFrequency.minDaysAhead
+                              ? Colors.green.shade50
+                              : Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '$daysAhead days ahead',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: daysAhead >= _selectedFrequency.minDaysAhead
+                                ? Colors.green.shade800
+                                : Colors.orange.shade800,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],
@@ -11070,13 +11722,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   }
 }
 
-// Helper extension for TimeOfDay
-extension TimeOfDayExtension on TimeOfDay {
-  String format24Hour() {
-    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
-  }
-}
-
 class _FrequencySelectionDialog extends StatelessWidget {
   final MeetingFrequency selectedFrequency;
   final Function(MeetingFrequency) onFrequencySelected;
@@ -11168,12 +11813,32 @@ class _FrequencySelectionDialog extends StatelessWidget {
                             : Colors.grey.shade800,
                       ),
                     ),
-                    subtitle: Text(
-                      frequency.description,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          frequency.description,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Plans ${frequency.minDaysAhead}+ days ahead',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.orange.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     trailing: isSelected
                         ? Icon(
