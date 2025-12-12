@@ -20,6 +20,9 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:uuid/uuid.dart';
 import 'package:hexcolor/hexcolor.dart';
 
+
+
+
 void main()async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
@@ -1199,7 +1202,10 @@ Future <String> getKey(String uid)async {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Colors.blue.shade700, Colors.blue.shade500],
+                colors: [
+                  Color(0xFF667eea),
+                  Color(0xFF764ba2),
+                ],
               ),
             ),
             child: Padding(
@@ -4948,7 +4954,10 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Colors.blue.shade700, Colors.blue.shade500],
+                colors: [
+                  Color(0xFF667eea),
+                  Color(0xFF764ba2),
+                ],
               ),
             ),
             child: Padding(
@@ -6864,8 +6873,20 @@ class _ProfilePageState extends State<ProfilePage> {
             color: Colors.white,
           ),
         ),
-        backgroundColor: Colors.blue.shade700,
+        backgroundColor: Colors.transparent, // Changed to transparent
         elevation: 0,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF667eea), // Purple-blue
+                Color(0xFF764ba2), // Deep purple
+              ],
+            ),
+          ),
+        ),
         actions: [
           IconButton(
             icon: Icon(_isEditing ? Icons.check : Icons.edit),
@@ -6881,7 +6902,11 @@ class _ProfilePageState extends State<ProfilePage> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFF667eea), // Match gradient color
+        ),
+      )
           : SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -6992,17 +7017,17 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildSectionHeader(String title) {
     return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(
-          title,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.grey.shade800,
-          ),
-          textAlign: TextAlign.left,
+      width: double.infinity,
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey.shade800,
         ),
+        textAlign: TextAlign.left,
+      ),
     );
   }
 
@@ -9354,8 +9379,6 @@ class MenteeHelpSupportPage extends StatelessWidget {
     );
   }
 }
-
-
 enum MeetingFrequency {
   daily('Daily', Icons.event_repeat, 'Every day'),
   weekly('Weekly', Icons.calendar_today, 'Once a week'),
@@ -9387,7 +9410,6 @@ enum MeetingFrequency {
     }
   }
 }
-
 class CombinedScheduleEvent {
   final DateTime date;
   final String startTime;
@@ -9425,7 +9447,6 @@ class CombinedScheduleEvent {
     };
   }
 }
-
 class TimePreferences {
   final TimeOfDay? preferredStartTime;
   final TimeOfDay? preferredEndTime;
@@ -9448,13 +9469,11 @@ class TimePreferences {
     };
   }
 }
-
 extension TimeOfDayExtension on TimeOfDay {
   String format24Hour() {
     return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
 }
-
 class GeminiMeetingSuggestionEngine {
   static String? _apiKey;
   static bool _isInitialized = false;
@@ -10243,7 +10262,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
     return score.clamp(0, 100);
   }
 }
-
 class SmartMeetingSchedulerPage extends StatefulWidget {
   const SmartMeetingSchedulerPage({super.key});
 
@@ -10251,7 +10269,6 @@ class SmartMeetingSchedulerPage extends StatefulWidget {
   State<SmartMeetingSchedulerPage> createState() =>
       _SmartMeetingSchedulerPageState();
 }
-
 class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -10897,7 +10914,19 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
               color: Colors.white,
             ),
           ),
-          backgroundColor: Colors.blue.shade700,
+          backgroundColor: Colors.transparent, // Changed from blue to transparent
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF667eea),
+                  Color(0xFF764ba2),
+                ],
+              ),
+            ),
+          ),
           elevation: 0,
           iconTheme: const IconThemeData(color: Colors.white),
           actions: [
@@ -10929,12 +10958,19 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Color(0xFF667eea),
+                                  Color(0xFF764ba2),
+                                ],
+                              ),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Icon(
                               Icons.psychology,
-                              color: Colors.blue.shade700,
+                              color: Colors.white,
                               size: 24,
                             ),
                           ),
@@ -11106,12 +11142,19 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                                 Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        Color(0xFF667eea),
+                                        Color(0xFF764ba2),
+                                      ],
+                                    ),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Icon(
                                     Icons.access_time,
-                                    color: Colors.blue.shade700,
+                                    color: Colors.white,
                                     size: 20,
                                   ),
                                 ),
@@ -11155,7 +11198,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                               'AI will prioritize $timeRangeText',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.blue.shade700,
+                                color: Color(0xFF667eea),
                               ),
                             ),
                           ),
@@ -11191,7 +11234,14 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 8),
                               decoration: BoxDecoration(
-                                color: Colors.blue.shade50,
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Color(0xFF667eea),
+                                    Color(0xFF764ba2),
+                                  ],
+                                ),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
@@ -11199,13 +11249,13 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                                   Icon(
                                     _selectedFrequency.icon,
                                     size: 16,
-                                    color: Colors.blue.shade700,
+                                    color: Colors.white,
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
                                     _selectedFrequency.title,
                                     style: TextStyle(
-                                      color: Colors.blue.shade700,
+                                      color: Colors.white,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -11282,7 +11332,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                               style: ElevatedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 16, vertical: 8),
-                                backgroundColor: Colors.blue.shade700,
+                                backgroundColor: Color(0xFF667eea),
                                 foregroundColor: Colors.white,
                               ),
                             ),
@@ -11301,7 +11351,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                           padding: const EdgeInsets.symmetric(vertical: 40),
                           child: Column(
                             children: [
-                              CircularProgressIndicator(color: Colors.blue.shade700),
+                              CircularProgressIndicator(color: Color(0xFF667eea)),
                               const SizedBox(height: 16),
                               Column(
                                 children: [
@@ -11328,7 +11378,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                                         'Prioritizing $timeRangeText',
                                         style: TextStyle(
                                           fontSize: 12,
-                                          color: Colors.blue.shade600,
+                                          color: Color(0xFF667eea),
                                         ),
                                       ),
                                     ),
@@ -11721,7 +11771,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     );
   }
 }
-
 class _FrequencySelectionDialog extends StatelessWidget {
   final MeetingFrequency selectedFrequency;
   final Function(MeetingFrequency) onFrequencySelected;
