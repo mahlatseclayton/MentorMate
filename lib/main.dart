@@ -12,6 +12,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth_platform_interface/firebase_auth_platform_interface.dart';
 import 'firebase_options.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:math';
 import 'package:image_picker/image_picker.dart';
@@ -44,7 +46,7 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         useMaterial3: true,
       ),
-      home: const WelcomePage(),
+      home: const StartUpPage(),
       debugShowCheckedModeBanner: false,
     );
   }
@@ -55,6 +57,72 @@ class WelcomePage extends StatefulWidget {
   @override
   State<WelcomePage> createState() => _WelcomePageState();
 }
+class StartUpPage extends StatefulWidget {
+  const StartUpPage({super.key});
+
+  @override
+  State<StartUpPage> createState() => _StartUpPageState();
+}
+
+class _StartUpPageState extends State<StartUpPage> {
+  @override
+  void initState() {
+    super.initState();
+    _checkUserStatus();
+  }
+
+  Future<void> _checkUserStatus() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+
+    bool loggedIn = prefs.getBool("loggedIn") ?? false;
+    String? role = prefs.getString("role");
+    String? expiryString = prefs.getString("sessionExpiry");
+
+    // Check expiry
+    if (expiryString != null) {
+      DateTime expiry = DateTime.parse(expiryString);
+      if (DateTime.now().isAfter(expiry)) {
+        loggedIn = false;
+      }
+    }
+
+    if (!loggedIn || role == null) {
+      // USER IS LOGGED OUT
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const WelcomePage()),
+      );
+      return;
+    }
+
+    // USER IS LOGGED IN → CHECK ROLE
+    if (role == "mentor") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const MentorHomePage()),
+      );
+    } else if (role == "mentee") {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const MenteeHomePage()),
+      );
+    } else {
+      // In case of unknown role
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const WelcomePage()),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
 class _WelcomePageState extends State<WelcomePage> {
   @override
   Widget build(BuildContext context) {
@@ -856,7 +924,17 @@ class _SignInPageState extends State<SignInPage> {
   final _formKey = GlobalKey<FormState>();
   final _studentNumberController = TextEditingController();
   final _passwordController = TextEditingController();
-Future<bool> getConfirm()async{
+  void saveLoginSession(String uid, String role) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+
+    prefs.setBool("loggedIn", true);
+    prefs.setString("uid", uid);
+    prefs.setString("role", role);
+
+  }
+
+
+  Future<bool> getConfirm()async{
   User? user= FirebaseAuth.instance.currentUser;
       bool isConfirm=user?.emailVerified ??false;
    return isConfirm;
@@ -884,45 +962,94 @@ Future<bool> getConfirm()async{
     _passwordController.dispose();
     super.dispose();
   }
-  void _login()async{
-    String email=_studentNumberController.text+"@students.wits.ac.za";
-    String password=_passwordController.text;
-    // bool  c=await getConfirm();
-    bool c=true;
+  void _login() async {
+    String email = _studentNumberController.text.trim() + "@students.wits.ac.za";
+    String password = _passwordController.text.trim();
 
-    String? uid;
     try {
+      // Try login
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
-          await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
-          uid=FirebaseAuth.instance.currentUser?.uid;
-          DocumentSnapshot doc=await FirebaseFirestore.instance.collection('users').doc(uid).get();
-          if(c==true){
-            Fluttertoast.showToast(msg: "Login successful.",
-                toastLength: Toast.LENGTH_SHORT,
-                gravity: ToastGravity.BOTTOM);
-            if(doc['role']=='mentee'){
+      String? uid = FirebaseAuth.instance.currentUser?.uid;
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
 
+      Fluttertoast.showToast(
+        msg: "Login successful.",
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM,
+      );
 
-              Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => MenteeHomePage()));
-            }
-            else{
-              Navigator.push(context, MaterialPageRoute(builder: (_)=>MentorHomePage()));
-            }
-            initializeFCMToken();
-          }
-          else{
-            Fluttertoast.showToast(msg: "Verify your email to log in.",
-                toastLength: Toast.LENGTH_SHORT,
-                gravity: ToastGravity.BOTTOM);
-            return;
-          }
+      // Role handling
+      if (doc['role'] == 'mentee') {
+        saveLoginSession(uid!, 'mentee');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => MenteeHomePage()),
+        );
+      } else {
+        saveLoginSession(uid!, 'mentor');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => MentorHomePage()),
+        );
+      }
 
+      initializeFCMToken();
 
-    }on FirebaseAuthException catch(e){
-        Fluttertoast.showToast(msg: "Incorrect password or student number ");
+    } on FirebaseAuthException catch (e) {
+      String message = "Login failed. Please try again.";
+
+      switch (e.code) {
+        case "invalid-email":
+          message = "Invalid student number or email format.";
+          break;
+
+        case "user-not-found":
+          message = "No user found with this student number.";
+          break;
+
+        case "wrong-password":
+          message = "Incorrect password.";
+          break;
+
+        case "user-disabled":
+          message = "Your account has been disabled. Contact support.";
+          break;
+
+        case "too-many-requests":
+          message =
+          "Too many attempts. Try again later or reset your password.";
+          break;
+
+        case "network-request-failed":
+          message = "No internet connection. Please check your network.";
+          break;
+
+        default:
+          message = "Error: ${e.message}";
+      }
+
+      Fluttertoast.showToast(
+        msg: message,
+        toastLength: Toast.LENGTH_LONG,
+        gravity: ToastGravity.BOTTOM,
+      );
+    } catch (e) {
+      // Catches unknown errors (Firestore crash etc.)
+      Fluttertoast.showToast(
+        msg: "Something went wrong. Please try again.",
+        toastLength: Toast.LENGTH_LONG,
+        gravity: ToastGravity.BOTTOM,
+      );
     }
   }
+
 void _changePass()async{
     String email=_studentNumberController.text+"@students.wits.ac.za";
     if(!_studentNumberController.text.isEmpty){
@@ -2088,7 +2215,13 @@ Future <String> getKey(String uid)async {
     );
   }
 void _logout()async{
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  prefs.clear();
   await FirebaseAuth.instance.signOut();
+  Navigator.pushReplacement(
+    context,
+    MaterialPageRoute(builder: (_) => const WelcomePage()),
+  );
 }
 
 Future <String>getUsername()async{
@@ -5118,7 +5251,13 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
     );
   }
   void _logout()async{
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    prefs.clear();
     await FirebaseAuth.instance.signOut();
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const WelcomePage()),
+    );
   }
   void _showLogoutDialog() {
     showDialog(
@@ -6348,6 +6487,9 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
     );
   }
 }
+
+
+// ================= TIMETABLE MODEL =================
 class TimetableEvent {
   final String id;
   final String userId;
@@ -6413,7 +6555,6 @@ class TimetableEvent {
     );
   }
 
-  // CopyWith method
   TimetableEvent copyWith({
     String? id,
     String? userId,
@@ -6440,12 +6581,15 @@ class TimetableEvent {
     );
   }
 }
+
+// ================= PROFILE PAGE =================
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
 }
+
 class _ProfilePageState extends State<ProfilePage> {
   // Profile Controllers
   final TextEditingController _nameController = TextEditingController();
@@ -6457,57 +6601,37 @@ class _ProfilePageState extends State<ProfilePage> {
   final ImagePicker _imagePicker = ImagePicker();
 
   // Timetable Variables
-  DateTime _currentWeekStart = DateTime.now();
   bool _isEditingTimetable = false;
-
-  // Time slots from 6:00 AM to 6:00 PM
-  final List<String> _timeSlots = [
+  List<String> _timeSlots = [
     '6:00', '7:00', '8:00', '9:00', '10:00', '11:00',
     '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'
   ];
 
   // Days of the week
-  final List<String> _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-  // Full day names
-  final Map<String, String> _fullDayNames = {
-    'Mon': 'Monday',
-    'Tue': 'Tuesday',
-    'Wed': 'Wednesday',
-    'Thu': 'Thursday',
-    'Fri': 'Friday',
-    'Sat': 'Saturday',
-    'Sun': 'Sunday',
-  };
+  final List<String> _days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  final List<String> _shortDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   // Firebase Instances
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final Uuid _uuid = const Uuid();
 
+  // Overlay for add button
+  OverlayEntry? _addButtonOverlay;
+
   @override
   void initState() {
     super.initState();
     _loadUserData();
     _loadProfilePicture();
-    // Adjust to start of current week (Monday)
-    _currentWeekStart = _getStartOfWeek(DateTime.now());
   }
 
-  // Helper to get Monday of the week
-  DateTime _getStartOfWeek(DateTime date) {
-    // Monday is 1 in Dart (Monday = 1, Sunday = 7)
-    int dayOfWeek = date.weekday;
-    return date.subtract(Duration(days: dayOfWeek - 1));
-  }
-
-  // Get dates for the current week
-  List<DateTime> _getWeekDates() {
-    List<DateTime> weekDates = [];
-    for (int i = 0; i < 7; i++) {
-      weekDates.add(_currentWeekStart.add(Duration(days: i)));
-    }
-    return weekDates;
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _removeAddButtonOverlay();
+    super.dispose();
   }
 
   // =============== PROFILE METHODS ===============
@@ -6549,12 +6673,6 @@ class _ProfilePageState extends State<ProfilePage> {
     return studentNo.isNotEmpty ? '$studentNo@students.wits.ac.za' : '';
   }
 
-  Future<String?> getUserKey() async {
-    final uid = _auth.currentUser?.uid;
-    DocumentSnapshot doc = await _firestore.collection('users').doc(uid).get();
-    return doc['userKey'];
-  }
-
   Future<void> _loadUserData() async {
     try {
       final name = await getFullName();
@@ -6590,7 +6708,7 @@ class _ProfilePageState extends State<ProfilePage> {
         await _uploadImageToFirebase(File(image.path));
       }
     } catch (e) {
-      _showSnackBar('Failed to pick image', isError: true);
+      _showToast('Failed to pick image', isError: true);
     }
   }
 
@@ -6602,7 +6720,7 @@ class _ProfilePageState extends State<ProfilePage> {
           .child('profile_pictures')
           .child('$userId.jpg');
 
-      _showSnackBar('Uploading image...', showProgress: true);
+      _showToast('Uploading image...');
 
       final UploadTask uploadTask = storageRef.putFile(imageFile);
       final TaskSnapshot snapshot = await uploadTask;
@@ -6613,11 +6731,9 @@ class _ProfilePageState extends State<ProfilePage> {
         _profileImageUrl = downloadUrl;
       });
 
-      _hideCurrentSnackBar();
-      _showSnackBar('Profile picture updated successfully!');
+      _showToast('Profile picture updated!');
     } catch (e) {
-      _hideCurrentSnackBar();
-      _showSnackBar('Failed to upload image', isError: true);
+      _showToast('Failed to upload image', isError: true);
     }
   }
 
@@ -6657,8 +6773,6 @@ class _ProfilePageState extends State<ProfilePage> {
       );
 
       if (shouldDelete == true) {
-        _showSnackBar('Removing...', showProgress: true);
-
         await _firestore.collection('users').doc(userId).update({
           'profile': FieldValue.delete(),
         });
@@ -6667,12 +6781,10 @@ class _ProfilePageState extends State<ProfilePage> {
           _profileImageUrl = "";
         });
 
-        _hideCurrentSnackBar();
-        _showSnackBar('Profile picture removed!');
+        _showToast('Profile picture removed!');
       }
     } catch (e) {
-      _hideCurrentSnackBar();
-      _showSnackBar('Failed to remove picture', isError: true);
+      _showToast('Failed to remove picture', isError: true);
     }
   }
 
@@ -6708,155 +6820,221 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _saveProfile() {
-    _showSnackBar('Profile updated successfully!');
+    _showToast('Profile updated successfully!');
   }
 
   // =============== TIMETABLE METHODS ===============
 
-  Future<void> _addTimetableEvent(TimetableEvent event) async {
-    try {
-      await _firestore.collection('timetable_events').doc(event.id).set(event.toMap());
-    } catch (e) {
-      throw e;
-    }
-  }
-
-  Future<void> _updateTimetableEvent(TimetableEvent event) async {
-    try {
-      await _firestore.collection('timetable_events').doc(event.id).update(event.toMap());
-    } catch (e) {
-      throw e;
-    }
-  }
-
-  Future<void> _deleteTimetableEvent(String eventId) async {
-    try {
-      await _firestore.collection('timetable_events').doc(eventId).delete();
-    } catch (e) {
-      throw e;
-    }
-  }
-
-  // Get all events for the current week
-  Stream<List<TimetableEvent>> _getWeeklyTimetableEvents() {
-    final userId = _auth.currentUser!.uid;
-    final weekStart = DateFormat('yyyy-MM-dd').format(_currentWeekStart);
-    final weekEnd = DateFormat('yyyy-MM-dd').format(_currentWeekStart.add(const Duration(days: 6)));
-
+  Stream<List<TimetableEvent>> _getTimetableEvents() {
+    final uid = _auth.currentUser!.uid;
     return _firestore
         .collection('timetable_events')
-        .where('userId', isEqualTo: userId)
-        .where('date', isGreaterThanOrEqualTo: weekStart)
-        .where('date', isLessThanOrEqualTo: weekEnd)
-        .orderBy('date')
-        .orderBy('startTime')
+        .where('userId', isEqualTo: uid)
         .snapshots()
-        .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => TimetableEvent.fromMap(doc.data() as Map<String, dynamic>))
-          .toList();
-    });
+        .map((s) => s.docs.map((d) => TimetableEvent.fromMap(d.data())).toList());
   }
 
-  void _showAddEventDialog({TimetableEvent? existingEvent, String? day, TimeOfDay? presetTime}) async {
-    final weekDates = _getWeekDates();
-    final selectedDate = existingEvent?.date ??
-        (day != null ? weekDates[_days.indexOf(day)] : weekDates[0]);
+  Future<void> _saveEvent(TimetableEvent event) async {
+    try {
+      if (event.id.isEmpty) {
+        final newEvent = event.copyWith(id: _uuid.v4());
+        await _firestore.collection('timetable_events').doc(newEvent.id).set(newEvent.toMap());
+        _showToast('Event added successfully!');
+      } else {
+        await _firestore.collection('timetable_events').doc(event.id).update(event.toMap());
+        _showToast('Event updated successfully!');
+      }
+    } catch (e) {
+      _showToast('Error saving event', isError: true);
+    }
+  }
 
-    final result = await showDialog(
-      context: context,
-      builder: (context) => AddTimetableEventDialog(
-        existingEvent: existingEvent,
-        selectedDate: selectedDate,
-        presetTime: presetTime,
-        onSave: _handleSaveEvent,
-        onDelete: existingEvent != null ? () => _handleDeleteEvent(existingEvent.id) : null,
+  Future<void> _deleteEvent(String eventId) async {
+    try {
+      await _firestore.collection('timetable_events').doc(eventId).delete();
+      _showToast('Event deleted successfully!');
+    } catch (e) {
+      _showToast('Error deleting event', isError: true);
+    }
+  }
+
+  void _addNewTimeSlot() {
+    setState(() {
+      final lastTime = _timeSlots.last;
+      final lastHour = int.parse(lastTime.split(':')[0]);
+      final newHour = lastHour + 1;
+      if (newHour <= 23) {
+        _timeSlots.add('$newHour:00');
+      }
+    });
+    _showToast('New time slot added');
+  }
+
+  void _removeLastTimeSlot() {
+    setState(() {
+      if (_timeSlots.length > 1) {
+        _timeSlots.removeLast();
+      }
+    });
+    _showToast('Time slot removed');
+  }
+
+  void _showAddEventButton(String day, int hour) {
+    _removeAddButtonOverlay();
+
+    final overlayState = Overlay.of(context);
+    final renderBox = context.findRenderObject() as RenderBox;
+    final position = renderBox.localToGlobal(Offset.zero);
+
+    _addButtonOverlay = OverlayEntry(
+      builder: (context) => Positioned(
+        left: position.dx + 80 + (_shortDays.indexOf(day.substring(0, 3)) * 100),
+        top: position.dy + 100 + (_timeSlots.indexOf('$hour:00') * 60),
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  spreadRadius: 2,
+                ),
+              ],
+              border: Border.all(color: Colors.blue.shade100),
+            ),
+            child: Column(
+              children: [
+                _buildAddEventOption(Icons.add, 'Add Event', () {
+                  _openAddDialog(day, hour);
+                  _removeAddButtonOverlay();
+                }),
+                const SizedBox(height: 4),
+                _buildAddEventOption(Icons.schedule, 'Add Custom Time', () {
+                  _openCustomTimeDialog(day);
+                  _removeAddButtonOverlay();
+                }),
+              ],
+            ),
+          ),
+        ),
       ),
     );
 
-    if (result == true) {
-      setState(() {});
-    }
+    overlayState.insert(_addButtonOverlay!);
+
+    // Auto-remove after 3 seconds
+    Future.delayed(const Duration(seconds: 3), () {
+      _removeAddButtonOverlay();
+    });
   }
 
-  Future<void> _handleSaveEvent(TimetableEvent event) async {
-    try {
-      if (event.id.isEmpty) {
-        event = event.copyWith(id: _uuid.v4());
-        await _addTimetableEvent(event);
-        _showSnackBar('Event added successfully!');
-      } else {
-        await _updateTimetableEvent(event);
-        _showSnackBar('Event updated successfully!');
-      }
-    } catch (e) {
-      _showSnackBar('Error saving event: ${e.toString()}', isError: true);
-    }
-  }
-
-  Future<void> _handleDeleteEvent(String eventId) async {
-    try {
-      bool? shouldDelete = await showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text("Delete Event"),
-          content: const Text("Are you sure you want to delete this event?"),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text("Cancel"),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text("Delete", style: TextStyle(color: Colors.red)),
+  Widget _buildAddEventOption(IconData icon, String text, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: Colors.blue),
+            const SizedBox(width: 8),
+            Text(
+              text,
+              style: const TextStyle(fontSize: 12, color: Colors.blue),
             ),
           ],
         ),
-      );
+      ),
+    );
+  }
 
-      if (shouldDelete == true) {
-        await _deleteTimetableEvent(eventId);
-        _showSnackBar('Event deleted successfully!');
-        setState(() {});
-      }
-    } catch (e) {
-      _showSnackBar('Error deleting event', isError: true);
+  void _removeAddButtonOverlay() {
+    if (_addButtonOverlay != null) {
+      _addButtonOverlay!.remove();
+      _addButtonOverlay = null;
     }
   }
 
-  // Helper to format time for display
-  String _formatTimeForDisplay(String time) {
-    final hour = int.parse(time.split(':')[0]);
-    if (hour == 0) return '12 AM';
-    if (hour < 12) return '$time AM';
-    if (hour == 12) return '12 PM';
-    return '${hour - 12}:00 PM';
+  void _openAddDialog(String day, int hour) {
+    _showToast('Adding event for $day at $hour:00');
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => AddTimetableEventDialog(
+        day: day,
+        presetHour: hour,
+        onSave: _saveEvent,
+      ),
+    );
+  }
+
+  void _openCustomTimeDialog(String day) {
+    showDialog(
+      context: context,
+      builder: (_) => CustomTimeEventDialog(
+        day: day,
+        onSave: _saveEvent,
+      ),
+    );
+  }
+
+  void _openEditDialog(TimetableEvent event) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => EditTimetableEventDialog(
+        event: event,
+        onSave: _saveEvent,
+        onDelete: () => _deleteEvent(event.id),
+      ),
+    );
   }
 
   // =============== HELPER METHODS ===============
 
-  void _showSnackBar(String message, {bool isError = false, bool showProgress = false}) {
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+  void _showToast(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).removeCurrentSnackBar();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: showProgress
-            ? Row(
+        content: Row(
           children: [
-            const CircularProgressIndicator(color: Colors.white),
-            const SizedBox(width: 12),
-            Text(message),
+            Icon(
+              isError ? Icons.error : Icons.check_circle,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
           ],
-        )
-            : Text(message),
+        ),
         backgroundColor: isError ? Colors.red : Colors.green,
-        duration: showProgress ? const Duration(minutes: 1) : const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
 
-  void _hideCurrentSnackBar() {
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+  String _formatTimeForDisplay(String time) {
+    final hour = int.parse(time.split(':')[0]);
+    if (hour == 0) return '12 AM';
+    if (hour < 12) return '$hour:00 AM';
+    if (hour == 12) return '12:00 PM';
+    return '${hour - 12}:00 PM';
   }
 
   // =============== WIDGET BUILDERS ===============
@@ -6873,7 +7051,7 @@ class _ProfilePageState extends State<ProfilePage> {
             color: Colors.white,
           ),
         ),
-        backgroundColor: Colors.transparent, // Changed to transparent
+        backgroundColor: Colors.transparent,
         elevation: 0,
         flexibleSpace: Container(
           decoration: BoxDecoration(
@@ -6881,8 +7059,8 @@ class _ProfilePageState extends State<ProfilePage> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Color(0xFF667eea), // Purple-blue
-                Color(0xFF764ba2), // Deep purple
+                Color(0xFF667eea),
+                Color(0xFF764ba2),
               ],
             ),
           ),
@@ -6904,7 +7082,7 @@ class _ProfilePageState extends State<ProfilePage> {
       body: _isLoading
           ? Center(
         child: CircularProgressIndicator(
-          color: Color(0xFF667eea), // Match gradient color
+          color: Color(0xFF667eea),
         ),
       )
           : SingleChildScrollView(
@@ -6916,7 +7094,7 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildSectionHeader("Personal Information"),
             _buildInfoCard(),
             const SizedBox(height: 32),
-            _buildWeeklyTimetableSection(),
+            _buildWeeklyTimetable(),
             const SizedBox(height: 24),
           ],
         ),
@@ -6939,28 +7117,29 @@ class _ProfilePageState extends State<ProfilePage> {
                   color: Colors.blue.shade300,
                   width: 3,
                 ),
+                gradient: _profileImageUrl.isEmpty
+                    ? LinearGradient(
+                  colors: [Colors.blue.shade100, Colors.blue.shade300],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+                    : null,
               ),
               child: ClipOval(
                 child: _profileImageUrl.isEmpty
-                    ? Container(
-                  color: Colors.blue.shade100,
-                  child: Icon(
-                    Icons.person,
-                    size: 50,
-                    color: Colors.blue.shade700,
-                  ),
+                    ? Icon(
+                  Icons.person,
+                  size: 50,
+                  color: Colors.blue.shade700,
                 )
                     : Image.network(
                   _profileImageUrl,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      color: Colors.blue.shade100,
-                      child: Icon(
-                        Icons.person,
-                        size: 50,
-                        color: Colors.blue.shade700,
-                      ),
+                    return Icon(
+                      Icons.person,
+                      size: 50,
+                      color: Colors.blue.shade700,
                     );
                   },
                 ),
@@ -6974,6 +7153,13 @@ class _ProfilePageState extends State<ProfilePage> {
                   color: Colors.blue.shade700,
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: IconButton(
                   icon: const Icon(Icons.camera_alt, size: 18, color: Colors.white),
@@ -6986,26 +7172,43 @@ class _ProfilePageState extends State<ProfilePage> {
         const SizedBox(height: 16),
         Text(
           _nameController.text,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.bold,
-            color: Colors.grey.shade800,
+            color: Colors.black87,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           decoration: BoxDecoration(
-            color: _role == "Mentor" ? Colors.blue.shade50 : Colors.green.shade50,
+            gradient: _role == "Mentor"
+                ? LinearGradient(
+              colors: [Colors.blue.shade50, Colors.blue.shade100],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            )
+                : LinearGradient(
+              colors: [Colors.green.shade50, Colors.green.shade100],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: _role == "Mentor" ? Colors.blue.shade200 : Colors.green.shade200,
+              color: _role == "Mentor" ? Colors.blue.shade300 : Colors.green.shade300,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Text(
             _role,
             style: TextStyle(
-              color: _role == "Mentor" ? Colors.blue.shade700 : Colors.green.shade700,
+              color: _role == "Mentor" ? Colors.blue.shade800 : Colors.green.shade800,
               fontWeight: FontWeight.w600,
               fontSize: 12,
             ),
@@ -7021,10 +7224,10 @@ class _ProfilePageState extends State<ProfilePage> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         title,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.bold,
-          color: Colors.grey.shade800,
+          color: Colors.black87,
         ),
         textAlign: TextAlign.left,
       ),
@@ -7032,23 +7235,40 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildInfoCard() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.white, Colors.grey.shade50],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            _buildReadOnlyField(
+            _buildInfoRow(
+              icon: Icons.person_outline,
               label: "Full Name",
               value: _nameController.text,
-              icon: Icons.person_outline,
+              iconColor: Colors.blue,
             ),
-            const SizedBox(height: 16),
-            _buildReadOnlyField(
+            const SizedBox(height: 20),
+            Divider(color: Colors.grey.shade200, height: 1),
+            const SizedBox(height: 20),
+            _buildInfoRow(
+              icon: Icons.email_outlined,
               label: "Email Address",
               value: _emailController.text,
-              icon: Icons.email_outlined,
+              iconColor: Colors.green,
             ),
           ],
         ),
@@ -7056,37 +7276,44 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildReadOnlyField({
+  Widget _buildInfoRow({
+    required IconData icon,
     required String label,
     required String value,
-    required IconData icon,
+    required Color iconColor,
   }) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: Colors.grey.shade600, size: 20),
-        const SizedBox(width: 12),
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: iconColor, size: 20),
+        ),
+        const SizedBox(width: 16),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 label,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 12,
-                  color: Colors.grey.shade600,
+                  color: Colors.grey,
                   fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey.shade800,
-                  ),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
                 ),
               ),
             ],
@@ -7096,265 +7323,323 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildWeeklyTimetableSection() {
-    final weekDates = _getWeekDates();
-    final formattedWeekRange = '${DateFormat('MMM d').format(weekDates.first)} - ${DateFormat('MMM d').format(weekDates.last)}';
-
-    return Column(
-      children: [
-        _buildSectionHeader("Weekly Timetable"),
-        Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
+  Widget _buildWeeklyTimetable() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.white, Colors.grey.shade50],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Week navigation and Edit button
+                const Text(
+                  'Weekly Timetable',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
                 Row(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.chevron_left),
-                      onPressed: () {
-                        setState(() {
-                          _currentWeekStart = _currentWeekStart.subtract(const Duration(days: 7));
-                        });
-                      },
-                    ),
-                    Expanded(
-                      child: Column(
+                    // Add Row Button
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
                         children: [
-                          Text(
-                            formattedWeekRange,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          IconButton(
+                            icon: const Icon(Icons.add, size: 18, color: Colors.blue),
+                            onPressed: _addNewTimeSlot,
+                            tooltip: 'Add time slot',
                           ),
-                          Text(
-                            DateFormat('yyyy').format(weekDates.first),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
+                          IconButton(
+                            icon: const Icon(Icons.remove, size: 18, color: Colors.red),
+                            onPressed: _removeLastTimeSlot,
+                            tooltip: 'Remove time slot',
                           ),
                         ],
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.chevron_right),
-                      onPressed: () {
-                        setState(() {
-                          _currentWeekStart = _currentWeekStart.add(const Duration(days: 7));
-                        });
-                      },
-                    ),
-                    IconButton(
-                      icon: Icon(_isEditingTimetable ? Icons.check : Icons.edit),
-                      onPressed: () {
-                        setState(() {
-                          _isEditingTimetable = !_isEditingTimetable;
-                        });
-                      },
+                    const SizedBox(width: 12),
+                    // Edit Toggle Button
+                    Container(
+                      decoration: BoxDecoration(
+                        color: _isEditingTimetable ? Colors.blue : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: IconButton(
+                        icon: Icon(
+                          _isEditingTimetable ? Icons.check : Icons.edit,
+                          size: 20,
+                          color: _isEditingTimetable ? Colors.white : Colors.grey.shade700,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _isEditingTimetable = !_isEditingTimetable;
+                          });
+                          _showToast(
+                              _isEditingTimetable
+                                  ? 'Edit mode enabled'
+                                  : 'Edit mode disabled'
+                          );
+                        },
+                        tooltip: _isEditingTimetable ? 'Save changes' : 'Edit timetable',
+                      ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 16),
-
-                // Weekly Timetable View
-                StreamBuilder<List<TimetableEvent>>(
-                  stream: _getWeeklyTimetableEvents(),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return Center(child: Text('Error: ${snapshot.error}'));
-                    }
-
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    final events = snapshot.data ?? [];
-
-                    return _buildWeeklyTimetableGrid(events, weekDates);
-                  },
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 4),
+            Text(
+              'Tap cells to ${_isEditingTimetable ? 'add/edit events' : 'view details'}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Timetable Grid
+            StreamBuilder<List<TimetableEvent>>(
+              stream: _getTimetableEvents(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+
+                final events = snapshot.data ?? [];
+                return _buildTimetableGrid(events);
+              },
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildWeeklyTimetableGrid(List<TimetableEvent> events, List<DateTime> weekDates) {
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 700),
+  Widget _buildTimetableGrid(List<TimetableEvent> events) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.vertical,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header row with days
-              Container(
-                height: 60,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Empty corner cell
-                    Container(
-                      width: 80,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        color: Colors.grey.shade100,
-                      ),
-                      alignment: Alignment.center,
-                      child: const Text(
+        scrollDirection: Axis.vertical,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Days Header
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(8),
+                  topRight: Radius.circular(8),
+                ),
+              ),
+              child: Row(
+                children: [
+                  // Time column header
+                  Container(
+                    width: 80,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: const BoxDecoration(
+                      color: Colors.blue,
+                      borderRadius: BorderRadius.only(topLeft: Radius.circular(8)),
+                    ),
+                    child: const Center(
+                      child: Text(
                         'Time',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
+                          color: Colors.indigo,
                         ),
                       ),
                     ),
+                  ),
 
-                    // Day headers
-                    ..._days.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final day = entry.value;
-                      final date = weekDates[index];
+                  // Day headers
+                  ..._shortDays.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final day = entry.value;
+                    final isWeekend = index >= 5;
 
-                      return Container(
-                        width: 120,
-                        decoration: BoxDecoration(
-                          border: Border(
-                            right: BorderSide(color: Colors.grey.shade300),
-                            bottom: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          color: date.weekday == DateTime.saturday || date.weekday == DateTime.sunday
-                              ? Colors.grey.shade50
-                              : Colors.white,
-                        ),
-                        padding: const EdgeInsets.all(8),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              _fullDayNames[day]!,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: date.weekday == DateTime.saturday || date.weekday == DateTime.sunday
-                                    ? Colors.red.shade700
-                                    : Colors.blue.shade700,
-                              ),
+                    return Container(
+                      width: 100,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        border: index < _shortDays.length - 1
+                            ? Border(right: BorderSide(color: Colors.blue.shade100, width: 1))
+                            : null,
+                        color: isWeekend ? Colors.red.shade50 : Colors.blue.shade50,
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            day,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: isWeekend ? Colors.red.shade700 : Colors.blue.shade700,
+                              fontSize: 14,
                             ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _days[index],
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isWeekend ? Colors.red.shade500 : Colors.blue.shade500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+
+            // Time slots and events
+            ..._timeSlots.asMap().entries.map((entry) {
+              final index = entry.key;
+              final time = entry.value;
+              final hour = int.parse(time.split(':')[0]);
+              final isLast = index == _timeSlots.length - 1;
+
+              return Container(
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: isLast ? BorderSide.none : BorderSide(color: Colors.grey.shade200),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    // Time slot
+                    Container(
+                      width: 80,
+                      height: 70,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        border: Border(
+                          right: BorderSide(color: Colors.grey.shade300, width: 1),
+                        ),
+                      ),
+                      padding: const EdgeInsets.all(8),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            _formatTimeForDisplay(time),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          if (index < _timeSlots.length - 1)
                             Text(
-                              DateFormat('MMM d').format(date),
+                              'to ${_formatTimeForDisplay(_timeSlots[index + 1])}',
                               style: const TextStyle(
-                                fontSize: 12,
+                                fontSize: 10,
                                 color: Colors.grey,
                               ),
                             ),
-                          ],
+                        ],
+                      ),
+                    ),
+
+                    // Day cells
+                    ..._days.asMap().entries.map((dayEntry) {
+                      final dayIndex = dayEntry.key;
+                      final day = dayEntry.value;
+                      final isWeekend = dayIndex >= 5;
+
+                      // Find events for this time slot and day
+                      final cellEvents = events.where((event) {
+                        final eventDay = event.day;
+                        final eventStartHour = event.startTime.hour;
+                        final eventEndHour = event.endTime.hour;
+
+                        return eventDay.toLowerCase() == day.toLowerCase() &&
+                            eventStartHour <= hour &&
+                            eventEndHour > hour;
+                      }).toList();
+
+                      return GestureDetector(
+                        onTap: () {
+                          if (_isEditingTimetable) {
+                            if (cellEvents.isEmpty) {
+                              _showAddEventButton(day, hour);
+                            } else {
+                              _openEditDialog(cellEvents.first);
+                            }
+                          } else if (cellEvents.isNotEmpty) {
+                            _openEditDialog(cellEvents.first);
+                          }
+                        },
+                        child: Container(
+                          width: 100,
+                          height: 70,
+                          decoration: BoxDecoration(
+                            color: isWeekend ? Colors.grey.shade50 : Colors.white,
+                            border: Border(
+                              right: BorderSide(color: Colors.grey.shade200),
+                            ),
+                          ),
+                          padding: const EdgeInsets.all(4),
+                          child: cellEvents.isEmpty
+                              ? _isEditingTimetable
+                              ? _buildEmptyCell(day, hour)
+                              : null
+                              : _buildEventCell(cellEvents.first),
                         ),
                       );
-                    }).toList(),
+                    }),
                   ],
                 ),
-              ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
 
-              // Time slots and events
-              ..._timeSlots.asMap().entries.map((timeEntry) {
-                final timeIndex = timeEntry.key;
-                final time = timeEntry.value;
-                final hour = int.parse(time.split(':')[0]);
-
-                return Container(
-                  height: 80,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Time slot label
-                      Container(
-                        width: 80,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
-                          color: Colors.grey.shade100,
-                        ),
-                        alignment: Alignment.center,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              _formatTimeForDisplay(time),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                            if (timeIndex < _timeSlots.length - 1)
-                              Text(
-                                'to ${_formatTimeForDisplay(_timeSlots[timeIndex + 1])}',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-
-                      // Day cells for this time slot
-                      ..._days.asMap().entries.map((dayEntry) {
-                        final dayIndex = dayEntry.key;
-                        final day = dayEntry.value;
-                        final date = weekDates[dayIndex];
-
-                        // Find events for this time slot and day
-                        final cellEvents = events.where((event) {
-                          final eventDay = DateFormat('EEE').format(event.date);
-                          final eventStartHour = event.startTime.hour;
-                          final eventEndHour = event.endTime.hour;
-
-                          return eventDay == day &&
-                              eventStartHour <= hour &&
-                              eventEndHour > hour;
-                        }).toList();
-
-                        return GestureDetector(
-                          onTap: _isEditingTimetable ? () {
-                            final presetTime = TimeOfDay(hour: hour, minute: 0);
-                            _showAddEventDialog(day: day, presetTime: presetTime);
-                          } : null,
-                          child: Container(
-                            width: 120,
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade300),
-                              color: date.weekday == DateTime.saturday || date.weekday == DateTime.sunday
-                                  ? Colors.grey.shade50
-                                  : Colors.white,
-                            ),
-                            padding: const EdgeInsets.all(4),
-                            child: cellEvents.isEmpty
-                                ? _isEditingTimetable
-                                ? Center(
-                              child: Icon(
-                                Icons.add,
-                                color: Colors.blue.shade300,
-                                size: 20,
-                              ),
-                            )
-                                : null
-                                : _buildEventCell(cellEvents.first),
-                          ),
-                        );
-                      }).toList(),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ],
-          ),
+  Widget _buildEmptyCell(String day, int hour) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50.withOpacity(0.3),
+        border: Border.all(color: Colors.blue.shade100, width: 1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Center(
+        child: Icon(
+          Icons.add,
+          size: 20,
+          color: Colors.blue,
         ),
       ),
     );
@@ -7363,13 +7648,21 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildEventCell(TimetableEvent event) {
     return Container(
       decoration: BoxDecoration(
-        color: HexColor(event.color).withOpacity(0.2),
-        border: Border.all(color: HexColor(event.color)),
-        borderRadius: BorderRadius.circular(4),
+        color: HexColor(event.color).withOpacity(0.15),
+        border: Border.all(color: HexColor(event.color).withOpacity(0.5), width: 1.5),
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: [
+          BoxShadow(
+            color: HexColor(event.color).withOpacity(0.1),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
             event.title,
@@ -7381,8 +7674,9 @@ class _ProfilePageState extends State<ProfilePage> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+          const SizedBox(height: 2),
           Text(
-            '${event.startTime.format(context)} - ${event.endTime.format(context)}',
+            '${event.startTime.format(context)}-${event.endTime.format(context)}',
             style: TextStyle(
               fontSize: 8,
               color: HexColor(event.color),
@@ -7394,7 +7688,7 @@ class _ProfilePageState extends State<ProfilePage> {
             Text(
               event.description,
               style: TextStyle(
-                fontSize: 8,
+                fontSize: 7,
                 color: HexColor(event.color),
               ),
               maxLines: 1,
@@ -7404,78 +7698,63 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    super.dispose();
-  }
 }
+
+// ================= ADD EVENT DIALOG =================
 class AddTimetableEventDialog extends StatefulWidget {
-  final TimetableEvent? existingEvent;
-  final DateTime selectedDate;
-  final TimeOfDay? presetTime;
+  final String day;
+  final int presetHour;
   final Function(TimetableEvent) onSave;
-  final Function()? onDelete;
 
   const AddTimetableEventDialog({
     super.key,
-    this.existingEvent,
-    required this.selectedDate,
-    this.presetTime,
+    required this.day,
+    required this.presetHour,
     required this.onSave,
-    this.onDelete,
   });
 
   @override
   State<AddTimetableEventDialog> createState() => _AddTimetableEventDialogState();
 }
+
 class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _descriptionController = TextEditingController();
+  final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
 
   late TimeOfDay _startTime;
   late TimeOfDay _endTime;
   String _selectedColor = '#4CAF50';
 
-  final List<String> _colors = [
-    '#4CAF50', // Green
-    '#2196F3', // Blue
-    '#FF9800', // Orange
-    '#F44336', // Red
-    '#9C27B0', // Purple
-    '#00BCD4', // Cyan
+  final List<Map<String, dynamic>> _colors = [
+    {'color': '#4CAF50', 'name': 'Green'},
+    {'color': '#2196F3', 'name': 'Blue'},
+    {'color': '#FF9800', 'name': 'Orange'},
+    {'color': '#F44336', 'name': 'Red'},
+    {'color': '#9C27B0', 'name': 'Purple'},
+    {'color': '#00BCD4', 'name': 'Cyan'},
   ];
 
   @override
   void initState() {
     super.initState();
-
-    if (widget.existingEvent != null) {
-      _titleController.text = widget.existingEvent!.title;
-      _descriptionController.text = widget.existingEvent!.description;
-      _startTime = widget.existingEvent!.startTime;
-      _endTime = widget.existingEvent!.endTime;
-      _selectedColor = widget.existingEvent!.color;
-    } else if (widget.presetTime != null) {
-      _startTime = widget.presetTime!;
-      _endTime = TimeOfDay(
-        hour: widget.presetTime!.hour + 1,
-        minute: widget.presetTime!.minute,
-      );
-    } else {
-      _startTime = const TimeOfDay(hour: 9, minute: 0);
-      _endTime = const TimeOfDay(hour: 10, minute: 0);
-    }
+    _startTime = TimeOfDay(hour: widget.presetHour, minute: 0);
+    _endTime = TimeOfDay(hour: widget.presetHour + 1, minute: 0);
   }
 
   Future<void> _selectStartTime() async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
       initialTime: _startTime,
-      initialEntryMode: TimePickerEntryMode.input,
+      builder: (BuildContext context, Widget? child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF667eea),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
 
     if (picked != null && picked != _startTime) {
@@ -7496,7 +7775,16 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
       initialTime: _endTime,
-      initialEntryMode: TimePickerEntryMode.input,
+      builder: (BuildContext context, Widget? child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF667eea),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
 
     if (picked != null && picked != _endTime) {
@@ -7506,215 +7794,579 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
     }
   }
 
-  Future<void> _saveEvent() async {
-    if (_formKey.currentState!.validate()) {
-      try {
-        final auth = FirebaseAuth.instance;
-        final firestore = FirebaseFirestore.instance;
+  Future<String> _getUserKey() async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    return doc['signkey'] ?? uid;
+  }
 
-        // Get user key from Firestore
-        final userDoc = await firestore
-            .collection('users')
-            .doc(auth.currentUser!.uid)
-            .get();
+  DateTime _getDateForDay(String day) {
+    final now = DateTime.now();
+    final dayIndex = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        .indexOf(day);
+    final currentDayIndex = now.weekday - 1;
+    return now.add(Duration(days: dayIndex - currentDayIndex));
+  }
 
-        final userKey = userDoc['signkey'] ?? auth.currentUser!.uid;
-
-        final event = TimetableEvent(
-          id: widget.existingEvent?.id ?? '',
-          userId: auth.currentUser!.uid,
-          signkey: userKey,
-          title: _titleController.text.trim(),
-          description: _descriptionController.text.trim(),
-          date: widget.selectedDate,
-          startTime: _startTime,
-          endTime: _endTime,
-          color: _selectedColor,
-          day: DateFormat('EEE').format(widget.selectedDate),
-        );
-
-        await widget.onSave(event);
-        Navigator.of(context).pop(true);
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red,
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Add Event',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
           ),
+          Text(
+            widget.day,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Form
+          TextField(
+            controller: _titleController,
+            decoration: InputDecoration(
+              labelText: 'Event Title *',
+              labelStyle: const TextStyle(color: Colors.grey),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFF667eea)),
+              ),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              prefixIcon: const Icon(Icons.title, color: Colors.grey),
+            ),
+            style: const TextStyle(fontSize: 15),
+          ),
+          const SizedBox(height: 16),
+
+          TextField(
+            controller: _descriptionController,
+            decoration: InputDecoration(
+              labelText: 'Description (Optional)',
+              labelStyle: const TextStyle(color: Colors.grey),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFF667eea)),
+              ),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              prefixIcon: const Icon(Icons.description, color: Colors.grey),
+            ),
+            maxLines: 3,
+            style: const TextStyle(fontSize: 15),
+          ),
+          const SizedBox(height: 20),
+
+          // Time Selection
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Start Time',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: _selectStartTime,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _startTime.format(context),
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const Icon(Icons.access_time, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'End Time',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: _selectEndTime,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _endTime.format(context),
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const Icon(Icons.access_time, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Color Selection
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Color',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 60,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _colors.length,
+                  separatorBuilder: (context, index) => const SizedBox(width: 12),
+                  itemBuilder: (context, index) {
+                    final colorData = _colors[index];
+                    final color = colorData['color'] as String;
+                    final name = colorData['name'] as String;
+
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedColor = color;
+                        });
+                      },
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: HexColor(color),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: _selectedColor == color
+                                    ? Colors.black
+                                    : Colors.transparent,
+                                width: 3,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: HexColor(color).withOpacity(0.3),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: _selectedColor == color ? Colors.black : Colors.grey,
+                              fontWeight: _selectedColor == color ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+
+          // Buttons
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    side: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    if (_titleController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please enter a title'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+
+                    try {
+                      final auth = FirebaseAuth.instance;
+                      final userKey = await _getUserKey();
+
+                      final event = TimetableEvent(
+                        id: '',
+                        userId: auth.currentUser!.uid,
+                        signkey: userKey,
+                        title: _titleController.text.trim(),
+                        description: _descriptionController.text.trim(),
+                        date: _getDateForDay(widget.day),
+                        startTime: _startTime,
+                        endTime: _endTime,
+                        color: _selectedColor,
+                        day: widget.day,
+                      );
+
+                      await widget.onSave(event);
+                      Navigator.pop(context);
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    backgroundColor: const Color(0xFF667eea),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add, size: 18, color: Colors.white),
+                      SizedBox(width: 8),
+                      Text(
+                        'Add Event',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+}
+
+// ================= CUSTOM TIME DIALOG =================
+class CustomTimeEventDialog extends StatefulWidget {
+  final String day;
+  final Function(TimetableEvent) onSave;
+
+  const CustomTimeEventDialog({
+    super.key,
+    required this.day,
+    required this.onSave,
+  });
+
+  @override
+  State<CustomTimeEventDialog> createState() => _CustomTimeEventDialogState();
+}
+
+class _CustomTimeEventDialogState extends State<CustomTimeEventDialog> {
+  final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
+
+  TimeOfDay _startTime = TimeOfDay.now();
+  TimeOfDay _endTime = TimeOfDay(hour: TimeOfDay.now().hour + 1, minute: 0);
+  String _selectedColor = '#2196F3';
+
+  final List<String> _colors = [
+    '#4CAF50', '#2196F3', '#FF9800', '#F44336', '#9C27B0', '#00BCD4'
+  ];
+
+  Future<void> _selectStartTime() async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _startTime,
+      builder: (BuildContext context, Widget? child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(primary: Color(0xFF667eea)),
+          ),
+          child: child!,
         );
-      }
+      },
+    );
+
+    if (picked != null && picked != _startTime) {
+      setState(() {
+        _startTime = picked;
+        if (_endTime.hour < _startTime.hour ||
+            (_endTime.hour == _startTime.hour && _endTime.minute <= _startTime.minute)) {
+          _endTime = TimeOfDay(
+            hour: _startTime.hour + 1,
+            minute: _startTime.minute,
+          );
+        }
+      });
     }
+  }
+
+  Future<void> _selectEndTime() async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _endTime,
+      builder: (BuildContext context, Widget? child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(primary: Color(0xFF667eea)),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && picked != _endTime) {
+      setState(() {
+        _endTime = picked;
+      });
+    }
+  }
+
+  Future<String> _getUserKey() async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    return doc['signkey'] ?? uid;
+  }
+
+  DateTime _getDateForDay(String day) {
+    final now = DateTime.now();
+    final dayIndex = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        .indexOf(day);
+    final currentDayIndex = now.weekday - 1;
+    return now.add(Duration(days: dayIndex - currentDayIndex));
   }
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: 500,
-          maxHeight: 600,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.existingEvent == null ? 'Add Timetable Event' : 'Edit Event',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Add Event with Custom Time',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        TextFormField(
-                          controller: _titleController,
-                          decoration: const InputDecoration(
-                            labelText: 'Title *',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter a title';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _descriptionController,
-                          decoration: const InputDecoration(
-                            labelText: 'Description (Optional)',
-                            border: OutlineInputBorder(),
-                          ),
-                          maxLines: 3,
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Start Time *'),
-                                  const SizedBox(height: 8),
-                                  OutlinedButton(
-                                    onPressed: _selectStartTime,
-                                    child: Text(
-                                      _startTime.format(context),
-                                      style: const TextStyle(fontSize: 16),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('End Time *'),
-                                  const SizedBox(height: 8),
-                                  OutlinedButton(
-                                    onPressed: _selectEndTime,
-                                    child: Text(
-                                      _endTime.format(context),
-                                      style: const TextStyle(fontSize: 16),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Color'),
-                            const SizedBox(height: 8),
-                            SizedBox(
-                              height: 50,
-                              child: ListView.separated(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: _colors.length,
-                                separatorBuilder: (context, index) => const SizedBox(width: 8),
-                                itemBuilder: (context, index) {
-                                  final color = _colors[index];
-                                  return GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedColor = color;
-                                      });
-                                    },
-                                    child: Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        color: HexColor(color),
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: _selectedColor == color
-                                              ? Colors.black
-                                              : Colors.transparent,
-                                          width: 3,
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Date: ${DateFormat('EEE, MMM d, yyyy').format(widget.selectedDate)}',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              widget.day,
+              style: const TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 20),
+
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                labelText: 'Title *',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Start Time'),
+                      const SizedBox(height: 4),
+                      OutlinedButton(
+                        onPressed: _selectStartTime,
+                        child: Text(_startTime.format(context)),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  if (widget.onDelete != null)
-                    TextButton(
-                      onPressed: () {
-                        widget.onDelete!();
-                        Navigator.of(context).pop(true);
-                      },
-                      child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('End Time'),
+                      const SizedBox(height: 4),
+                      OutlinedButton(
+                        onPressed: _selectEndTime,
+                        child: Text(_endTime.format(context)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            const Text('Color'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: _colors.map((color) {
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedColor = color),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: HexColor(color),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _selectedColor == color ? Colors.black : Colors.transparent,
+                        width: 2,
+                      ),
                     ),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: const Text('Cancel'),
                   ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: _saveEvent,
-                    child: const Text('Save'),
-                  ),
-                ],
-              ),
-            ],
-          ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 24),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (_titleController.text.trim().isEmpty) return;
+
+                    try {
+                      final userKey = await _getUserKey();
+                      final event = TimetableEvent(
+                        id: '',
+                        userId: FirebaseAuth.instance.currentUser!.uid,
+                        signkey: userKey,
+                        title: _titleController.text.trim(),
+                        description: _descriptionController.text.trim(),
+                        date: _getDateForDay(widget.day),
+                        startTime: _startTime,
+                        endTime: _endTime,
+                        color: _selectedColor,
+                        day: widget.day,
+                      );
+
+                      await widget.onSave(event);
+                      Navigator.pop(context);
+                    } catch (e) {
+                      // Handle error
+                    }
+                  },
+                  child: const Text('Add Event'),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -7726,6 +8378,458 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
     _descriptionController.dispose();
     super.dispose();
   }
+}
+
+// ================= EDIT EVENT DIALOG =================
+class EditTimetableEventDialog extends StatefulWidget {
+  final TimetableEvent event;
+  final Function(TimetableEvent) onSave;
+  final Function() onDelete;
+
+  const EditTimetableEventDialog({
+    super.key,
+    required this.event,
+    required this.onSave,
+    required this.onDelete,
+  });
+
+  @override
+  State<EditTimetableEventDialog> createState() => _EditTimetableEventDialogState();
+}
+
+class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
+  final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
+
+  late TimeOfDay _startTime;
+  late TimeOfDay _endTime;
+  late String _selectedColor;
+
+  final List<Map<String, dynamic>> _colors = [
+    {'color': '#4CAF50', 'name': 'Green'},
+    {'color': '#2196F3', 'name': 'Blue'},
+    {'color': '#FF9800', 'name': 'Orange'},
+    {'color': '#F44336', 'name': 'Red'},
+    {'color': '#9C27B0', 'name': 'Purple'},
+    {'color': '#00BCD4', 'name': 'Cyan'},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController.text = widget.event.title;
+    _descriptionController.text = widget.event.description;
+    _startTime = widget.event.startTime;
+    _endTime = widget.event.endTime;
+    _selectedColor = widget.event.color;
+  }
+
+  Future<void> _selectStartTime() async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _startTime,
+      builder: (BuildContext context, Widget? child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF667eea),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && picked != _startTime) {
+      setState(() {
+        _startTime = picked;
+      });
+    }
+  }
+
+  Future<void> _selectEndTime() async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _endTime,
+      builder: (BuildContext context, Widget? child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF667eea),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && picked != _endTime) {
+      setState(() {
+        _endTime = picked;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Edit Event',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade800,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          Text(
+            '${widget.event.day} • ${_startTime.format(context)}-${_endTime.format(context)}',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Form
+          TextField(
+            controller: _titleController,
+            decoration: InputDecoration(
+              labelText: 'Event Title *',
+              labelStyle: const TextStyle(color: Colors.grey),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFF667eea)),
+              ),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              prefixIcon: const Icon(Icons.title, color: Colors.grey),
+            ),
+            style: const TextStyle(fontSize: 15),
+          ),
+          const SizedBox(height: 16),
+
+          TextField(
+            controller: _descriptionController,
+            decoration: InputDecoration(
+              labelText: 'Description',
+              labelStyle: const TextStyle(color: Colors.grey),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFF667eea)),
+              ),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              prefixIcon: const Icon(Icons.description, color: Colors.grey),
+            ),
+            maxLines: 3,
+            style: const TextStyle(fontSize: 15),
+          ),
+          const SizedBox(height: 20),
+
+          // Time Selection
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Start Time',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: _selectStartTime,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _startTime.format(context),
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const Icon(Icons.access_time, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'End Time',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: _selectEndTime,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _endTime.format(context),
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const Icon(Icons.access_time, color: Colors.grey),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Color Selection
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Color',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 60,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _colors.length,
+                  separatorBuilder: (context, index) => const SizedBox(width: 12),
+                  itemBuilder: (context, index) {
+                    final colorData = _colors[index];
+                    final color = colorData['color'] as String;
+                    final name = colorData['name'] as String;
+
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedColor = color;
+                        });
+                      },
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: HexColor(color),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: _selectedColor == color
+                                    ? Colors.black
+                                    : Colors.transparent,
+                                width: 3,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: HexColor(color).withOpacity(0.3),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: _selectedColor == color ? Colors.black : Colors.grey,
+                              fontWeight: _selectedColor == color ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+
+          // Buttons
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: widget.onDelete,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    side: const BorderSide(color: Colors.red),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.delete, size: 18, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text(
+                        'Delete',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    side: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    if (_titleController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please enter a title'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+
+                    try {
+                      final updatedEvent = widget.event.copyWith(
+                        title: _titleController.text.trim(),
+                        description: _descriptionController.text.trim(),
+                        startTime: _startTime,
+                        endTime: _endTime,
+                        color: _selectedColor,
+                      );
+
+                      await widget.onSave(updatedEvent);
+                      Navigator.pop(context);
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    backgroundColor: const Color(0xFF667eea),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.save, size: 18, color: Colors.white),
+                      SizedBox(width: 8),
+                      Text(
+                        'Save',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+}
+
+// ================= COLOR HELPER =================
+class HexColor extends Color {
+  HexColor(final String hex) : super(int.parse(hex.replaceFirst('#', '0xff')));
 }
 class ViewMentorPage extends StatefulWidget {
   const ViewMentorPage({super.key});
