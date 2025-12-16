@@ -13,7 +13,7 @@ import 'package:firebase_auth_platform_interface/firebase_auth_platform_interfac
 import 'firebase_options.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:math';
 import 'package:image_picker/image_picker.dart';
@@ -6599,7 +6599,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String _profileImageUrl = "";
   bool _isLoading = true;
   final ImagePicker _imagePicker = ImagePicker();
-
+  String _signkey = "";
   // Timetable Variables
   bool _isEditingTimetable = false;
   List<String> _timeSlots = [
@@ -6673,27 +6673,6 @@ class _ProfilePageState extends State<ProfilePage> {
     return studentNo.isNotEmpty ? '$studentNo@students.wits.ac.za' : '';
   }
 
-  Future<void> _loadUserData() async {
-    try {
-      final name = await getFullName();
-      final email = await getEmail();
-      final role = await getRole();
-
-      setState(() {
-        _nameController.text = name;
-        _emailController.text = email;
-        _role = role;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _nameController.text = 'Error loading name';
-        _emailController.text = 'Error loading email';
-        _role = 'Unknown';
-        _isLoading = false;
-      });
-    }
-  }
 
   Future<void> _pickImageFromGallery() async {
     try {
@@ -7182,7 +7161,7 @@ class _ProfilePageState extends State<ProfilePage> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           decoration: BoxDecoration(
-            gradient: _role == "Mentor"
+            gradient: _role == "mentor"
                 ? LinearGradient(
               colors: [Colors.blue.shade50, Colors.blue.shade100],
               begin: Alignment.topLeft,
@@ -7195,7 +7174,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: _role == "Mentor" ? Colors.blue.shade300 : Colors.green.shade300,
+              color: _role == "mentor" ? Colors.blue.shade300 : Colors.green.shade300,
             ),
             boxShadow: [
               BoxShadow(
@@ -7208,14 +7187,176 @@ class _ProfilePageState extends State<ProfilePage> {
           child: Text(
             _role,
             style: TextStyle(
-              color: _role == "Mentor" ? Colors.blue.shade800 : Colors.green.shade800,
+              color: _role == "mentor" ? Colors.blue.shade800 : Colors.green.shade800,
               fontWeight: FontWeight.w600,
               fontSize: 12,
             ),
           ),
         ),
+
+        // Add signkey display for mentors only
+        if (_role == "mentor" && _signkey.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.purple.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.purple.shade200, width: 1.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.vpn_key,
+                        size: 16,
+                        color: Colors.purple,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Your Signkey',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.purple,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.content_copy, size: 18),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: _signkey));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Signkey copied to clipboard'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      },
+                      padding: EdgeInsets.zero,
+                      tooltip: 'Copy signkey',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _signkey,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.black87,
+                            fontFamily: 'Monospace',
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(
+                        Icons.shield_outlined,
+                        size: 16,
+                        color: Colors.purple,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Share this signkey with your mentees for scheduling',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
+  }
+
+  // =============== FETCH SIGNKEY METHOD ===============
+  // =============== FETCH SIGNKEY METHOD ===============
+  Future<void> _loadSignkey() async {
+    try {
+      final userId = _auth.currentUser!.uid;
+      final DocumentSnapshot userDoc = await _firestore
+          .collection('users')
+          .doc(userId)
+          .get();
+
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>;
+        final loadedSignkey = userData['signkey'] as String?; // Use different variable name
+
+        print('Loaded signkey from DB: $loadedSignkey'); // Add debug print
+
+        if (loadedSignkey != null && loadedSignkey.isNotEmpty) {
+          setState(() {
+            _signkey = loadedSignkey; // Set the class variable
+          });
+          print('Signkey set to: $_signkey');
+        } else {
+          print('No signkey found in user document or signkey is empty');
+        }
+      } else {
+        print('User document does not exist');
+      }
+    } catch (e) {
+      print('Error loading signkey: $e');
+    }
+  }
+
+  Future<void> _loadUserData() async {
+    try {
+      final name = await getFullName();
+      final email = await getEmail();
+      final role = await getRole();
+
+      setState(() {
+        _nameController.text = name;
+        _emailController.text = email;
+        _role = role;
+      });
+
+      // Load signkey after role is determined
+      if (_role == "mentor") {
+        await _loadSignkey();
+      }
+
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _nameController.text = 'Error loading name';
+        _emailController.text = 'Error loading email';
+        _role = 'Unknown';
+        _isLoading = false;
+      });
+    }
   }
 
   Widget _buildSectionHeader(String title) {
@@ -10483,6 +10624,8 @@ class MenteeHelpSupportPage extends StatelessWidget {
     );
   }
 }
+
+// ================= ENUM AND HELPER CLASSES =================
 enum MeetingFrequency {
   daily('Daily', Icons.event_repeat, 'Every day'),
   weekly('Weekly', Icons.calendar_today, 'Once a week'),
@@ -10514,6 +10657,7 @@ enum MeetingFrequency {
     }
   }
 }
+
 class CombinedScheduleEvent {
   final DateTime date;
   final String startTime;
@@ -10551,6 +10695,7 @@ class CombinedScheduleEvent {
     };
   }
 }
+
 class TimePreferences {
   final TimeOfDay? preferredStartTime;
   final TimeOfDay? preferredEndTime;
@@ -10573,11 +10718,15 @@ class TimePreferences {
     };
   }
 }
+
+// ================= EXTENSIONS =================
 extension TimeOfDayExtension on TimeOfDay {
   String format24Hour() {
     return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
 }
+
+// ================= GEMINI MEETING SUGGESTION ENGINE =================
 class GeminiMeetingSuggestionEngine {
   static String? _apiKey;
   static bool _isInitialized = false;
@@ -11366,6 +11515,8 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
     return score.clamp(0, 100);
   }
 }
+
+// ================= SMART MEETING SCHEDULER PAGE =================
 class SmartMeetingSchedulerPage extends StatefulWidget {
   const SmartMeetingSchedulerPage({super.key});
 
@@ -11373,6 +11524,7 @@ class SmartMeetingSchedulerPage extends StatefulWidget {
   State<SmartMeetingSchedulerPage> createState() =>
       _SmartMeetingSchedulerPageState();
 }
+
 class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -11498,6 +11650,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
             .collection('timetable_events')
             .where('userId', isEqualTo: userId)
             .where('date', isGreaterThanOrEqualTo: DateFormat('yyyy-MM-dd').format(now))
+            .where('date', isLessThanOrEqualTo: DateFormat('yyyy-MM-dd').format(next90Days))
             .limit(100)
             .get();
 
@@ -11509,16 +11662,14 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
             final dateString = data['date'] as String?;
             if (dateString != null) {
               final date = DateTime.parse(dateString);
-              if (date.isBefore(next90Days)) {
-                allEvents.add(CombinedScheduleEvent(
-                  date: date,
-                  startTime: data['startTime']?.toString() ?? '09:00',
-                  endTime: data['endTime']?.toString() ?? '10:00',
-                  title: data['title']?.toString() ?? 'Timetable Event',
-                  source: 'timetable',
-                  signkey: data['signkey']?.toString(),
-                ));
-              }
+              allEvents.add(CombinedScheduleEvent(
+                date: date,
+                startTime: data['startTime']?.toString() ?? '09:00',
+                endTime: data['endTime']?.toString() ?? '10:00',
+                title: data['title']?.toString() ?? 'Timetable Event',
+                source: 'timetable',
+                signkey: data['signkey']?.toString(),
+              ));
             }
           } catch (e) {
             print('Error parsing timetable event ${doc.id}: $e');
@@ -11608,6 +11759,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
             .collection('timetable_events')
             .where('signkey', isEqualTo: _userSignkey)
             .where('date', isGreaterThanOrEqualTo: DateFormat('yyyy-MM-dd').format(now))
+            .where('date', isLessThanOrEqualTo: DateFormat('yyyy-MM-dd').format(next90Days))
             .limit(100)
             .get();
 
@@ -11621,16 +11773,14 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
               final dateString = data['date'] as String?;
               if (dateString != null) {
                 final date = DateTime.parse(dateString);
-                if (date.isBefore(next90Days)) {
-                  allEvents.add(CombinedScheduleEvent(
-                    date: date,
-                    startTime: data['startTime']?.toString() ?? '09:00',
-                    endTime: data['endTime']?.toString() ?? '10:00',
-                    title: '${data['title']?.toString() ?? 'Event'} (Mentee)',
-                    source: 'timetable',
-                    signkey: data['signkey']?.toString(),
-                  ));
-                }
+                allEvents.add(CombinedScheduleEvent(
+                  date: date,
+                  startTime: data['startTime']?.toString() ?? '09:00',
+                  endTime: data['endTime']?.toString() ?? '10:00',
+                  title: '${data['title']?.toString() ?? 'Event'} (Mentee)',
+                  source: 'timetable',
+                  signkey: data['signkey']?.toString(),
+                ));
               }
             } catch (e) {
               print('Error parsing mentee event ${doc.id}: $e');
@@ -11831,24 +11981,20 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
 
       await _firestore.collection('Events').doc(eventId).set(eventData);
 
-      // Add to timetable
+      // Add to timetable using the new model with day field
       final timetableId = 'timetable_$eventId';
-      final timetableData = {
-        'id': timetableId,
-        'userId': userId,
-        'signkey': _userSignkey,
-        'title': _titleController.text.trim(),
-        'description': 'Meeting: ${_venueController.text.isNotEmpty ? _venueController.text : "No venue specified"}\nDuration: ${durationMinutes} minutes\nFrequency: ${_selectedFrequency.title}',
-        'date': DateFormat('yyyy-MM-dd').format(date),
-        'day': DateFormat('EEE').format(date),
-        'startTime': '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
-        'endTime': '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
-        'duration': durationMinutes,
-        'frequency': _selectedFrequency.title,
-        'color': '#2196F3',
-        'isMeeting': true,
-        'createdAt': FieldValue.serverTimestamp(),
-      };
+      final timetableData = TimetableEvent(
+        id: timetableId,
+        userId: userId,
+        signkey: _userSignkey!,
+        title: _titleController.text.trim(),
+        description: 'Meeting: ${_venueController.text.isNotEmpty ? _venueController.text : "No venue specified"}\nDuration: ${durationMinutes} minutes\nFrequency: ${_selectedFrequency.title}',
+        date: date,
+        startTime: startTime,
+        endTime: endTime,
+        color: '#2196F3',
+        day: DateFormat('EEEE').format(date), // Full day name (Monday, Tuesday, etc.)
+      ).toMap();
 
       await _firestore.collection('timetable_events').doc(timetableId).set(timetableData);
 
@@ -11992,8 +12138,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     return 'Planning meetings after ${DateFormat('MMM d').format(minDate)}';
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     final timeRangeText = _getTimeRangeText();
@@ -12018,7 +12162,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
               color: Colors.white,
             ),
           ),
-          backgroundColor: Colors.transparent, // Changed from blue to transparent
+          backgroundColor: Colors.transparent,
           flexibleSpace: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -12072,7 +12216,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                               ),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Icon(
+                            child: const Icon(
                               Icons.psychology,
                               color: Colors.white,
                               size: 24,
@@ -12256,7 +12400,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                                     ),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: Icon(
+                                  child: const Icon(
                                     Icons.access_time,
                                     color: Colors.white,
                                     size: 20,
@@ -12790,14 +12934,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                     ),
                   ),
                 const Spacer(),
-                Text(
-                  '$score%',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade700,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+
               ],
             ),
             if (reasoning.isNotEmpty && reasoning.length < 100) ...[
@@ -12875,6 +13012,8 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     );
   }
 }
+
+// ================= FREQUENCY SELECTION DIALOG =================
 class _FrequencySelectionDialog extends StatelessWidget {
   final MeetingFrequency selectedFrequency;
   final Function(MeetingFrequency) onFrequencySelected;
