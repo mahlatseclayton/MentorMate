@@ -67,11 +67,11 @@ dev_dependencies:
 
 
 flutter_icons:
-  image_path: "assets/logo.png"
+  image_path: "assets/mmc_logo.jpeg"
   android: true
   ios: true
   adaptive_icon_background: "#ffffff"
-  adaptive_icon_foreground: "assets/logo.png"
+  adaptive_icon_foreground: "assets/mmc_logo.jpeg"
   min_sdk_android: 21
 
 

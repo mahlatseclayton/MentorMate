@@ -2270,7 +2270,7 @@ void _logout()async{
   await FirebaseAuth.instance.signOut();
   Navigator.pushReplacement(
     context,
-    MaterialPageRoute(builder: (_) => const WelcomePage()),
+    MaterialPageRoute(builder: (_) => const SignInPage()),
   );
 }
 
@@ -2599,7 +2599,7 @@ Future <String>getUsername()async{
                   child: Center(child: CircularProgressIndicator()),
                 );
               }
-                 if (snapshot.hasError) {
+              if (snapshot.hasError) {
                 return Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -2779,8 +2779,6 @@ Future <String>getUsername()async{
                 StreamBuilder<QuerySnapshot>(
                   stream: announcementsRef
                       .where('createdBy', isEqualTo: currentUserId)
-                      .orderBy('createdAt', descending: true)
-                      .limit(5)
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
@@ -2791,14 +2789,70 @@ Future <String>getUsername()async{
                       return Center(child: CircularProgressIndicator());
                     }
 
-                    final announcements = snapshot.data!.docs;
+                    final allAnnouncements = snapshot.data!.docs;
+                    final now = DateTime.now();
 
-                    if (announcements.isEmpty) {
-                      return Text('No announcements yet');
+                    final filteredAnnouncements = allAnnouncements.where((doc) {
+                      final announcement = doc.data() as Map<String, dynamic>;
+
+                      final expiresAt = announcement['expiresAt'] as Timestamp?;
+                      if (expiresAt == null) {
+                        return false;
+                      }
+
+                      final expiresDateTime = expiresAt.toDate();
+                      return expiresDateTime.isAfter(now);
+                    }).toList();
+
+                    if (filteredAnnouncements.isEmpty) {
+                      return Column(
+                        children: [
+                          Icon(
+                            Icons.calendar_today,
+                            size: 64,
+                            color: Colors.grey[300],
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            'No upcoming announcements or meetings',
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 16,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      );
                     }
+
+                    filteredAnnouncements.sort((a, b) {
+                      final aExpiresAt = (a.data() as Map<String, dynamic>)['expiresAt'] as Timestamp;
+                      final bExpiresAt = (b.data() as Map<String, dynamic>)['expiresAt'] as Timestamp;
+                      return aExpiresAt.compareTo(bExpiresAt);
+                    });
+
+                    final recentAnnouncements = filteredAnnouncements.take(5).toList();
+
                     return Column(
-                      children: announcements.map((doc) {
+                      children: recentAnnouncements.map((doc) {
                         final announcement = doc.data() as Map<String, dynamic>;
+                        final expiresAt = announcement['expiresAt'] as Timestamp;
+                        final isMeeting = announcement['type'] == 'meeting';
+                        final expiresDateTime = expiresAt.toDate();
+
+                        String timeRemaining = '';
+                        final difference = expiresDateTime.difference(now);
+
+                        if (difference.inDays > 0) {
+                          timeRemaining = '${difference.inDays}d remaining';
+                        } else if (difference.inHours > 0) {
+                          timeRemaining = '${difference.inHours}h remaining';
+                        } else if (difference.inMinutes > 0) {
+                          timeRemaining = '${difference.inMinutes}m remaining';
+                        } else {
+                          timeRemaining = 'Starting now';
+                        }
+
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: Container(
@@ -2813,14 +2867,14 @@ Future <String>getUsername()async{
                                 Container(
                                   padding: EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: Color(0xFF667eea).withOpacity(0.1),
+                                    color: isMeeting
+                                        ? Color(0xFF667eea).withOpacity(0.1)
+                                        : Color(0xFF48bb78).withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Icon(
-                                    announcement['type'] == 'meeting'
-                                        ? Icons.groups
-                                        : Icons.announcement,
-                                    color: Color(0xFF667eea),
+                                    isMeeting ? Icons.groups : Icons.announcement,
+                                    color: isMeeting ? Color(0xFF667eea) : Color(0xFF48bb78),
                                     size: 20,
                                   ),
                                 ),
@@ -2837,12 +2891,20 @@ Future <String>getUsername()async{
                                           color: Colors.grey[800],
                                         ),
                                       ),
-                                      SizedBox(height: 4),
+                                      SizedBox(height: 2),
                                       Text(
                                         announcement['date'],
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: Colors.grey[600],
+                                        ),
+                                      ),
+                                      Text(
+                                        timeRemaining,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isMeeting ? Color(0xFF667eea) : Color(0xFF48bb78),
+                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                       if (announcement['venue'] != null) ...[
@@ -5425,7 +5487,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                     Icon(Icons.announcement, color: Color(0xFF667eea)),
                     SizedBox(width: 8),
                     Text(
-                      'Latest Announcements',
+                      'Upcoming Announcements & Meetings',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -5439,32 +5501,81 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                   stream: announcementsRef.snapshots(),
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
-                      return Text('Error loading announcements');
+                      return Text('Error loading data');
                     }
 
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return Center(child: CircularProgressIndicator());
                     }
-                    final allAnnouncements = snapshot.data!.docs;
-                    final announcements = allAnnouncements.where((doc) {
-                      final announcement = doc.data() as Map<String, dynamic>;
-                      return announcement['signkey'] == _menteeSignKey;
+
+                    final allItems = snapshot.data!.docs;
+                    final now = DateTime.now();
+
+                    final filteredItems = allItems.where((doc) {
+                      final item = doc.data() as Map<String, dynamic>;
+
+                      if (item['signkey'] != _menteeSignKey) {
+                        return false;
+                      }
+
+                      final expiresAt = item['expiresAt'] as Timestamp?;
+                      if (expiresAt == null) {
+                        return false;
+                      }
+
+                      final expiresDateTime = expiresAt.toDate();
+                      return expiresDateTime.isAfter(now);
                     }).toList();
 
-                    if (announcements.isEmpty) {
-                      return Text('No announcements yet');
+                    if (filteredItems.isEmpty) {
+                      return Column(
+                        children: [
+                          Icon(
+                            Icons.calendar_today,
+                            size: 64,
+                            color: Colors.grey[300],
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            'No upcoming announcements or meetings',
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 16,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      );
                     }
-                    announcements.sort((a, b) {
-                      final aTime = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
-                      final bTime = (b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
-                      return (bTime ?? Timestamp.now()).compareTo(aTime ?? Timestamp.now());
+
+                    filteredItems.sort((a, b) {
+                      final aExpiresAt = (a.data() as Map<String, dynamic>)['expiresAt'] as Timestamp;
+                      final bExpiresAt = (b.data() as Map<String, dynamic>)['expiresAt'] as Timestamp;
+                      return aExpiresAt.compareTo(bExpiresAt);
                     });
 
-                    final recentAnnouncements = announcements.take(5).toList();
+                    final upcomingItems = filteredItems.take(5).toList();
 
                     return Column(
-                      children: recentAnnouncements.map((doc) {
-                        final announcement = doc.data() as Map<String, dynamic>;
+                      children: upcomingItems.map((doc) {
+                        final item = doc.data() as Map<String, dynamic>;
+                        final expiresAt = item['expiresAt'] as Timestamp;
+                        final isMeeting = item['type'] == 'meeting';
+                        final expiresDateTime = expiresAt.toDate();
+
+                        String timeRemaining = '';
+                        final difference = expiresDateTime.difference(now);
+
+                        if (difference.inDays > 0) {
+                          timeRemaining = '${difference.inDays}d ${difference.inHours % 24}h remaining';
+                        } else if (difference.inHours > 0) {
+                          timeRemaining = '${difference.inHours}h ${difference.inMinutes % 60}m remaining';
+                        } else if (difference.inMinutes > 0) {
+                          timeRemaining = '${difference.inMinutes}m remaining';
+                        } else {
+                          timeRemaining = 'Starting now';
+                        }
+
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: Container(
@@ -5482,14 +5593,14 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                                     Container(
                                       padding: EdgeInsets.all(8),
                                       decoration: BoxDecoration(
-                                        color: Color(0xFF667eea).withOpacity(0.1),
+                                        color: isMeeting
+                                            ? Color(0xFF667eea).withOpacity(0.1)
+                                            : Color(0xFF48bb78).withOpacity(0.1),
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: Icon(
-                                        announcement['type'] == 'meeting'
-                                            ? Icons.groups
-                                            : Icons.announcement,
-                                        color: Color(0xFF667eea),
+                                        isMeeting ? Icons.groups : Icons.announcement,
+                                        color: isMeeting ? Color(0xFF667eea) : Color(0xFF48bb78),
                                         size: 20,
                                       ),
                                     ),
@@ -5499,18 +5610,28 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            announcement['title'] ?? 'No Title',
+                                            item['title'] ?? 'No Title',
                                             style: TextStyle(
                                               fontSize: 14,
                                               fontWeight: FontWeight.w600,
                                               color: Colors.grey[800],
                                             ),
                                           ),
+                                          SizedBox(height: 2),
+                                          if (item['date'] != null)
+                                            Text(
+                                              item['date'] ?? '',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
                                           Text(
-                                            announcement['date'] ?? '',
+                                            timeRemaining,
                                             style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.grey[600],
+                                              fontSize: 11,
+                                              color: isMeeting ? Color(0xFF667eea) : Color(0xFF48bb78),
+                                              fontWeight: FontWeight.w500,
                                             ),
                                           ),
                                         ],
@@ -5518,20 +5639,30 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                                     ),
                                   ],
                                 ),
-                                if (announcement['description'] != null) ...[
+                                if (item['description'] != null && item['description'].toString().isNotEmpty) ...[
                                   SizedBox(height: 8),
                                   Text(
-                                    announcement['description'],
+                                    item['description'].toString(),
                                     style: TextStyle(
                                       fontSize: 13,
                                       color: Colors.grey[700],
                                     ),
                                   ),
                                 ],
-                                if (announcement['venue'] != null) ...[
+                                if (item['venue'] != null && item['venue'].toString().isNotEmpty) ...[
                                   SizedBox(height: 4),
                                   Text(
-                                    'Venue: ${announcement['venue']}',
+                                    'Venue: ${item['venue']}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                                if (isMeeting && item['time'] != null && item['time'].toString().isNotEmpty) ...[
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Time: ${item['time']}',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.grey[600],
@@ -5549,7 +5680,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
               ],
             ),
           ),
-
           SizedBox(height: 20),
         ],
       ),
@@ -12855,8 +12985,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     );
   }
 }
-
-// ================= FREQUENCY SELECTION DIALOG =================
 class _FrequencySelectionDialog extends StatelessWidget {
   final MeetingFrequency selectedFrequency;
   final Function(MeetingFrequency) onFrequencySelected;
