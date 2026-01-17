@@ -15,8 +15,8 @@ const db = admin.firestore();
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "mahlatseclayton1@gmail.com",
-    pass: "hjjqerfrkmlfipsr",
+    user: "mentormenteeconnect26@gmail.com",
+    pass: "buzpqkwmzmhfjniz",
   },
 });
 
@@ -310,7 +310,7 @@ async function sendReminder(event, eventId, reminderType) {
     // Send emails to all recipients
     for (const email of emails) {
       await transporter.sendMail({
-        from: "Mentor Mate <mahlatseclayton1@gmail.com>",
+        from: "Mentor Mentee Connect <mentormmentee26@gmail.com>",
         to: email,
         subject: subject,
         text: message,
@@ -335,7 +335,7 @@ async function sendReminder(event, eventId, reminderType) {
               </div>
               <div style="margin-top: 20px; padding: 10px; background: #e8f4fd; border-radius: 5px;">
                 <p style="margin: 0; color: #2c5cc7; font-size: 14px;">
-                  This is an automated ${reminderType === 'immediate' ? 'notification' : 'reminder'} from Mentor Mate.
+                  This is an automated ${reminderType === 'immediate' ? 'notification' : 'reminder'} from Mentor Mentee Connect.
                 </p>
               </div>
             </div>
@@ -374,9 +374,9 @@ exports.testEmailNotification = onRequest(
   async (req, res) => {
     try {
       await transporter.sendMail({
-        from: "Mentor Mate <mahlatseclayton1@gmail.com>",
-        to: "mahlatseclayton1@gmail.com",
-        subject: "Test Email from Mentor Mate",
+        from: "Mentor Mentee Connect <mentormmenteeconnect26@gmail.com>",
+        to: "mentormmenteeconnect26@gmail.com",
+        subject: "Test Email from Mentor Mentee Connect",
         text: "This is a test email from your Cloud Function.",
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
