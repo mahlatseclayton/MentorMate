@@ -21,10 +21,6 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:uuid/uuid.dart';
 import 'package:hexcolor/hexcolor.dart';
-
-
-
-
 void main()async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
@@ -348,8 +344,34 @@ class _SignUpPageState extends State<SignUpPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _signkeyController = TextEditingController();
+  bool isError=true;
   String _selectedRole = 'mentee';
   @override
+  void _showToast(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).removeCurrentSnackBar();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isError ? Icons.error : Icons.check_circle,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
   void dispose() {
     _nameController.dispose();
     _surnameController.dispose();
@@ -361,7 +383,7 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   String _generateSignKey() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';//hide this key
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789qwertyuioplkjhgfdsazxcvbnm';
     final random = Random();
     return List.generate(6, (index) => chars[random.nextInt(chars.length)]).join();
   }
@@ -394,20 +416,25 @@ class _SignUpPageState extends State<SignUpPage> {
     String? imageUrl = "";
 
     if (password != cpassword) {
-      Fluttertoast.showToast(msg: "Passwords do not match");
+      _showToast( "Passwords do not match");
       return;
     }
 
     try {
-
+      String? mentorId = await _findMentorBySignKey(_signkeyController.text);
+      if (mentorId == null) {
+        _showToast( "Invalid signkey. Please check with your mentor.",isError:true);
+        return;
+      }
       UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(email: email, password: password);
 
       User? user = FirebaseAuth.instance.currentUser;
       String? uid = user?.uid;
 
+
       if (uid == null) {
-        Fluttertoast.showToast(msg: "Account creation failed.");
+        _showToast(  "Account creation failed.",isError:true);
         return;
       }
       Map<String, dynamic> userData = {
@@ -429,15 +456,11 @@ class _SignUpPageState extends State<SignUpPage> {
 
       } else if (_selectedRole == 'mentee') {
         if (_signkeyController.text.isEmpty) {
-          Fluttertoast.showToast(msg: "Please enter your mentor's signkey");
+          _showToast(  "Please enter your mentor's signkey");
           return;
         }
 
-        String? mentorId = await _findMentorBySignKey(_signkeyController.text);
-        if (mentorId == null) {
-          Fluttertoast.showToast(msg: "Invalid signkey. Please check with your mentor.");
-          return;
-        }
+
 
         userData['mentor_id'] = mentorId;
         userData['signkey'] = _signkeyController.text;
@@ -448,9 +471,7 @@ class _SignUpPageState extends State<SignUpPage> {
       if (user != null) {
         await user.sendEmailVerification();
         await user.reload();
-        Fluttertoast.showToast(
-          msg: "Account created! Check your email to verify your account.",
-          toastLength: Toast.LENGTH_LONG,
+      _showToast("Account created! Check your email to verify your account.",
         );
         await FirebaseAuth.instance.signOut();
         Navigator.pushReplacement(
@@ -459,16 +480,16 @@ class _SignUpPageState extends State<SignUpPage> {
         );
 
       } else {
-        Fluttertoast.showToast(msg: "Failed to send verification email.");
+        _showToast(  "Failed to send verification email.",isError:true);
       }
 
     } on FirebaseAuthException catch (e) {
       if (e.code == 'weak-password') {
-        Fluttertoast.showToast(msg: "Password is too weak.");
+        _showToast(  "Password is too weak.",isError:true);
       } else if (e.code == 'email-already-in-use') {
-        Fluttertoast.showToast(msg: "Student number already exists.");
+        _showToast( "Student number already exists.",isError:true);
       } else {
-        Fluttertoast.showToast(msg: e.message ?? "Unknown error occurred.");
+        _showToast(  e.message ?? "Unknown error occurred.",isError:true);
       }
     }
   }
@@ -979,10 +1000,8 @@ class _SignInPageState extends State<SignInPage> {
           .doc(uid)
           .get();
 
-      Fluttertoast.showToast(
-        msg: "Login successful.",
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,
+      _showToast( "Login successful.",
+
       );
 
       // Role handling
@@ -1035,32 +1054,48 @@ class _SignInPageState extends State<SignInPage> {
           message = "Error: ${e.message}";
       }
 
-      Fluttertoast.showToast(
-        msg: message,
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.BOTTOM,
+      _showToast( message
       );
     } catch (e) {
-      // Catches unknown errors (Firestore crash etc.)
-      Fluttertoast.showToast(
-        msg: "Something went wrong. Please try again.",
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.BOTTOM,
+      _showToast(  "Something went wrong. Please try again.",isError:true
+
       );
     }
   }
+  void _showToast(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).removeCurrentSnackBar();
 
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isError ? Icons.error : Icons.check_circle,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
 void _changePass()async{
     String email=_studentNumberController.text+"@students.wits.ac.za";
     if(!_studentNumberController.text.isEmpty){
     await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-    Fluttertoast.showToast(msg: "Recovery email sent.",
-        toastLength:Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM);}
+    _showToast(  "Recovery email sent."
+        );}
     else{
-      Fluttertoast.showToast(msg: "Failed to send recovery email.",
-      toastLength:Toast.LENGTH_SHORT,
-      gravity: ToastGravity.BOTTOM);
+      _showToast(  "Failed to send recovery email.",isError:true
+     );
     }
 }
   @override
@@ -1293,7 +1328,8 @@ class _MentorHomePageState extends State<MentorHomePage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-
+  DateTime today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+  late Timestamp todayTimestamp = Timestamp.fromDate(today);
   TextEditingController _announcementTitleController = TextEditingController();
   TextEditingController _announcementDescriptionController = TextEditingController();
   DateTime _announcementSelectedDate = DateTime.now();
@@ -1655,6 +1691,7 @@ Future <String> getKey(String uid)async {
                                           'dateTime': Timestamp.fromDate(meetingDateTime),
                                           'isoDateTime': meetingDateTime.toIso8601String(),
                                           'createdAt': FieldValue.serverTimestamp(),
+                                          'expiresAt': Timestamp.fromDate(meetingDateTime),
                                           'createdBy': currentUserId,
                                           'signkey': signkey,
                                           'mentorId': currentUserId,
@@ -1669,6 +1706,7 @@ Future <String> getKey(String uid)async {
                                           'type': 'meeting',
                                           'venue': _meetingVenueController.text,
                                           'createdAt': FieldValue.serverTimestamp(),
+                                          'expiresAt': Timestamp.fromDate(meetingDateTime),
                                           'createdBy': currentUserId,
                                           'signkey': signkey,
                                           'isoDate': meetingDateTime.toIso8601String(),
@@ -1684,6 +1722,9 @@ Future <String> getKey(String uid)async {
                                           'uid': FirebaseAuth.instance.currentUser!.uid,
                                           'type': 'meeting',
                                           'reminderType': 'immediate',
+                                          'expiresAt': Timestamp.fromDate(
+                                            meetingDateTime.add(const Duration(hours: 1)),
+                                          ),
                                           'venue': _meetingVenueController.text,
                                           'createdAt': FieldValue.serverTimestamp(),
                                         };
@@ -1862,6 +1903,7 @@ Future <String> getKey(String uid)async {
                                     'uid': FirebaseAuth.instance.currentUser!.uid,
                                     'type': 'register',
                                     'reminderType': 'immediate',
+                                    'expiresAt': Timestamp.fromDate(expiresAt),
                                     'createdAt': FieldValue.serverTimestamp(),
                                   };
 
@@ -2056,6 +2098,12 @@ Future <String> getKey(String uid)async {
                                     final signKey = await getKey(currentUserId);
                                     if (_announcementTitleController.text.isNotEmpty) {
                                       try {
+                                        final dt=DateTime(
+                                          _announcementSelectedDate.year,
+                                          _announcementSelectedDate.month,
+                                          _announcementSelectedDate.day,
+                                          _announcementSelectedTime.hour,
+                                          _announcementSelectedTime.minute);
                                         final announcementDateTime = DateTime(
                                           _announcementSelectedDate.year,
                                           _announcementSelectedDate.month,
@@ -2071,6 +2119,7 @@ Future <String> getKey(String uid)async {
                                           'isoDate': announcementDateTime.toIso8601String(),
                                           'type': 'announcement',
                                           'createdAt': FieldValue.serverTimestamp(),
+                                          'expiresAt': Timestamp.fromDate(dt),
                                           'signkey': signKey,
                                           'createdBy': currentUserId,
                                         };
@@ -2085,6 +2134,7 @@ Future <String> getKey(String uid)async {
                                           'timestamp': Timestamp.fromDate(announcementDateTime),
                                           'isoDate': announcementDateTime.toIso8601String(),
                                           'uid': FirebaseAuth.instance.currentUser!.uid,
+                                          'expiresAt': Timestamp.fromDate(dt),
                                           'type': 'announcement',
                                           'reminderType': 'immediate',
                                           'createdAt': FieldValue.serverTimestamp(),
@@ -3536,6 +3586,7 @@ class _CalendarPageState extends State<CalendarPage> {
   @override
   void initState() {
     super.initState();
+    _selectedDay = DateTime.now();
     _loadEventsFromFirebase();
     _loadEventsFromFirebase2();
     _initializeNotifications();
@@ -3752,6 +3803,31 @@ class _CalendarPageState extends State<CalendarPage> {
     DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
     return doc['signkey'];
   }
+  void _showToast(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).removeCurrentSnackBar();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isError ? Icons.error : Icons.check_circle,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
 
   void _addEvent(DateTime date, String title, String description, TimeOfDay? time) async {
     DateTime finalDateTime = DateTime(
@@ -3771,7 +3847,7 @@ class _CalendarPageState extends State<CalendarPage> {
       'signkey': signKey,
       'dateTime': formattedDateTime,
       'timestamp': Timestamp.fromDate(finalDateTime),
-      'isoDate': finalDateTime.toIso8601String(), // Add ISO format for consistent parsing
+      'isoDate': finalDateTime.toIso8601String(),
       'uid': uid,
       'createdAt': FieldValue.serverTimestamp(),
       'type': 'calendar_event',
@@ -3793,17 +3869,11 @@ class _CalendarPageState extends State<CalendarPage> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      Fluttertoast.showToast(
-        msg: "Event added successfully",
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,
+      _showToast( "Event added successfully"
       );
 
     } catch (e) {
-      Fluttertoast.showToast(
-        msg: "Failed to add event: $e",
-        toastLength: Toast.LENGTH_SHORT,
-        gravity: ToastGravity.BOTTOM,
+      _showToast( "Failed to add event: $e",isError:true
       );
     }
   }
@@ -4163,8 +4233,8 @@ class _CalendarPageState extends State<CalendarPage> {
                           ],
                         ),
                         child: TableCalendar(
-                          firstDay: DateTime.utc(2024, 1, 1),
-                          lastDay: DateTime.utc(2025, 12, 31),
+                          firstDay: DateTime.now().subtract(Duration(days: 365)),
+                          lastDay: DateTime.now().add(Duration(days: 365)),
                           focusedDay: _focusedDay,
                           calendarFormat: _calendarFormat,
                           selectedDayPredicate: (day) {
@@ -4182,7 +4252,9 @@ class _CalendarPageState extends State<CalendarPage> {
                             });
                           },
                           onPageChanged: (focusedDay) {
-                            _focusedDay = focusedDay;
+                            setState(() {
+                              _focusedDay = focusedDay;
+                            });
                           },
                           eventLoader: _getEventsForDay,
                           calendarStyle: CalendarStyle(
@@ -5256,7 +5328,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
     await FirebaseAuth.instance.signOut();
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => const WelcomePage()),
+      MaterialPageRoute(builder: (_) => const SignInPage() ),
     );
   }
   void _showLogoutDialog() {
@@ -5477,134 +5549,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
               ],
             ),
           ),
-          SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.upcoming, color: Color(0xFF667eea)),
-                    SizedBox(width: 8),
-                    Text(
-                      'Upcoming Meetings',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 16),
-                StreamBuilder<QuerySnapshot>(
-                  stream: meetingsRef.snapshots(), // Simple query without filters
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return Text('Error loading meetings');
-                    }
 
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(child: CircularProgressIndicator());
-                    }
-                    final allMeetings = snapshot.data!.docs;
-                    final meetings = allMeetings.where((doc) {
-                      final meeting = doc.data() as Map<String, dynamic>;
-                      final isMyMentor = meeting['mentorId'] == _mentorId;
-                      final dateTime = meeting['dateTime'] as Timestamp?;
-                      final isFuture = dateTime != null &&
-                          dateTime.toDate().isAfter(DateTime.now());
-                      return isMyMentor && isFuture;
-                    }).toList();
-
-                    if (meetings.isEmpty) {
-                      return Text('No upcoming meetings');
-                    }
-                    meetings.sort((a, b) {
-                      final aTime = (a.data() as Map<String, dynamic>)['dateTime'] as Timestamp?;
-                      final bTime = (b.data() as Map<String, dynamic>)['dateTime'] as Timestamp?;
-                      return (aTime ?? Timestamp.now()).compareTo(bTime ?? Timestamp.now());
-                    });
-                    final upcomingMeetings = meetings.take(5).toList();
-                    return Column(
-                      children: upcomingMeetings.map((doc) {
-                        final meeting = doc.data() as Map<String, dynamic>;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[50],
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.grey[200]!),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Color(0xFF667eea).withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(
-                                    Icons.groups,
-                                    color: Color(0xFF667eea),
-                                    size: 20,
-                                  ),
-                                ),
-                                SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        meeting['title'] ?? 'No Title',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.grey[800],
-                                        ),
-                                      ),
-                                      Text(
-                                        '${meeting['date']} • ${meeting['time']}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey[600],
-                                        ),
-                                      ),
-                                      Text(
-                                        'Venue: ${meeting['venue']}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey[500],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
           SizedBox(height: 20),
         ],
       ),
@@ -6156,6 +6101,31 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
     DocumentSnapshot doc=await FirebaseFirestore.instance.collection('users').doc(uid).get();
     return doc['signkey'];
   }
+  void _showToast(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).removeCurrentSnackBar();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isError ? Icons.error : Icons.check_circle,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
   void submit()async{
     final uid=await FirebaseAuth.instance.currentUser?.uid;
     final signkey=await getKey(uid!);
@@ -6165,7 +6135,7 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
       'timestamp': FieldValue.serverTimestamp(),
       'userId': FirebaseAuth.instance.currentUser?.uid,
     });
-    Fluttertoast.showToast(msg: "Suggestion added successfully.",toastLength:Toast.LENGTH_SHORT,gravity:ToastGravity.BOTTOM);
+    _showToast( "Suggestion added successfully.");
     _topicController.clear();
 
   }
@@ -6487,9 +6457,6 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
     );
   }
 }
-
-
-// ================= TIMETABLE MODEL =================
 class TimetableEvent {
   final String id;
   final String userId;
@@ -6581,17 +6548,13 @@ class TimetableEvent {
     );
   }
 }
-
-// ================= PROFILE PAGE =================
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
 }
-
 class _ProfilePageState extends State<ProfilePage> {
-  // Profile Controllers
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   String _role = "";
@@ -6600,23 +6563,20 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isLoading = true;
   final ImagePicker _imagePicker = ImagePicker();
   String _signkey = "";
-  // Timetable Variables
+
   bool _isEditingTimetable = false;
   List<String> _timeSlots = [
     '6:00', '7:00', '8:00', '9:00', '10:00', '11:00',
     '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'
   ];
 
-  // Days of the week
   final List<String> _days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   final List<String> _shortDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-  // Firebase Instances
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final Uuid _uuid = const Uuid();
 
-  // Overlay for add button
   OverlayEntry? _addButtonOverlay;
 
   @override
@@ -6634,8 +6594,6 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
-  // =============== PROFILE METHODS ===============
-
   Future<void> _loadProfilePicture() async {
     try {
       final userId = _auth.currentUser!.uid;
@@ -6650,7 +6608,7 @@ class _ProfilePageState extends State<ProfilePage> {
         });
       }
     } catch (e) {
-      // Silently fail - use default avatar
+
     }
   }
 
@@ -7840,8 +7798,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 }
-
-// ================= ADD EVENT DIALOG =================
 class AddTimetableEventDialog extends StatefulWidget {
   final String day;
   final int presetHour;
@@ -7857,7 +7813,6 @@ class AddTimetableEventDialog extends StatefulWidget {
   @override
   State<AddTimetableEventDialog> createState() => _AddTimetableEventDialogState();
 }
-
 class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -8289,8 +8244,6 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
     super.dispose();
   }
 }
-
-// ================= CUSTOM TIME DIALOG =================
 class CustomTimeEventDialog extends StatefulWidget {
   final String day;
   final Function(TimetableEvent) onSave;
@@ -8520,8 +8473,6 @@ class _CustomTimeEventDialogState extends State<CustomTimeEventDialog> {
     super.dispose();
   }
 }
-
-// ================= EDIT EVENT DIALOG =================
 class EditTimetableEventDialog extends StatefulWidget {
   final TimetableEvent event;
   final Function(TimetableEvent) onSave;
@@ -8537,7 +8488,6 @@ class EditTimetableEventDialog extends StatefulWidget {
   @override
   State<EditTimetableEventDialog> createState() => _EditTimetableEventDialogState();
 }
-
 class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -8968,7 +8918,6 @@ class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
   }
 }
 
-// ================= COLOR HELPER =================
 class HexColor extends Color {
   HexColor(final String hex) : super(int.parse(hex.replaceFirst('#', '0xff')));
 }
@@ -10624,8 +10573,6 @@ class MenteeHelpSupportPage extends StatelessWidget {
     );
   }
 }
-
-// ================= ENUM AND HELPER CLASSES =================
 enum MeetingFrequency {
   daily('Daily', Icons.event_repeat, 'Every day'),
   weekly('Weekly', Icons.calendar_today, 'Once a week'),
@@ -10719,45 +10666,30 @@ class TimePreferences {
   }
 }
 
-// ================= EXTENSIONS =================
 extension TimeOfDayExtension on TimeOfDay {
   String format24Hour() {
     return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
 }
-
-// ================= GEMINI MEETING SUGGESTION ENGINE =================
 class GeminiMeetingSuggestionEngine {
   static String? _apiKey;
   static bool _isInitialized = false;
   static bool _isInitializing = false;
-
-  // Private initialization method
   static Future<void> _initializeApiKey() async {
     if (_isInitialized || _isInitializing) return;
 
     _isInitializing = true;
 
     try {
-      // Load environment variables
       await dotenv.load(fileName: ".env");
-
-      // Get API key from environment
       _apiKey = dotenv.get('GEMINI_API_KEY');
-
-      // Validate API key
       if (_apiKey == null || _apiKey!.isEmpty) {
-        print('GEMINI_API_KEY not found in .env file');
+
         throw Exception('GEMINI_API_KEY not found in .env file');
       }
 
-      // Check if API key looks valid
-      if (!_apiKey!.startsWith('AIza')) {
-        print('Warning: API key may be invalid. Expected to start with "AIza"');
-      }
 
       _isInitialized = true;
-      print('GeminiMeetingSuggestionEngine initialized successfully');
     } catch (e) {
       print('Error initializing Gemini API key: $e');
       _apiKey = null;
@@ -10765,23 +10697,17 @@ class GeminiMeetingSuggestionEngine {
       _isInitializing = false;
     }
   }
-
-  // Public method to ensure API key is loaded
   static Future<void> ensureInitialized() async {
     if (!_isInitialized) {
       await _initializeApiKey();
     }
   }
-
-  // Getter for API key that ensures initialization
   static Future<String?> get apiKey async {
     if (!_isInitialized) {
       await ensureInitialized();
     }
     return _apiKey;
   }
-
-  // Main method to find optimal meeting times
   static Future<List<Map<String, dynamic>>> findOptimalTimesWithAI({
     required List<CombinedScheduleEvent> allEvents,
     required MeetingFrequency frequency,
@@ -10790,7 +10716,7 @@ class GeminiMeetingSuggestionEngine {
     required TimePreferences timePreferences,
     int numberOfSuggestions = 3,
   }) async {
-    // Ensure API key is initialized
+
     try {
       await ensureInitialized();
     } catch (e) {
@@ -10812,8 +10738,6 @@ class GeminiMeetingSuggestionEngine {
     try {
       final now = DateTime.now();
       final candidateDates = _generateCandidateDates(frequency);
-
-      // Prepare data for Gemini
       final prompt = _buildPrompt(
         allEvents: allEvents,
         frequency: frequency,
@@ -10824,8 +10748,6 @@ class GeminiMeetingSuggestionEngine {
         now: now,
         candidateDates: candidateDates,
       );
-
-      print('Sending request to Gemini API...');
       final response = await http.post(
         Uri.parse(
           'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$currentApiKey',
@@ -10881,7 +10803,6 @@ class GeminiMeetingSuggestionEngine {
     }
   }
 
-  // Helper method to get valid API key
   static Future<String?> _getValidApiKey() async {
     if (!_isInitialized) {
       try {
@@ -10891,23 +10812,17 @@ class GeminiMeetingSuggestionEngine {
         return null;
       }
     }
-
-    // Check if API key is valid
     if (_apiKey == null || _apiKey!.isEmpty) {
       print('API key is null or empty');
       return null;
     }
-
-    // Additional validation
     if (_apiKey!.length < 20) {
-      print('API key appears too short: ${_apiKey!.length} characters');
       return null;
     }
 
     return _apiKey;
   }
 
-  // Generate candidate dates
   static List<DateTime> _generateCandidateDates(MeetingFrequency frequency) {
     final now = DateTime.now();
     final minStartDate = now.add(Duration(days: frequency.minDaysAhead));
@@ -10922,8 +10837,6 @@ class GeminiMeetingSuggestionEngine {
 
     return dates;
   }
-
-  // Build prompt for Gemini
   static String _buildPrompt({
     required List<CombinedScheduleEvent> allEvents,
     required MeetingFrequency frequency,
@@ -11028,8 +10941,6 @@ Return exactly ${numberOfSuggestions} suggestions sorted by score (highest first
 CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead of today and NOT on Sundays.
 ''';
   }
-
-  // Parse Gemini response
   static Future<List<Map<String, dynamic>>> _parseGeminiResponse(
       String responseBody,
       DateTime now,
@@ -11043,29 +10954,21 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
       print('Parsing Gemini response...');
       final data = jsonDecode(responseBody);
       final text = data['candidates'][0]['content']['parts'][0]['text'];
-
-      // Extract JSON from response
       String cleanedText = text.trim();
       cleanedText = cleanedText.replaceAll('```json', '');
       cleanedText = cleanedText.replaceAll('```', '');
       cleanedText = cleanedText.trim();
 
       final suggestions = jsonDecode(cleanedText);
-
-      // Parse suggestions with null safety
       final List<Map<String, dynamic>> results = [];
       for (var suggestion in suggestions['suggestions']) {
         try {
           final date = DateTime.parse(suggestion['date']);
           final daysAhead = suggestion['daysAhead'] ?? date.difference(now).inDays;
-
-          // Verify date is not too soon and not Sunday
           if (daysAhead < frequency.minDaysAhead || date.weekday == DateTime.sunday) {
             print('Warning: Suggestion $date is invalid (days ahead: $daysAhead, Sunday: ${date.weekday == DateTime.sunday}), skipping');
             continue;
           }
-
-          // Verify time is in 24-hour format
           final timeStr = suggestion['time'] as String;
           if (!RegExp(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$').hasMatch(timeStr)) {
             print('Warning: Invalid time format: $timeStr, skipping');
@@ -11087,8 +10990,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
           print('Error parsing suggestion: $e');
         }
       }
-
-      // Ensure we have enough suggestions
       if (results.length < numberOfSuggestions) {
         print('Got ${results.length} suggestions, adding ${numberOfSuggestions - results.length} fallback suggestions');
         final fallbackResults = _getFallbackSuggestions(
@@ -11114,8 +11015,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
       );
     }
   }
-
-  // Fallback suggestions when API fails
   static List<Map<String, dynamic>> _getFallbackSuggestions(
       List<CombinedScheduleEvent> allEvents,
       MeetingFrequency frequency,
@@ -11127,33 +11026,20 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
     final results = <Map<String, dynamic>>[];
     final durationMinutes = timePreferences.meetingDuration?.inMinutes ?? 60;
     final now = DateTime.now();
-
-    // Try to find times within preferred range
     for (var date in candidateDates) {
       if (results.length >= numberOfSuggestions) break;
-
-      // Skip Sundays
       if (date.weekday == DateTime.sunday) continue;
-
       final daysAhead = date.difference(DateTime(now.year, now.month, now.day)).inDays;
-
-      // Skip if too soon for this frequency
       if (daysAhead < frequency.minDaysAhead) {
         continue;
       }
-
-      // Get all events for this date
       final dateEvents = allEvents.where((event) =>
       event.date.year == date.year &&
           event.date.month == date.month &&
           event.date.day == date.day
       ).toList();
-
-      // Define working hours (8 AM to 8 PM)
       final workingStart = const TimeOfDay(hour: 8, minute: 0);
       final workingEnd = const TimeOfDay(hour: 20, minute: 0);
-
-      // Use preferred time range if available
       final effectiveStartTime = timePreferences.preferredStartTime ?? workingStart;
       final effectiveEndTime = timePreferences.preferredEndTime ?? workingEnd;
 
@@ -11164,8 +11050,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
       String reasoning = '';
 
       if (dateEvents.isEmpty) {
-        // Day is completely free
-        // Check if we can fit the meeting in preferred time range
         if (_hasSufficientGap(effectiveStartTime, effectiveEndTime, durationMinutes)) {
           suggestedTime = effectiveStartTime;
           matchesPreferences = timePreferences.hasTimeRange;
@@ -11173,8 +11057,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
           reasoning = 'Completely free day';
         }
       } else {
-        // Day has events, check for gaps
-        // Sort events by start time
         dateEvents.sort((a, b) {
           final timeA = _parseTimeString(a.startTime);
           final timeB = _parseTimeString(b.startTime);
@@ -11187,8 +11069,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
         if (firstEventStart != null) {
           // Calculate the earliest we can start (max of preferred start time and working start)
           final earliestStart = _maxTimeOfDay(effectiveStartTime, workingStart);
-
-          // Only suggest if the gap is sufficient and within working hours
           if (_hasSufficientGap(earliestStart, firstEventStart, durationMinutes) &&
               _isTimeInRange(earliestStart, workingStart, workingEnd)) {
             suggestedTime = earliestStart;
@@ -11198,8 +11078,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
             reasoning = 'Found morning slot before first event';
           }
         }
-
-        // Check gaps between events
         if (suggestedTime == null && dateEvents.length > 1) {
           for (int i = 0; i < dateEvents.length - 1; i++) {
             final currentEventEnd = _parseTimeString(dateEvents[i].endTime);
@@ -11283,7 +11161,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
       }
     }
 
-    // If no results with preferences, try without strict range
     if (results.isEmpty) {
       for (var date in candidateDates) {
         if (results.length >= numberOfSuggestions) break;
@@ -11301,7 +11178,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
         ).toList();
 
         if (dateEvents.isEmpty && date.weekday <= 5) {
-          // Default to 10:00 AM if in range, otherwise 9:00 AM
           TimeOfDay defaultTime;
           if (timePreferences.hasTimeRange) {
             final preferredTime = timePreferences.preferredStartTime!;
@@ -11344,16 +11220,12 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
     if (events.isEmpty) {
       return startBoundary;
     }
-
-    // Sort events by start time
     events.sort((a, b) {
       final timeA = _parseTimeString(a.startTime);
       final timeB = _parseTimeString(b.startTime);
       if (timeA == null || timeB == null) return 0;
       return (timeA.hour * 60 + timeA.minute).compareTo(timeB.hour * 60 + timeB.minute);
     });
-
-    // Check before first event
     final firstEventStart = _parseTimeString(events.first.startTime);
     if (firstEventStart != null) {
       if (_hasSufficientGap(startBoundary, firstEventStart, durationMinutes)) {
@@ -11372,8 +11244,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
         }
       }
     }
-
-    // Check after last event
     final lastEventEnd = _parseTimeString(events.last.endTime);
     if (lastEventEnd != null) {
       if (_hasSufficientGap(lastEventEnd, endBoundary, durationMinutes)) {
@@ -11406,7 +11276,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
 
   static TimeOfDay? _parseTimeString(String timeString) {
     try {
-      // Remove any whitespace and convert to lowercase
       timeString = timeString.trim().toLowerCase();
 
       // Handle 24-hour format (e.g., "14:30")
@@ -11431,8 +11300,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
           }
         }
       }
-
-      // Handle AM/PM format (e.g., "2:30 PM")
       final regex = RegExp(r'(\d+):(\d+)\s*(am|pm)');
       final match = regex.firstMatch(timeString);
       if (match != null) {
@@ -11485,7 +11352,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
       int minDaysAhead,
       bool isInTimeRange
       ) {
-    // Start with a base score of 50 (mid-range)
     int score = 50;
 
     // Add moderate bonuses for positive factors
@@ -11515,8 +11381,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
     return score.clamp(0, 100);
   }
 }
-
-// ================= SMART MEETING SCHEDULER PAGE =================
 class SmartMeetingSchedulerPage extends StatefulWidget {
   const SmartMeetingSchedulerPage({super.key});
 
@@ -11545,7 +11409,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   bool _isLoadingSignkey = false;
   bool _hasLoadError = false;
 
-  // Time preferences
   TimeOfDay? _preferredStartTime;
   TimeOfDay? _preferredEndTime;
   bool _showTimePreferences = false;
@@ -11561,7 +11424,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     try {
       await GeminiMeetingSuggestionEngine.ensureInitialized();
     } catch (e) {
-      print('Error initializing Gemini engine: $e');
+
     }
   }
 
@@ -11574,13 +11437,10 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     });
 
     try {
-      // Ensure user is authenticated
       final user = _auth.currentUser;
       if (user == null) {
         throw Exception('User not authenticated. Please sign in again.');
       }
-
-      // Get user document
       final userDoc = await _firestore.collection('users').doc(user.uid).get();
 
       if (userDoc.exists) {
@@ -11592,7 +11452,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
             _userSignkey = signkey;
             _hasLoadError = false;
           });
-          print('Signkey loaded successfully: $signkey');
+
         } else {
           throw Exception('Signkey not found in user profile. Please update your profile.');
         }
@@ -11801,7 +11661,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   }
 
   Future<void> _findAvailableDates() async {
-    // Check if signkey is loaded
+
     if (_userSignkey == null || _userSignkey!.isEmpty) {
       _showSnackBar('Please wait, still loading your profile...', isError: true);
       await _initializeSignkey();
@@ -11809,11 +11669,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         return;
       }
     }
-
-    // Dismiss keyboard before searching
     FocusManager.instance.primaryFocus?.unfocus();
-
-    // Validate meeting title
     if (_titleController.text.trim().isEmpty) {
       _showSnackBar('Please enter a meeting title first', isError: true);
       _titleFocusNode.requestFocus();
@@ -11826,7 +11682,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     });
 
     try {
-      // Initialize Gemini engine if not already done
+
       await GeminiMeetingSuggestionEngine.ensureInitialized();
 
       _allEvents = await _getAllScheduleEvents();
@@ -11847,9 +11703,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         preferredEndTime: _preferredEndTime,
         meetingDuration: Duration(minutes: durationMinutes),
       );
-
-      print('Finding optimal times with ${_allEvents.length} events...');
-
       final suggestions = await GeminiMeetingSuggestionEngine.findOptimalTimesWithAI(
         allEvents: _allEvents,
         frequency: _selectedFrequency,
@@ -11858,8 +11711,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         timePreferences: timePreferences,
         numberOfSuggestions: 3,
       );
-
-      print('Found ${suggestions.length} suggestions');
 
       setState(() {
         _availableDates = suggestions;
@@ -11875,8 +11726,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         String extraInfo = '';
         if (matchesCount > 0) extraInfo += '($matchesCount match preferences) ';
         if (gapCount > 0) extraInfo += '($gapCount found in gaps)';
-
-        // Show when meetings are scheduled
         final earliestDate = suggestions.map((s) => s['date'] as DateTime).reduce((a, b) => a.isBefore(b) ? a : b);
         final earliestDays = earliestDate.difference(DateTime.now()).inDays;
 
@@ -11957,8 +11806,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         startTime.hour,
         startTime.minute,
       );
-
-      // Create event in Events collection
       final eventId = '${DateTime.now().millisecondsSinceEpoch}_${date.millisecondsSinceEpoch}';
       final eventData = {
         'id': eventId,
@@ -11976,12 +11823,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         'reminderType': 'immediate',
         'createdAt': FieldValue.serverTimestamp(),
       };
-
-      print('Creating event with data: $eventData');
-
       await _firestore.collection('Events').doc(eventId).set(eventData);
-
-      // Add to timetable using the new model with day field
       final timetableId = 'timetable_$eventId';
       final timetableData = TimetableEvent(
         id: timetableId,
@@ -11993,7 +11835,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         startTime: startTime,
         endTime: endTime,
         color: '#2196F3',
-        day: DateFormat('EEEE').format(date), // Full day name (Monday, Tuesday, etc.)
+        day: DateFormat('EEEE').format(date),
       ).toMap();
 
       await _firestore.collection('timetable_events').doc(timetableId).set(timetableData);
@@ -12114,13 +11956,14 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   }
 
   String _getConfidenceLabel(int score) {
-    if (score >= 80) return 'High';
+    if (score >= 85) return 'High';
     if (score >= 50) return 'Medium';
     return 'Low';
   }
 
   Color _getConfidenceColor(int score) {
-    if (score >= 80) return Colors.green;
+    if (score >= 85) return Colors.green;
+    if (score >= 60) return Colors.blue;
     if (score >= 50) return Colors.orange;
     return Colors.red;
   }
