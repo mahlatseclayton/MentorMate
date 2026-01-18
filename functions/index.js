@@ -92,7 +92,7 @@ exports.sendImmediateEventToStudent = onDocumentCreated(
 exports.send5HourReminders = onSchedule(
   {
     schedule: "every 15 minutes",
-    timeZone: "Africa/Johannesburg",
+//    timeZone: "Africa/Johannesburg",
     region: "us-central1",
     secrets: [EMAIL_PASSWORD],
   },
@@ -600,6 +600,6 @@ function formatTime(dateTime) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Africa/Johannesburg",
+//    timeZone: "Africa/Johannesburg",
   });
 }
