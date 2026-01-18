@@ -60,7 +60,6 @@ class StartUpPage extends StatefulWidget {
   @override
   State<StartUpPage> createState() => _StartUpPageState();
 }
-
 class _StartUpPageState extends State<StartUpPage> {
   @override
   void initState() {
@@ -119,7 +118,6 @@ class _StartUpPageState extends State<StartUpPage> {
     );
   }
 }
-
 class _WelcomePageState extends State<WelcomePage> {
   @override
   Widget build(BuildContext context) {
@@ -3232,13 +3230,11 @@ IMPORTANT: Generate EXACTLY 3 different topic suggestions, all equally detailed.
 
         return _parseGeminiResponse(textResponse);
       } else {
-        debugPrint("API Error Status: ${response.statusCode}");
-        debugPrint("API Error Body: ${response.body}");
+
         throw Exception(
             'Failed to load suggestions: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint("Network/API Error: $e");
       rethrow;
     }
   }
@@ -3261,8 +3257,6 @@ IMPORTANT: Generate EXACTLY 3 different topic suggestions, all equally detailed.
 
     try {
       final String prompt = buildGeminiPrompt();
-      debugPrint("Sending prompt to Gemini...");
-
       final Map<String, dynamic> response = await _callGeminiAPI(prompt);
 
       if (response.containsKey('suggestions') && response['suggestions'] is List) {
@@ -3293,7 +3287,6 @@ IMPORTANT: Generate EXACTLY 3 different topic suggestions, all equally detailed.
       });
 
     } catch (e) {
-      debugPrint("Error in _generateAISuggestions: $e");
       setState(() {
         _isLoading = false;
       });
@@ -3348,7 +3341,7 @@ IMPORTANT: Generate EXACTLY 3 different topic suggestions, all equally detailed.
 
   Map<String, dynamic> _parseGeminiResponse(String textResponse) {
     try {
-      debugPrint("Raw AI Response: $textResponse");
+
       String cleanResponse = textResponse
           .replaceAll('```json', '')
           .replaceAll('```', '')
@@ -11337,7 +11330,7 @@ class GeminiMeetingSuggestionEngine {
 
       _isInitialized = true;
     } catch (e) {
-      print('Error initializing Gemini API key: $e');
+
       _apiKey = null;
     } finally {
       _isInitializing = false;
@@ -11368,12 +11361,12 @@ class GeminiMeetingSuggestionEngine {
     try {
       await ensureInitialized();
     } catch (e) {
-      print('Failed to initialize Gemini: $e');
+
     }
 
     final currentApiKey = await _getValidApiKey();
     if (currentApiKey == null) {
-      print('Cannot proceed without valid API key, using fallback suggestions');
+
       return _getFallbackSuggestions(
         allEvents,
         frequency,
@@ -11433,7 +11426,6 @@ class GeminiMeetingSuggestionEngine {
           userSignkey,
         );
       } else {
-        print('Gemini API error: ${response.statusCode} - ${response.body}');
         return _getFallbackSuggestions(
           allEvents,
           frequency,
@@ -11444,7 +11436,6 @@ class GeminiMeetingSuggestionEngine {
         );
       }
     } catch (e) {
-      print('Error calling Gemini API: $e');
       return _getFallbackSuggestions(
         allEvents,
         frequency,
@@ -11733,7 +11724,6 @@ DO NOT output the same time for multiple dates. Be creative and find the BEST VA
       String userSignkey,
       ) async {
     try {
-      print('Parsing Gemini response...');
       final data = jsonDecode(responseBody);
       final text = data['candidates'][0]['content']['parts'][0]['text'];
       String cleanedText = text.trim();
@@ -11749,19 +11739,16 @@ DO NOT output the same time for multiple dates. Be creative and find the BEST VA
           final daysAhead = suggestion['daysAhead'] ?? date.difference(now).inDays;
 
           if (daysAhead < frequency.minDaysAhead || date.weekday == DateTime.sunday) {
-            print('Warning: Suggestion $date is invalid (days ahead: $daysAhead, Sunday: ${date.weekday == DateTime.sunday}), skipping');
             continue;
           }
 
           final timeStr = suggestion['time'] as String;
           if (!RegExp(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$').hasMatch(timeStr)) {
-            print('Warning: Invalid time format: $timeStr, skipping');
             continue;
           }
 
           final timetableConflict = suggestion['timetableConflict'] ?? false;
           if (timetableConflict) {
-            print('Warning: Suggestion $date $timeStr has timetable conflict, skipping');
             continue;
           }
 
@@ -11778,7 +11765,6 @@ DO NOT output the same time for multiple dates. Be creative and find the BEST VA
           );
 
           if (conflicts > 0) {
-            print('Warning: Suggestion $date $timeStr has $conflicts conflicts, skipping');
             continue;
           }
 
@@ -11795,12 +11781,10 @@ DO NOT output the same time for multiple dates. Be creative and find the BEST VA
             'timetableConflict': timetableConflict,
           });
         } catch (e) {
-          print('Error parsing suggestion: $e');
         }
       }
 
       if (results.length < numberOfSuggestions) {
-        print('Got ${results.length} suggestions, adding ${numberOfSuggestions - results.length} fallback suggestions');
         final fallbackResults = _getFallbackSuggestions(
           allEvents,
           frequency,
@@ -11814,8 +11798,6 @@ DO NOT output the same time for multiple dates. Be creative and find the BEST VA
 
       return results.take(numberOfSuggestions).toList();
     } catch (e) {
-      print('Error parsing Gemini response: $e');
-      print('Response body was: $responseBody');
       return _getFallbackSuggestions(
         allEvents,
         frequency,
@@ -11877,7 +11859,6 @@ DO NOT output the same time for multiple dates. Be creative and find the BEST VA
       String userSignkey,
       int numberOfSuggestions,
       ) {
-    print('Using fallback suggestions engine');
     final results = <Map<String, dynamic>>[];
     final durationMinutes = timePreferences.meetingDuration?.inMinutes ?? 60;
     final now = DateTime.now();
@@ -12060,7 +12041,6 @@ DO NOT output the same time for multiple dates. Be creative and find the BEST VA
       }
     }
 
-    print('Fallback engine found ${results.length} suggestions');
     return results;
   }
 
@@ -12427,7 +12407,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         throw Exception('User profile not found. Please complete your profile setup.');
       }
     } catch (e) {
-      print('Error loading signkey: $e');
       setState(() {
         _hasLoadError = true;
         _userSignkey = null;
@@ -12468,20 +12447,13 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
 
       final now = DateTime.now();
       final next90Days = now.add(const Duration(days: 90));
-
-      print('Fetching schedule events for user: $userId, signkey: $_userSignkey');
-
-      // Fetch all timetable events for this signkey (recurring weekly events)
       try {
         final timetableSnapshot = await _firestore
             .collection('timetable_events')
             .where('signkey', isEqualTo: _userSignkey)
-            .limit(200) // Increased limit to catch all timetable events including mentees
+            .limit(200)
             .get();
 
-        print('Found ${timetableSnapshot.docs.length} timetable events (including mentees)');
-
-        // Map to convert day names to weekday numbers
         final weekdayMap = {
           'Monday': DateTime.monday,
           'Tuesday': DateTime.tuesday,
@@ -12505,11 +12477,9 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
             if (dayName != null) {
               final targetWeekday = weekdayMap[dayName];
               if (targetWeekday != null) {
-                // Generate all occurrences of this weekday in the next 90 days
                 DateTime currentDate = now;
                 while (currentDate.isBefore(next90Days) || currentDate.isAtSameMomentAs(next90Days)) {
                   if (currentDate.weekday == targetWeekday) {
-                    // Check if this is the user's own event or a mentee's event
                     final isMenteeEvent = eventUserId != null && eventUserId != userId;
                     final displayTitle = isMenteeEvent ? '$title (Mentee)' : title;
 
@@ -12524,19 +12494,15 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                   }
                   currentDate = currentDate.add(const Duration(days: 1));
                 }
-
-                print('Expanded timetable event: $dayName $startTime-$endTime across 90 days');
               }
             }
           } catch (e) {
-            print('Error parsing timetable event ${doc.id}: $e');
+
           }
         }
       } catch (e) {
-        print('Error fetching timetable events: $e');
-      }
 
-      // Fetch one-time Events (capital E Events table)
+      }
       try {
         final eventsSnapshot = await _firestore
             .collection('Events')
@@ -12546,8 +12512,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
             .limit(100)
             .get();
 
-        print('Found ${eventsSnapshot.docs.length} Events');
-
         for (final doc in eventsSnapshot.docs) {
           final data = doc.data();
           try {
@@ -12555,8 +12519,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
             if (timestamp != null) {
               final dateTime = timestamp.toDate();
               final title = data['title']?.toString() ?? 'Event';
-
-              // Check if this is an all-day event
               final dateTimeStr = data['dateTime']?.toString() ?? '';
               final isAllDay = dateTimeStr.contains('All Day');
 
@@ -12564,11 +12526,9 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
               String endTime;
 
               if (isAllDay) {
-                // All-day events block the entire working day
                 startTime = '00:00';
                 endTime = '23:59';
               } else {
-                // Use provided times or default to 1-hour duration
                 startTime = data['startTime']?.toString() ?? DateFormat('HH:mm').format(dateTime);
                 endTime = data['endTime']?.toString() ??
                     DateFormat('HH:mm').format(dateTime.add(const Duration(hours: 1)));
@@ -12590,8 +12550,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
       } catch (e) {
         print('Error fetching Events: $e');
       }
-
-      // Fetch one-time calendar events (events table with uid)
       try {
         final calendarSnapshot = await _firestore
             .collection('events')
@@ -12600,8 +12558,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
             .where('dateTime', isLessThan: Timestamp.fromDate(next90Days))
             .limit(100)
             .get();
-
-        print('Found ${calendarSnapshot.docs.length} calendar events');
 
         for (final doc in calendarSnapshot.docs) {
           final data = doc.data();
@@ -12622,14 +12578,10 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
           }
         }
       } catch (e) {
-        print('Error fetching calendar events: $e');
+
       }
 
-      print('Total events loaded: ${allEvents.length}');
-      print('Breakdown:');
-      print('- Timetable (recurring): ${allEvents.where((e) => e.source == 'timetable').length}');
-      print('- Events (one-time): ${allEvents.where((e) => e.source == 'events').length}');
-      print('- Calendar: ${allEvents.where((e) => e.source == 'calendar').length}');
+
     } catch (e) {
       print('Error fetching schedule events: $e');
       _showSnackBar('Error loading schedule events: ${e.toString().replaceAll('Exception: ', '')}', isError: true);
