@@ -1,406 +1,370 @@
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { onRequest } = require("firebase-functions/v2/https");
-const { logger } = require("firebase-functions/v2");
-
+const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 
-// Initialize Firebase
 admin.initializeApp();
 
 const db = admin.firestore();
 
-// Email transport (Gmail) - Direct password for testing
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: "mentormenteeconnect26@gmail.com",
-    pass: "buzpqkwmzmhfjniz",
-  },
-});
+const EMAIL_PASSWORD = defineSecret("EMAIL_PASSWORD");
 
-/**
- * Parse event date from multiple possible formats
- */
-function parseEventDate(event) {
-  // Priority 1: ISO 8601 format
-  if (event.isoDate) {
-    try {
-      return new Date(event.isoDate);
-    } catch (err) {
-      logger.warn(`Failed to parse ISO date: ${event.isoDate}`, err);
-    }
-  }
-
-  // Priority 2: Firestore Timestamp (dateTime field)
-  const dt = event.dateTime;
-  if (dt && typeof dt.toDate === "function") {
-    return dt.toDate();
-  }
-
-  // Priority 3: Firestore Timestamp (timestamp field)
-  if (event.timestamp && typeof event.timestamp.toDate === "function") {
-    return event.timestamp.toDate();
-  }
-
-  // Priority 4: String format "25/11/2025 • 7:30 PM"
-  if (typeof dt === "string") {
-    try {
-      return parseStringDate(dt);
-    } catch (err) {
-      logger.warn(`Failed to parse string date: ${dt}`, err);
-    }
-  }
-
-  // Fallback to current time
-  return new Date();
-}
-
-/**
- * Parse string date in format "25/11/2025 • 7:30 PM"
- */
-function parseStringDate(dateString) {
-  let cleaned = dateString.replace("•", "").trim();
-  const parts = cleaned.split(" ").filter(part => part.length > 0);
-
-  if (parts.length < 3) {
-    throw new Error(`Invalid string date format: ${dateString}`);
-  }
-
-  const datePart = parts[0];
-  const [day, month, year] = datePart.split("/").map(Number);
-
-  if (!day || !month || !year) {
-    throw new Error(`Invalid date part: ${datePart}`);
-  }
-
-  const timePart = parts[1];
-  const ampm = parts[2];
-
-  if (!timePart || !ampm) {
-    return new Date(year, month - 1, day);
-  }
-
-  const [hourStr, minuteStr] = timePart.split(":");
-  let hour = Number(hourStr);
-  const minute = Number(minuteStr || 0);
-
-  if (isNaN(hour) || isNaN(minute)) {
-    throw new Error(`Invalid time part: ${timePart}`);
-  }
-
-  // Convert to 24-hour format
-  if (ampm.toUpperCase() === "PM" && hour !== 12) {
-    hour += 12;
-  }
-  if (ampm.toUpperCase() === "AM" && hour === 12) {
-    hour = 0;
-  }
-
-  return new Date(year, month - 1, day, hour, minute);
-}
-
-/**
- * Format time nicely for emails
- */
-function formatTime(dateTime) {
-  return dateTime.toLocaleString("en-ZA", {
-    weekday: 'short',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Africa/Johannesburg'
-  });
-}
-
-// 🔥 IMMEDIATE NOTIFICATION: Trigger when any event is created
 exports.sendImmediateEventNotification = onDocumentCreated(
   {
     document: "Events/{eventId}",
     region: "us-central1",
+    secrets: [EMAIL_PASSWORD],
   },
   async (event) => {
     const snapshot = event.data;
-    if (!snapshot) {
-      logger.error("No data associated with the event");
-      return;
-    }
+    if (!snapshot) return;
 
     const eventData = snapshot.data();
     const eventId = event.params.eventId;
 
-    logger.log(`🎯 New event created: "${eventData.title}" (ID: ${eventId})`);
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: "mentormenteeconnect26@gmail.com",
+        pass: EMAIL_PASSWORD.value(),
+      },
+    });
 
-    try {
-      await sendReminder(eventData, eventId, "immediate");
-      logger.log(`✅ Immediate notification sent for: "${eventData.title}"`);
-    } catch (error) {
-      logger.error(`❌ Failed to send notification for "${eventData.title}":`, error);
-    }
+    await sendReminder(eventData, eventId, "immediate", transporter);
   }
 );
 
-// 🔥 SCHEDULED 5-HOUR REMINDER: Runs every 15 minutes to check for events happening in 5 hours
 exports.send5HourReminders = onSchedule(
   {
     schedule: "every 15 minutes",
     timeZone: "Africa/Johannesburg",
     region: "us-central1",
+    secrets: [EMAIL_PASSWORD],
   },
   async () => {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: "mentormenteeconnect26@gmail.com",
+        pass: EMAIL_PASSWORD.value(),
+      },
+    });
+
     const now = new Date();
-    const fiveHoursFromNow = new Date(now.getTime() + 5 * 60 * 60 * 1000);
+    const target = new Date(now.getTime() + 5 * 60 * 60 * 1000);
 
-    logger.log(`⏰ Running 5-hour reminder check at: ${now.toISOString()}`);
-    logger.log(`🔍 Looking for events around: ${fiveHoursFromNow.toISOString()}`);
+    const snapshot = await db.collection("Events").get();
 
-    try {
-      // Get all events from Events collection
-      const eventsSnapshot = await db.collection("Events").get();
-      logger.log(`📋 Found ${eventsSnapshot.size} total events to check`);
+    for (const doc of snapshot.docs) {
+      const event = doc.data();
+      if (event.type !== "meeting") continue;
 
-      let remindersSent = 0;
+      const eventTime = parseEventDate(event);
+      const diff = (eventTime - target) / (1000 * 60);
 
-      for (const eventDoc of eventsSnapshot.docs) {
-        const event = eventDoc.data();
-        const eventId = eventDoc.id;
-
-        // Skip if it's not a meeting (only send 5-hour reminders for meetings)
-        if (event.type !== 'meeting') {
-          continue;
-        }
-
-        let eventTime;
-        try {
-          eventTime = parseEventDate(event);
-        } catch (err) {
-          logger.error(`Failed to parse event date for "${event.title}":`, err);
-          continue;
-        }
-
-        // Calculate time difference in minutes
-        const timeDiffMinutes = (eventTime - fiveHoursFromNow) / (1000 * 60);
-
-        // Send reminder if event is within ±15 minutes of 5 hours from now
-        if (Math.abs(timeDiffMinutes) <= 15) {
-          logger.log(`⏰ 5-hour reminder triggered for: "${event.title}"`);
-          logger.log(`   Event time: ${eventTime.toISOString()}`);
-          logger.log(`   Time difference: ${timeDiffMinutes.toFixed(1)} minutes`);
-
-          await sendReminder(event, eventId, "5hours");
-          remindersSent++;
-        }
+      if (Math.abs(diff) <= 15) {
+        await sendReminder(event, doc.id, "5hours", transporter);
       }
-
-      logger.log(`✅ 5-hour reminder scan completed. Sent ${remindersSent} reminders.`);
-
-    } catch (error) {
-      logger.error("❌ 5-hour reminder ERROR:", error);
     }
   }
 );
 
-/**
- * Send reminder email (works for both immediate and 5-hour reminders)
- */
-async function sendReminder(event, eventId, reminderType) {
+async function sendReminder(event, eventId, reminderType, transporter) {
   let emails = [];
 
-  // Get all users who match event.signkey
   if (event.signkey) {
-    const usersSnapshot = await db
+    const users = await db
       .collection("users")
       .where("signkey", "==", event.signkey)
       .get();
 
-    usersSnapshot.forEach((doc) => {
-      const user = doc.data();
-      if (user.email) emails.push(user.email);
+    users.forEach((d) => {
+      if (d.data().email) emails.push(d.data().email);
     });
   }
 
-  // Remove duplicates
   emails = [...new Set(emails)];
+  if (!emails.length) return;
 
-  if (emails.length === 0) {
-    logger.log(`⚠ No recipients found for event "${event.title}"`);
-    return;
-  }
-
-  // Parse event time
-  const eventTime = parseEventDate(event);
-  const formattedTime = formatTime(eventTime);
-
-  // Determine email content based on reminder type and event type
-  let subject, message;
-
-  if (reminderType === "immediate") {
-    // Immediate notification content (existing logic)
-    switch (event.type) {
-      case 'meeting':
-        subject = `📅 New Meeting: ${event.title}`;
-        message = `A new meeting has been scheduled:\n\n` +
-                  `📌 ${event.title}\n` +
-                  `🕐 ${formattedTime}\n` +
-                  `📍 ${event.venue || 'Location to be confirmed'}\n\n` +
-                  `Please make sure to attend.`;
-        break;
-
-      case 'announcement':
-        subject = `📢 New Announcement: ${event.title}`;
-        message = `A new announcement has been made:\n\n` +
-                  `📌 ${event.title}\n` +
-                  `🕐 ${formattedTime}\n` +
-                  `📝 ${event.description || 'No additional details provided.'}`;
-        break;
-
-      case 'register':
-        subject = `📋 Attendance Register: ${event.title}`;
-        message = `An attendance register has been created:\n\n` +
-                  `📌 ${event.title}\n` +
-                  `❓ ${event.question || 'Please mark your attendance'}\n` +
-                  `⏰ Please respond within 24 hours`;
-        break;
-
-      case 'calendar_event':
-        subject = `🗓️ New Event: ${event.title}`;
-        message = `A new event has been added to your calendar:\n\n` +
-                  `📌 ${event.title}\n` +
-                  `🕐 ${formattedTime}\n` +
-                  `📝 ${event.description || 'No additional details provided.'}`;
-        break;
-
-      default:
-        subject = `📅 New Event: ${event.title}`;
-        message = `A new event has been scheduled:\n\n` +
-                  `📌 ${event.title}\n` +
-                  `🕐 ${formattedTime}\n` +
-                  `📝 ${event.description || 'No additional details provided.'}`;
-    }
-  } else if (reminderType === "5hours") {
-    // 5-hour reminder content (only for meetings)
-    subject = `⏰ Meeting Reminder: ${event.title} in 5 hours`;
-    message = `Reminder: You have a meeting coming up in 5 hours:\n\n` +
-              `📌 ${event.title}\n` +
-              `🕐 ${formattedTime}\n` +
-              `📍 ${event.venue || 'Location to be confirmed'}\n\n` +
-              `Please prepare to attend.`;
-  }
-
-  // Add venue if available and not already included
-  if (event.venue && event.type !== 'meeting' && reminderType === "immediate") {
-    message += `\n📍 ${event.venue}`;
-  }
-
-  // Prevent duplicate sending by checking sentReminders collection
-  const alreadySent = await db.collection("sentReminders")
+  const sent = await db
+    .collection("sentReminders")
     .where("eventId", "==", eventId)
     .where("reminderType", "==", reminderType)
     .get();
 
-  if (!alreadySent.empty) {
-    logger.log(`⏩ SKIP: ${reminderType} reminder already sent for event "${event.title}"`);
-    return;
+  if (!sent.empty) return;
+
+  const eventTime = parseEventDate(event);
+  const formattedTime = formatTime(eventTime);
+
+  let subject = "";
+  let htmlContent = "";
+  let textContent = "";
+
+  if (reminderType === "immediate") {
+    subject = `${event.title}`;
+    htmlContent = getHtmlTemplate(event, formattedTime, reminderType);
+    textContent = `${event.title}\nDate: ${formattedTime}\nVenue: ${event.venue || 'To be announced'}\nDescription: ${event.description || ''}`;
+  } else {
+    subject = `Reminder: ${event.title}`;
+    htmlContent = getHtmlTemplate(event, formattedTime, reminderType);
+    textContent = `${event.title}\nDate: ${formattedTime}\nVenue: ${event.venue || 'To be announced'}\nDescription: ${event.description || ''}\nThis meeting starts in approximately 5 hours.`;
   }
 
-  try {
-    // Send emails to all recipients
-    for (const email of emails) {
-      await transporter.sendMail({
-        from: "Mentor Mentee Connect <mentormmentee26@gmail.com>",
-        to: email,
-        subject: subject,
-        text: message,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 10px 10px 0 0;">
-              <h2 style="color: white; margin: 0;">${subject}</h2>
-            </div>
-            <div style="background: #f9f9f9; padding: 20px; border-radius: 0 0 10px 10px;">
-              <p style="font-size: 16px; line-height: 1.6; color: #333;">
-                ${message.replace(/\n/g, "<br>")}
-              </p>
-              <div style="margin-top: 20px; padding: 15px; background: white; border-left: 4px solid #667eea; border-radius: 5px;">
-                <p style="margin: 0; color: #667eea; font-weight: bold;">📅 Event Details:</p>
-                <p style="margin: 5px 0 0 0; color: #666;">
-                  <strong>Title:</strong> ${event.title}<br>
-                  <strong>When:</strong> ${formattedTime}<br>
-                  ${event.description ? `<strong>Details:</strong> ${event.description}<br>` : ''}
-                  ${event.venue ? `<strong>Location:</strong> ${event.venue}<br>` : ''}
-                  ${event.type ? `<strong>Type:</strong> ${event.type.charAt(0).toUpperCase() + event.type.slice(1)}` : ''}
-                </p>
-              </div>
-              <div style="margin-top: 20px; padding: 10px; background: #e8f4fd; border-radius: 5px;">
-                <p style="margin: 0; color: #2c5cc7; font-size: 14px;">
-                  This is an automated ${reminderType === 'immediate' ? 'notification' : 'reminder'} from Mentor Mentee Connect.
-                </p>
-              </div>
-            </div>
-          </div>
-        `,
-      });
-      logger.log(`📧 ${reminderType} email sent to ${email}`);
-    }
-
-    // Log the notification in sentReminders collection to prevent duplicates
-    await db.collection("sentReminders").add({
-      eventId: eventId,
-      eventTitle: event.title,
-      eventType: event.type,
-      reminderType: reminderType,
-      sentAt: admin.firestore.FieldValue.serverTimestamp(),
-      recipientsCount: emails.length,
-      eventTime: eventTime,
+  for (const email of emails) {
+    await transporter.sendMail({
+      from: "Mentor Mentee Connect <mentormenteeconnect26@gmail.com>",
+      to: email,
+      subject,
+      html: htmlContent,
+      text: textContent,
     });
-
-    logger.log(
-      `✅ ${reminderType} notification completed for "${event.title}" → ${emails.length} emails sent`
-    );
-
-  } catch (err) {
-    logger.error(`Email sending error for ${reminderType} reminder:`, err);
-    throw err;
   }
+
+  await db.collection("sentReminders").add({
+    eventId,
+    reminderType,
+    sentAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
 }
 
-// Test function to verify email sending
-exports.testEmailNotification = onRequest(
-  {
-    region: "us-central1",
-  },
-  async (req, res) => {
-    try {
-      await transporter.sendMail({
-        from: "Mentor Mentee Connect <mentormmenteeconnect26@gmail.com>",
-        to: "mentormmenteeconnect26@gmail.com",
-        subject: "Test Email from Mentor Mentee Connect",
-        text: "This is a test email from your Cloud Function.",
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 10px 10px 0 0;">
-              <h2 style="color: white; margin: 0;">Test Email from Mentor Mate</h2>
-            </div>
-            <div style="background: #f9f9f9; padding: 20px; border-radius: 0 0 10px 10px;">
-              <p style="font-size: 16px; line-height: 1.6; color: #333;">
-                This is a test email from your Cloud Function to verify that email notifications are working correctly.
-              </p>
-              <div style="margin-top: 20px; padding: 10px; background: #e8f4fd; border-radius: 5px;">
-                <p style="margin: 0; color: #2c5cc7; font-size: 14px;">
-                  If you received this email, your Cloud Function is working properly! 🎉
-                </p>
-              </div>
-            </div>
-          </div>
-        `,
-      });
+function getHtmlTemplate(event, formattedTime, reminderType) {
+  const isMeeting = event.type === 'meeting';
+  const eventType = isMeeting ? 'Meeting' : 'Announcement';
+  const primaryColor = '#667eea';
+  const gradientStart = '#667eea';
+  const gradientEnd = '#764ba2';
 
-      res.status(200).send("Test email sent successfully!");
-    } catch (error) {
-      logger.error("Test email failed:", error);
-      res.status(500).send("Test email failed: " + error.message);
-    }
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${event.title}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.4;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8fafc;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15);
+        }
+        .header {
+            background: linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%);
+            color: white;
+            padding: 24px 20px;
+            text-align: center;
+        }
+        .event-icon {
+            font-size: 36px;
+            margin-bottom: 12px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+        .type-badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-top: 12px;
+            backdrop-filter: blur(10px);
+        }
+        .content {
+            padding: 24px;
+        }
+        .info-row {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(102, 126, 234, 0.1);
+        }
+        .info-row:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        .info-icon {
+            color: ${primaryColor};
+            font-size: 20px;
+            min-width: 24px;
+            margin-right: 16px;
+            margin-top: 2px;
+        }
+        .info-text {
+            flex: 1;
+        }
+        .info-label {
+            font-size: 12px;
+            color: #718096;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+        .info-value {
+            font-size: 15px;
+            color: #2d3748;
+            line-height: 1.5;
+        }
+        .reminder-banner {
+            background: linear-gradient(135deg, #ffeaa7, #fab1a0);
+            border-radius: 10px;
+            padding: 14px;
+            margin: 20px 0 0 0;
+            display: flex;
+            align-items: center;
+        }
+        .reminder-icon {
+            font-size: 20px;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+        .reminder-text {
+            font-size: 14px;
+            color: #2d3748;
+            font-weight: 500;
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #f8fafc, #ffffff);
+            color: #718096;
+            font-size: 13px;
+            border-top: 1px solid rgba(102, 126, 234, 0.1);
+        }
+        .logo {
+            color: ${primaryColor};
+            font-weight: 700;
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+        .automated-text {
+            font-size: 12px;
+            color: #a0aec0;
+            margin-bottom: 8px;
+        }
+        .copyright {
+            font-size: 12px;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="event-icon">${isMeeting ? '👥' : '📢'}</div>
+            <h1>${event.title}</h1>
+            <div class="type-badge">${eventType}</div>
+        </div>
+
+        <div class="content">
+            <div class="info-row">
+                <div class="info-icon">📅</div>
+                <div class="info-text">
+                    <div class="info-label">Date & Time</div>
+                    <div class="info-value">${formattedTime}</div>
+                </div>
+            </div>
+
+            ${event.venue ? `
+            <div class="info-row">
+                <div class="info-icon">📍</div>
+                <div class="info-text">
+                    <div class="info-label">Venue</div>
+                    <div class="info-value">${event.venue}</div>
+                </div>
+            </div>
+            ` : ''}
+
+            ${event.description ? `
+            <div class="info-row">
+                <div class="info-icon">📝</div>
+                <div class="info-text">
+                    <div class="info-label">Description</div>
+                    <div class="info-value">${event.description}</div>
+                </div>
+            </div>
+            ` : ''}
+
+            ${reminderType === '5hours' ? `
+            <div class="reminder-banner">
+                <div class="reminder-icon">⏰</div>
+                <div class="reminder-text">This meeting starts in approximately 5 hours</div>
+            </div>
+            ` : ''}
+        </div>
+
+        <div class="footer">
+            <div class="logo">MENTOR MENTEE CONNECT</div>
+            <div class="automated-text">This is an automated message from Mentor Mentee Connect</div>
+            <div class="copyright">© 2026 All rights reserved</div>
+        </div>
+    </div>
+</body>
+</html>
+  `;
+}
+
+function parseEventDate(event) {
+  if (event.isoDate) {
+    try {
+      return new Date(event.isoDate);
+    } catch {}
   }
-);
+
+  const dt = event.dateTime;
+  if (dt && typeof dt.toDate === "function") return dt.toDate();
+  if (event.timestamp && typeof event.timestamp.toDate === "function")
+    return event.timestamp.toDate();
+
+  if (typeof dt === "string") return parseStringDate(dt);
+
+  return new Date();
+}
+
+function parseStringDate(dateString) {
+  const cleaned = dateString.replace("•", "").trim();
+  const parts = cleaned.split(" ").filter(Boolean);
+
+  const [day, month, year] = parts[0].split("/").map(Number);
+  if (!parts[1] || !parts[2]) return new Date(year, month - 1, day);
+
+  let [hour, minute] = parts[1].split(":").map(Number);
+  const ampm = parts[2].toUpperCase();
+
+  if (ampm === "PM" && hour !== 12) hour += 12;
+  if (ampm === "AM" && hour === 12) hour = 0;
+
+  return new Date(year, month - 1, day, hour, minute || 0);
+}
+
+function formatTime(dateTime) {
+  return dateTime.toLocaleString("en-ZA", {
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Africa/Johannesburg",
+  });
+}
