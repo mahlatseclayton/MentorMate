@@ -6939,7 +6939,6 @@ class _ProfilePageState extends State<ProfilePage> {
     _showToast('Profile updated successfully!');
   }
 
-  // =============== TIMETABLE METHODS ===============
 
   Stream<List<TimetableEvent>> _getTimetableEvents() {
     final uid = _auth.currentUser!.uid;
@@ -6994,73 +6993,209 @@ class _ProfilePageState extends State<ProfilePage> {
     });
     _showToast('Time slot removed');
   }
-
   void _showAddEventButton(String day, int hour) {
     _removeAddButtonOverlay();
 
     final overlayState = Overlay.of(context);
-    final renderBox = context.findRenderObject() as RenderBox;
-    final position = renderBox.localToGlobal(Offset.zero);
+    final screenSize = MediaQuery.of(context).size;
 
     _addButtonOverlay = OverlayEntry(
-      builder: (context) => Positioned(
-        left: position.dx + 80 + (_shortDays.indexOf(day.substring(0, 3)) * 100),
-        top: position.dy + 100 + (_timeSlots.indexOf('$hour:00') * 60),
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 10,
-                  spreadRadius: 2,
-                ),
-              ],
-              border: Border.all(color: Colors.blue.shade100),
-            ),
-            child: Column(
-              children: [
-                _buildAddEventOption(Icons.add, 'Add Event', () {
-                  _openAddDialog(day, hour);
-                  _removeAddButtonOverlay();
-                }),
-                const SizedBox(height: 4),
-                _buildAddEventOption(Icons.schedule, 'Add Custom Time', () {
-                  _openCustomTimeDialog(day);
-                  _removeAddButtonOverlay();
-                }),
-              ],
+      builder: (context) => Stack(
+        children: [
+          GestureDetector(
+            onTap: _removeAddButtonOverlay,
+            child: Container(
+              color: Colors.black.withOpacity(0.3),
+              width: screenSize.width,
+              height: screenSize.height,
             ),
           ),
-        ),
+          Positioned.fill(
+            child: Align(
+              alignment: Alignment.center,
+              child: SingleChildScrollView(
+                child: Container(
+                  margin: const EdgeInsets.all(20),
+                  constraints: BoxConstraints(
+                    maxWidth: screenSize.width * 0.9,
+                    maxHeight: screenSize.height * 0.8,
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      width: double.infinity, // Take available width
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                        border: Border.all(color: Colors.blue.shade100, width: 1.5),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(16),
+                                topRight: Radius.circular(16),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade100,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    Icons.add_circle,
+                                    color: Colors.blue,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Add Event on $day',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      Text(
+                                        'At ${hour.toString().padLeft(2, '0')}:00',
+                                        style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close, size: 20),
+                                  onPressed: _removeAddButtonOverlay,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildAddEventOption(
+                                  Icons.add,
+                                  'Add Event at ${hour.toString().padLeft(2, '0')}:00',
+                                  'Create a new event at this time',
+                                      () {
+                                    _openAddDialog(day, hour);
+                                    _removeAddButtonOverlay();
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                _buildAddEventOption(
+                                  Icons.schedule,
+                                  'Custom Time Slot',
+                                  'Choose a different start time',
+                                      () {
+                                    _openCustomTimeDialog(day);
+                                    _removeAddButtonOverlay();
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
 
     overlayState.insert(_addButtonOverlay!);
-    Future.delayed(const Duration(seconds: 3), () {
-      _removeAddButtonOverlay();
-    });
   }
 
-  Widget _buildAddEventOption(IconData icon, String text, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: Colors.blue),
-            const SizedBox(width: 8),
-            Text(
-              text,
-              style: const TextStyle(fontSize: 12, color: Colors.blue),
-            ),
-          ],
+
+  Widget _buildAddEventOption(IconData icon, String title, String description, VoidCallback onTap) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: double.infinity, // Take full width
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  icon,
+                  color: Colors.blue,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios,
+                color: Colors.grey.shade400,
+                size: 16,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -7149,8 +7284,6 @@ class _ProfilePageState extends State<ProfilePage> {
     if (hour == 12) return '12:00 PM';
     return '${hour - 12}:00 PM';
   }
-
-  // =============== WIDGET BUILDERS ===============
 
   @override
   Widget build(BuildContext context) {
@@ -7472,8 +7605,6 @@ class _ProfilePageState extends State<ProfilePage> {
         _emailController.text = email;
         _role = role;
       });
-
-      // Load signkey after role is determined
       if (_role == "mentor") {
         await _loadSignkey();
       }
@@ -10670,20 +10801,21 @@ enum MeetingFrequency {
   int get minDaysAhead {
     switch (this) {
       case MeetingFrequency.daily:
-        return 2; // At least tomorrow
+        return 2;
       case MeetingFrequency.weekly:
-        return 7; // At least 1 week ahead
+        return 7;
       case MeetingFrequency.biWeekly:
-        return 14; // At least 2 weeks ahead
+        return 14;
       case MeetingFrequency.monthly:
-        return 30; // At least 1 month ahead
+        return 30;
       case MeetingFrequency.quarterly:
-        return 90; // At least 3 months ahead
+        return 90;
       case MeetingFrequency.custom:
-        return 7; // Default 1 week ahead
+        return 7;
     }
   }
 }
+
 class CombinedScheduleEvent {
   final DateTime date;
   final String startTime;
@@ -10702,7 +10834,6 @@ class CombinedScheduleEvent {
   });
 
   Map<String, dynamic> toJson() {
-    // Convert times to 24-hour format
     String formatTime(String timeStr) {
       final time = GeminiMeetingSuggestionEngine._parseTimeString(timeStr);
       if (time != null) {
@@ -10721,6 +10852,7 @@ class CombinedScheduleEvent {
     };
   }
 }
+
 class TimePreferences {
   final TimeOfDay? preferredStartTime;
   final TimeOfDay? preferredEndTime;
@@ -10743,15 +10875,18 @@ class TimePreferences {
     };
   }
 }
+
 extension TimeOfDayExtension on TimeOfDay {
   String format24Hour() {
     return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
 }
+
 class GeminiMeetingSuggestionEngine {
   static String? _apiKey;
   static bool _isInitialized = false;
   static bool _isInitializing = false;
+
   static Future<void> _initializeApiKey() async {
     if (_isInitialized || _isInitializing) return;
 
@@ -10761,10 +10896,8 @@ class GeminiMeetingSuggestionEngine {
       await dotenv.load(fileName: ".env");
       _apiKey = dotenv.get('GEMINI_API_KEY');
       if (_apiKey == null || _apiKey!.isEmpty) {
-
         throw Exception('GEMINI_API_KEY not found in .env file');
       }
-
 
       _isInitialized = true;
     } catch (e) {
@@ -10774,17 +10907,20 @@ class GeminiMeetingSuggestionEngine {
       _isInitializing = false;
     }
   }
+
   static Future<void> ensureInitialized() async {
     if (!_isInitialized) {
       await _initializeApiKey();
     }
   }
+
   static Future<String?> get apiKey async {
     if (!_isInitialized) {
       await ensureInitialized();
     }
     return _apiKey;
   }
+
   static Future<List<Map<String, dynamic>>> findOptimalTimesWithAI({
     required List<CombinedScheduleEvent> allEvents,
     required MeetingFrequency frequency,
@@ -10793,7 +10929,6 @@ class GeminiMeetingSuggestionEngine {
     required TimePreferences timePreferences,
     int numberOfSuggestions = 3,
   }) async {
-
     try {
       await ensureInitialized();
     } catch (e) {
@@ -10808,6 +10943,7 @@ class GeminiMeetingSuggestionEngine {
         frequency,
         timePreferences,
         _generateCandidateDates(frequency),
+        userSignkey,
         numberOfSuggestions,
       );
     }
@@ -10825,6 +10961,7 @@ class GeminiMeetingSuggestionEngine {
         now: now,
         candidateDates: candidateDates,
       );
+
       final response = await http.post(
         Uri.parse(
           'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$currentApiKey',
@@ -10857,6 +10994,7 @@ class GeminiMeetingSuggestionEngine {
           allEvents,
           timePreferences,
           candidateDates,
+          userSignkey,
         );
       } else {
         print('Gemini API error: ${response.statusCode} - ${response.body}');
@@ -10865,6 +11003,7 @@ class GeminiMeetingSuggestionEngine {
           frequency,
           timePreferences,
           candidateDates,
+          userSignkey,
           numberOfSuggestions,
         );
       }
@@ -10875,6 +11014,7 @@ class GeminiMeetingSuggestionEngine {
         frequency,
         timePreferences,
         _generateCandidateDates(frequency),
+        userSignkey,
         numberOfSuggestions,
       );
     }
@@ -10914,6 +11054,7 @@ class GeminiMeetingSuggestionEngine {
 
     return dates;
   }
+
   static String _buildPrompt({
     required List<CombinedScheduleEvent> allEvents,
     required MeetingFrequency frequency,
@@ -10939,6 +11080,9 @@ CRITICAL RULES:
 2. ${hasTimeRange ? 'Only suggest times within the preferred time range: $startTimeStr to $endTimeStr' : 'Any time between 8:00 and 20:00 is acceptable'}
 3. All suggestions MUST be at least ${frequency.minDaysAhead} days ahead of today
 4. Use 24-hour format for all times (e.g., "14:30" not "2:30 PM")
+5. CRITICAL: Do NOT suggest times that conflict with ANY timetable_events
+6. CRITICAL: Verify suggested times are not within the duration of any existing event
+7. CRITICAL: Each suggestion must have DIFFERENT dates and DIFFERENT times
 
 Meeting Frequency: ${frequency.title} (${frequency.description})
 Minimum days ahead required: ${frequency.minDaysAhead} days
@@ -10954,70 +11098,194 @@ User Preferences:
 - Preferred Time Range: ${hasTimeRange ? '$startTimeStr to $endTimeStr' : 'Any time'}
 - Meeting Duration: $durationMinutes minutes
 
+SCHEDULE DATA STRUCTURE:
+Events are categorized by source:
+1. 'timetable' - Recurring weekly events (including mentees)
+   - These are FIXED commitments that repeat every week
+   - Source: 'timetable'
+   - Signkey: Identifies the owner
+   - Title: Event title (may include "(Mentee)" suffix for mentee events)
+   - These events appear for EVERY occurrence of their weekday in the next 90 days
+   
+2. 'events' - One-time events (Events table with capital E)
+   - Source: 'events'
+   - May be all-day events (00:00-23:59)
+   - Can be for user or mentees
+   
+3. 'calendar' - Calendar events
+   - Source: 'calendar'
+   - Typically user's own events
+
 Schedule Data (next 90 days):
 ${jsonEncode(eventsJson)}
 
 ANALYSIS REQUIREMENTS:
-1. CRITICAL: Consider PARTIALLY BOOKED days - find available time slots between existing events
-2. STRICT PRIORITY: Find slots that can accommodate the FULL $durationMinutes minutes meeting duration
-3. When checking partially booked days:
-   - Look for gaps between existing events that are at least $durationMinutes minutes long
-   - Consider time before first event of the day (if it starts late enough)
-   - Consider time after last event of the day (if it ends early enough)
-   - Consider gaps between consecutive events
-4. Ensure the time slot has no conflicts for the ENTIRE duration
-5. Try to match user preferences exactly first
-6. If exact preferences not available, fall back to intelligent scheduling
-7. Avoid dates with existing events for the same signkey (especially timetable_events)
-8. Avoid dates where mentees (same signkey) have timetable events
-9. Calculate a confidence score (0-100) based on:
-    - Slot accommodates full $durationMinutes minutes: +50 points
-    - Matches exact time preference: +30 points
-    - Within preferred time range: +25 points
-    - No conflicts: +40 points
-    - Found gap in partially booked day: +35 points
-    - Weekday (Monday-Friday): +20 points
-    - Weekend (Saturday): -30 points
-    - Sunday: -100 points (NOT ALLOWED)
-    - Each existing event on that date: -15 points (but still consider gaps)
-    - Mentee conflicts: -40 points each
-    - Proximity to ideal scheduling time (not too soon, not too late): 
-        - ${frequency.minDaysAhead} to ${frequency.minDaysAhead * 2} days ahead: +30 points
-        - ${frequency.minDaysAhead * 2 + 1} to ${frequency.minDaysAhead * 3} days ahead: +25 points
-        - More than ${frequency.minDaysAhead * 3} days ahead: +15 points
-        - Less than ${frequency.minDaysAhead} days ahead: -100 points (NOT ALLOWED)
-    - ${hasTimeRange ? 'Outside preferred time range: -15 points' : 'No penalty for time range'}
-    - Slot too short for $durationMinutes minutes: -100 points
+1. FIRST PRIORITY: Check ALL timetable_events - these are mandatory weekly commitments
+2. SECOND PRIORITY: Check other events (events, calendar)
+3. For each candidate date, check ALL events on that date:
+   - Calculate event start and end times in minutes
+   - Calculate suggested meeting duration: start + $durationMinutes minutes
+   - Check if suggested time overlaps with ANY event's duration
+   
+4. TIMETABLE_EVENTS SPECIAL HANDLING:
+   - Timetable events are expanded to EVERY occurrence of their weekday
+   - For example: Monday 09:00-10:00 event appears on EVERY Monday in next 90 days
+   - These are ABSOLUTE conflicts - cannot schedule over them
+   - Mentee timetable events (signkey = "$userSignkey" but marked as mentee) are also conflicts
+   
+5. CONFLICT DETECTION LOGIC:
+   - For each event on candidate date:
+     1. Parse startTime and endTime to minutes
+     2. Calculate suggestedStartMinutes and suggestedEndMinutes
+     3. Check overlap: suggestedStart < eventEnd AND suggestedEnd > eventStart
+     4. If overlap exists, it's a conflict
+   
+6. GAP FINDING STRATEGY:
+   - Sort all events on the day by start time
+   - Check gaps:
+     a. Before first event (if day starts after 8:00 or preferred start)
+     b. Between consecutive events
+     c. After last event (if day ends before 20:00 or preferred end)
+   - Minimum gap needed: $durationMinutes minutes
+   
+7. MENTEE EVENTS IDENTIFICATION:
+   - Look for "(Mentee)" suffix in title OR different userId
+   - These are also conflicts for scheduling purposes
+   - User needs to be available for mentee meetings
 
-TIME SLOT ANALYSIS RULES:
-- For each day, sort events by start time
-- Check if there's enough time BEFORE the first event (if first event starts after 8:00 AM)
-- Check gaps BETWEEN consecutive events (end time of event 1 to start time of event 2)
-- Check if there's enough time AFTER the last event (if last event ends before 8:00 PM)
-- Minimum gap needed: $durationMinutes minutes
-- Time range constraint: ${hasTimeRange ? 'MUST be between $startTimeStr and $endTimeStr' : 'Should be between 8:00 and 20:00'}
+VARIETY ENFORCEMENT - CRITICAL:
+You MUST provide suggestions with VARIED dates and times. Follow these rules:
+
+1. DATE VARIETY:
+   - Each suggestion must be on a DIFFERENT date
+   - Spread suggestions across different days of the week
+   - Avoid consecutive days unless absolutely necessary
+   - Prefer pattern: Monday → Wednesday → Friday
+   - Minimum 2 days gap between suggestions
+
+2. TIME VARIETY:
+   - Each suggestion must have a DIFFERENT time
+   - Minimum 90 minutes difference between suggestion times
+   - Spread across time categories:
+     • Morning (08:00-11:00)
+     • Afternoon (12:00-15:00)
+     • Late Afternoon (16:00-18:00)
+   - ${hasTimeRange ? 'Within preferred range: $startTimeStr to $endTimeStr' : 'Within working hours: 08:00-20:00'}
+
+3. GAP TYPE VARIETY:
+   - Try to include different gap types:
+     • free_day (completely free day)
+     • between_events (gap between existing events)
+     • after_last (after last event of day)
+     • before_first (before first event of day)
+
+4. ORDER OF PRIORITY:
+   - First suggestion: Highest scoring overall
+   - Second suggestion: Different weekday AND different time category
+   - Third suggestion: Different from both previous suggestions in weekday and time
+
+CONFLICT SCORING:
+- Any conflict with timetable_event: -1000 points (AUTOMATIC REJECTION)
+- Conflict with regular event: -100 points
+- Partial conflict (within 15 minutes): -50 points
+- Mentee event conflict: -150 points
+- No conflicts: +100 points
+- Variety bonus (different weekday from previous): +20 points
+- Variety bonus (different time category from previous): +15 points
+
+TIME SLOT QUALITY SCORING:
+- Slot accommodates full $durationMinutes: +80 points
+- Matches exact time preference: +60 points
+- Within preferred time range: +40 points
+- Found in natural gap between events: +30 points
+- Weekday (Mon-Fri): +20 points
+- Saturday: +10 points
+- Sunday: -100 points (NOT ALLOWED)
+- Proximity to ideal scheduling (${frequency.minDaysAhead}-${frequency.minDaysAhead*2} days): +30 points
+- More than ${frequency.minDaysAhead*3} days ahead: +10 points
+
+REJECTION CRITERIA (DO NOT SUGGEST IF):
+1. Day is Sunday
+2. Less than ${frequency.minDaysAhead} days ahead
+3. Any overlap with timetable_events
+4. Slot shorter than $durationMinutes minutes
+5. Outside working hours (8:00-20:00 unless custom range)
+6. Too similar to previous suggestion (< 90 minutes difference)
+7. Same weekday as previous suggestion (unless no alternatives)
 
 OUTPUT FORMAT (JSON only, no markdown):
 {
   "suggestions": [
     {
-      "date": "2025-12-22",  // MUST be after ${DateFormat('yyyy-MM-dd').format(minStartDate)} and NOT Sunday
-      "time": "10:00",  // MUST be in 24-hour format
+      "date": "2025-12-22",
+      "time": "10:00",
       "score": 95,
       "conflicts": 0,
-      "reasoning": "Brief explanation including why this date fits the frequency pattern",
-      "matchesPreferences": true/false,
+      "reasoning": "Monday morning slot, free from timetable conflicts, matches preferences",
+      "matchesPreferences": true,
       "preferenceMatches": ["time", "duration"],
-      "foundInGap": true/false,
-      "daysAhead": 14  // How many days from today
+      "foundInGap": true,
+      "daysAhead": 14,
+      "timetableConflict": false,
+      "gapType": "free_day",
+      "timeCategory": "morning",
+      "weekday": "Monday"
+    },
+    {
+      "date": "2025-12-24",
+      "time": "14:30",
+      "score": 92,
+      "conflicts": 0,
+      "reasoning": "Wednesday afternoon slot, found gap between events, different time from Monday",
+      "matchesPreferences": true,
+      "preferenceMatches": ["time"],
+      "foundInGap": true,
+      "daysAhead": 16,
+      "timetableConflict": false,
+      "gapType": "between_events",
+      "timeCategory": "afternoon",
+      "weekday": "Wednesday"
+    },
+    {
+      "date": "2025-12-26",
+      "time": "16:45",
+      "score": 90,
+      "conflicts": 0,
+      "reasoning": "Friday late afternoon, after last event, completes varied weekly spread",
+      "matchesPreferences": true,
+      "preferenceMatches": ["time"],
+      "foundInGap": true,
+      "daysAhead": 18,
+      "timetableConflict": false,
+      "gapType": "after_last",
+      "timeCategory": "late_afternoon",
+      "weekday": "Friday"
     }
   ]
 }
 
-Return exactly ${numberOfSuggestions} suggestions sorted by score (highest first).
-CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead of today and NOT on Sundays.
+CRITICAL OUTPUT RULES:
+1. Return EXACTLY ${numberOfSuggestions} suggestions
+2. Sort by score (highest first)
+3. Each suggestion MUST be on a DIFFERENT date
+4. Each suggestion MUST have a DIFFERENT time (minimum 90 minutes difference)
+5. Prefer different weekdays for each suggestion
+6. Include variety in time categories (morning/afternoon/late_afternoon)
+7. Each suggestion MUST be conflict-free with ALL timetable events
+8. Include gapType and timeCategory in each suggestion
+9. Add weekday field showing day name
+10. Ensure reasoning explains why this time/date was chosen and how it differs from others
+
+SAMPLE VARIED OUTPUT FOR ${numberOfSuggestions} SUGGESTIONS:
+- Suggestion 1: Monday morning (e.g., 09:30)
+- Suggestion 2: Wednesday afternoon (e.g., 14:00) 
+- Suggestion 3: Friday late afternoon (e.g., 16:30)
+- Different dates, different times, different weekdays, different time categories
+
+DO NOT output the same time for multiple dates. Be creative and find the BEST VARIED options.
 ''';
   }
+
   static Future<List<Map<String, dynamic>>> _parseGeminiResponse(
       String responseBody,
       DateTime now,
@@ -11026,6 +11294,7 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
       List<CombinedScheduleEvent> allEvents,
       TimePreferences timePreferences,
       List<DateTime> candidateDates,
+      String userSignkey,
       ) async {
     try {
       print('Parsing Gemini response...');
@@ -11042,13 +11311,38 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
         try {
           final date = DateTime.parse(suggestion['date']);
           final daysAhead = suggestion['daysAhead'] ?? date.difference(now).inDays;
+
           if (daysAhead < frequency.minDaysAhead || date.weekday == DateTime.sunday) {
             print('Warning: Suggestion $date is invalid (days ahead: $daysAhead, Sunday: ${date.weekday == DateTime.sunday}), skipping');
             continue;
           }
+
           final timeStr = suggestion['time'] as String;
           if (!RegExp(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$').hasMatch(timeStr)) {
             print('Warning: Invalid time format: $timeStr, skipping');
+            continue;
+          }
+
+          final timetableConflict = suggestion['timetableConflict'] ?? false;
+          if (timetableConflict) {
+            print('Warning: Suggestion $date $timeStr has timetable conflict, skipping');
+            continue;
+          }
+
+          final timeParts = timeStr.split(':');
+          final startTime = TimeOfDay(hour: int.parse(timeParts[0]), minute: int.parse(timeParts[1]));
+          final durationMinutes = timePreferences.meetingDuration?.inMinutes ?? 60;
+
+          final conflicts = _checkConflictsForTime(
+              date,
+              startTime,
+              durationMinutes,
+              allEvents,
+              userSignkey
+          );
+
+          if (conflicts > 0) {
+            print('Warning: Suggestion $date $timeStr has $conflicts conflicts, skipping');
             continue;
           }
 
@@ -11056,17 +11350,19 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
             'date': date,
             'time': timeStr,
             'score': suggestion['score'] ?? 0,
-            'conflicts': suggestion['conflicts'] ?? 0,
+            'conflicts': conflicts,
             'reasoning': suggestion['reasoning'] ?? '',
             'matchesPreferences': suggestion['matchesPreferences'] ?? false,
             'preferenceMatches': List<String>.from(suggestion['preferenceMatches'] ?? []),
             'foundInGap': suggestion['foundInGap'] ?? false,
             'daysAhead': daysAhead,
+            'timetableConflict': timetableConflict,
           });
         } catch (e) {
           print('Error parsing suggestion: $e');
         }
       }
+
       if (results.length < numberOfSuggestions) {
         print('Got ${results.length} suggestions, adding ${numberOfSuggestions - results.length} fallback suggestions');
         final fallbackResults = _getFallbackSuggestions(
@@ -11074,6 +11370,7 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
           frequency,
           timePreferences,
           candidateDates,
+          userSignkey,
           numberOfSuggestions - results.length,
         );
         results.addAll(fallbackResults);
@@ -11088,33 +11385,82 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
         frequency,
         timePreferences,
         candidateDates,
+        userSignkey,
         numberOfSuggestions,
       );
     }
   }
+
+  static int _checkConflictsForTime(
+      DateTime date,
+      TimeOfDay startTime,
+      int durationMinutes,
+      List<CombinedScheduleEvent> allEvents,
+      String userSignkey,
+      ) {
+    int conflicts = 0;
+    final dateEvents = allEvents.where((event) =>
+    event.date.year == date.year &&
+        event.date.month == date.month &&
+        event.date.day == date.day
+    ).toList();
+
+    final suggestedStartMinutes = startTime.hour * 60 + startTime.minute;
+    final suggestedEndMinutes = suggestedStartMinutes + durationMinutes;
+
+    for (final event in dateEvents) {
+      final eventStart = _parseTimeString(event.startTime);
+      final eventEnd = _parseTimeString(event.endTime);
+
+      if (eventStart != null && eventEnd != null) {
+        final eventStartMinutes = eventStart.hour * 60 + eventStart.minute;
+        final eventEndMinutes = eventEnd.hour * 60 + eventEnd.minute;
+
+        final hasConflict = (
+            suggestedStartMinutes < eventEndMinutes &&
+                suggestedEndMinutes > eventStartMinutes
+        );
+
+        if (hasConflict) {
+          if (event.source == 'timetable' && event.signkey == userSignkey) {
+            return 1000;
+          }
+          conflicts++;
+        }
+      }
+    }
+
+    return conflicts;
+  }
+
   static List<Map<String, dynamic>> _getFallbackSuggestions(
       List<CombinedScheduleEvent> allEvents,
       MeetingFrequency frequency,
       TimePreferences timePreferences,
       List<DateTime> candidateDates,
+      String userSignkey,
       int numberOfSuggestions,
       ) {
     print('Using fallback suggestions engine');
     final results = <Map<String, dynamic>>[];
     final durationMinutes = timePreferences.meetingDuration?.inMinutes ?? 60;
     final now = DateTime.now();
+
     for (var date in candidateDates) {
       if (results.length >= numberOfSuggestions) break;
       if (date.weekday == DateTime.sunday) continue;
+
       final daysAhead = date.difference(DateTime(now.year, now.month, now.day)).inDays;
       if (daysAhead < frequency.minDaysAhead) {
         continue;
       }
+
       final dateEvents = allEvents.where((event) =>
       event.date.year == date.year &&
           event.date.month == date.month &&
           event.date.day == date.day
       ).toList();
+
       final workingStart = const TimeOfDay(hour: 8, minute: 0);
       final workingEnd = const TimeOfDay(hour: 20, minute: 0);
       final effectiveStartTime = timePreferences.preferredStartTime ?? workingStart;
@@ -11126,12 +11472,15 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
       List<String> matchedPrefs = [];
       String reasoning = '';
 
+      List<TimeOfDay> candidateTimes = [];
+
       if (dateEvents.isEmpty) {
         if (_hasSufficientGap(effectiveStartTime, effectiveEndTime, durationMinutes)) {
           suggestedTime = effectiveStartTime;
           matchesPreferences = timePreferences.hasTimeRange;
           if (matchesPreferences) matchedPrefs.add('time');
           reasoning = 'Completely free day';
+          candidateTimes.add(suggestedTime);
         }
       } else {
         dateEvents.sort((a, b) {
@@ -11141,78 +11490,56 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
           return (timeA.hour * 60 + timeA.minute).compareTo(timeB.hour * 60 + timeB.minute);
         });
 
-        // Check morning slot (before first event)
-        final firstEventStart = _parseTimeString(dateEvents.first.startTime);
-        if (firstEventStart != null) {
-          // Calculate the earliest we can start (max of preferred start time and working start)
-          final earliestStart = _maxTimeOfDay(effectiveStartTime, workingStart);
-          if (_hasSufficientGap(earliestStart, firstEventStart, durationMinutes) &&
-              _isTimeInRange(earliestStart, workingStart, workingEnd)) {
-            suggestedTime = earliestStart;
+        candidateTimes.addAll(_findAvailableSlotsInDay(
+          dateEvents,
+          durationMinutes,
+          effectiveStartTime,
+          effectiveEndTime,
+          workingStart,
+          workingEnd,
+        ));
+      }
+
+      for (final candidateTime in candidateTimes) {
+        final conflicts = _checkConflictsForTime(
+          date,
+          candidateTime,
+          durationMinutes,
+          dateEvents,
+          userSignkey,
+        );
+
+        if (conflicts == 0) {
+          suggestedTime = candidateTime;
+          matchesPreferences = _isTimeInRange(suggestedTime, effectiveStartTime, effectiveEndTime);
+          if (matchesPreferences) matchedPrefs.add('time');
+
+          final eventIndex = _findGapForTime(dateEvents, candidateTime, durationMinutes);
+          if (eventIndex >= 0) {
             foundInGap = true;
-            matchesPreferences = _isTimeInRange(suggestedTime!, effectiveStartTime, effectiveEndTime);
-            if (matchesPreferences) matchedPrefs.add('time');
-            reasoning = 'Found morning slot before first event';
+            reasoning = 'Found gap between events';
+          } else if (dateEvents.isEmpty) {
+            reasoning = 'Free day';
+          } else {
+            reasoning = 'Available slot';
           }
-        }
-        if (suggestedTime == null && dateEvents.length > 1) {
-          for (int i = 0; i < dateEvents.length - 1; i++) {
-            final currentEventEnd = _parseTimeString(dateEvents[i].endTime);
-            final nextEventStart = _parseTimeString(dateEvents[i + 1].startTime);
-
-            if (currentEventEnd != null && nextEventStart != null) {
-              // Ensure the gap is within working hours and preferred range
-              if (_hasSufficientGap(currentEventEnd, nextEventStart, durationMinutes) &&
-                  _isTimeInRange(currentEventEnd, workingStart, workingEnd) &&
-                  _isTimeInRange(currentEventEnd, effectiveStartTime, effectiveEndTime)) {
-                suggestedTime = currentEventEnd;
-                foundInGap = true;
-                matchesPreferences = true;
-                matchedPrefs.add('time');
-                reasoning = 'Found gap between events';
-                break;
-              }
-            }
-          }
-        }
-
-        // Check evening slot (after last event)
-        if (suggestedTime == null) {
-          final lastEventEnd = _parseTimeString(dateEvents.last.endTime);
-          if (lastEventEnd != null) {
-            // Calculate the latest we can end (min of preferred end time and working end)
-            final latestEnd = _minTimeOfDay(effectiveEndTime, workingEnd);
-
-            if (_hasSufficientGap(lastEventEnd, latestEnd, durationMinutes) &&
-                _isTimeInRange(lastEventEnd, workingStart, workingEnd) &&
-                _isTimeInRange(lastEventEnd, effectiveStartTime, effectiveEndTime)) {
-              suggestedTime = lastEventEnd;
-              foundInGap = true;
-              matchesPreferences = true;
-              matchedPrefs.add('time');
-              reasoning = 'Found evening slot after last event';
-            }
-          }
-        }
-
-        // If no gap found in preferred range, look for any available slot in working hours
-        if (suggestedTime == null) {
-          // Try to find any slot in working hours
-          suggestedTime = _findAnyAvailableSlot(
-              dateEvents,
-              durationMinutes,
-              workingStart,
-              workingEnd
-          );
-          if (suggestedTime != null) {
-            matchesPreferences = _isTimeInRange(suggestedTime!, effectiveStartTime, effectiveEndTime);
-            if (matchesPreferences) matchedPrefs.add('time');
-            reasoning = 'Available slot found${matchesPreferences ? ' in preferred range' : ''}';
-          }
+          break;
         }
       }
 
       if (suggestedTime != null) {
+        final conflicts = _checkConflictsForTime(
+          date,
+          suggestedTime,
+          durationMinutes,
+          allEvents,
+          userSignkey,
+        );
+
+        if (conflicts > 0) {
+          continue;
+        }
+
         final isInTimeRange = _isTimeInRange(suggestedTime, effectiveStartTime, effectiveEndTime);
         final score = _calculateFallbackScore(
           matchesPreferences,
@@ -11228,12 +11555,13 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
           'date': date,
           'time': '${suggestedTime.hour.toString().padLeft(2, '0')}:${suggestedTime.minute.toString().padLeft(2, '0')}',
           'score': score,
-          'conflicts': dateEvents.length,
+          'conflicts': conflicts,
           'reasoning': '$reasoning ($daysAhead days ahead)',
           'matchesPreferences': matchesPreferences,
           'preferenceMatches': matchedPrefs,
           'foundInGap': foundInGap,
           'daysAhead': daysAhead,
+          'timetableConflict': false,
         });
       }
     }
@@ -11242,7 +11570,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
       for (var date in candidateDates) {
         if (results.length >= numberOfSuggestions) break;
 
-        // Skip Sundays
         if (date.weekday == DateTime.sunday) continue;
 
         final daysAhead = date.difference(DateTime(now.year, now.month, now.day)).inDays;
@@ -11266,6 +11593,18 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
             defaultTime = const TimeOfDay(hour: 10, minute: 0);
           }
 
+          final conflicts = _checkConflictsForTime(
+            date,
+            defaultTime,
+            durationMinutes,
+            allEvents,
+            userSignkey,
+          );
+
+          if (conflicts > 0) {
+            continue;
+          }
+
           final isInPreferredRange = timePreferences.hasTimeRange ?
           _isTimeInRange(defaultTime, timePreferences.preferredStartTime!, timePreferences.preferredEndTime!) : false;
 
@@ -11279,6 +11618,7 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
             'preferenceMatches': isInPreferredRange ? ['time'] : [],
             'foundInGap': false,
             'daysAhead': daysAhead,
+            'timetableConflict': false,
           });
         }
       }
@@ -11286,6 +11626,129 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
 
     print('Fallback engine found ${results.length} suggestions');
     return results;
+  }
+
+  static List<TimeOfDay> _findAvailableSlotsInDay(
+      List<CombinedScheduleEvent> events,
+      int durationMinutes,
+      TimeOfDay preferredStart,
+      TimeOfDay preferredEnd,
+      TimeOfDay workingStart,
+      TimeOfDay workingEnd,
+      ) {
+    final List<TimeOfDay> slots = [];
+
+    final effectiveStart = _maxTimeOfDay(preferredStart, workingStart);
+    final effectiveEnd = _minTimeOfDay(preferredEnd, workingEnd);
+
+    if (events.isEmpty) {
+      if (_hasSufficientGap(effectiveStart, effectiveEnd, durationMinutes)) {
+        slots.add(effectiveStart);
+      }
+      return slots;
+    }
+
+    events.sort((a, b) {
+      final timeA = _parseTimeString(a.startTime);
+      final timeB = _parseTimeString(b.startTime);
+      if (timeA == null || timeB == null) return 0;
+      return (timeA.hour * 60 + timeA.minute).compareTo(timeB.hour * 60 + timeB.minute);
+    });
+
+    final firstEventStart = _parseTimeString(events.first.startTime);
+    if (firstEventStart != null) {
+      if (_hasSufficientGap(effectiveStart, firstEventStart, durationMinutes) &&
+          _isTimeInRange(effectiveStart, workingStart, workingEnd)) {
+        slots.add(effectiveStart);
+      }
+    }
+
+    for (int i = 0; i < events.length - 1; i++) {
+      final currentEventEnd = _parseTimeString(events[i].endTime);
+      final nextEventStart = _parseTimeString(events[i + 1].startTime);
+
+      if (currentEventEnd != null && nextEventStart != null) {
+        if (_hasSufficientGap(currentEventEnd, nextEventStart, durationMinutes) &&
+            _isTimeInRange(currentEventEnd, workingStart, workingEnd) &&
+            _isTimeInRange(currentEventEnd, preferredStart, preferredEnd)) {
+          slots.add(currentEventEnd);
+        }
+      }
+    }
+
+    final lastEventEnd = _parseTimeString(events.last.endTime);
+    if (lastEventEnd != null) {
+      if (_hasSufficientGap(lastEventEnd, effectiveEnd, durationMinutes) &&
+          _isTimeInRange(lastEventEnd, workingStart, workingEnd) &&
+          _isTimeInRange(lastEventEnd, preferredStart, preferredEnd)) {
+        slots.add(lastEventEnd);
+      }
+    }
+
+    if (slots.isEmpty) {
+      final anySlot = _findAnyAvailableSlot(
+          events,
+          durationMinutes,
+          workingStart,
+          workingEnd
+      );
+      if (anySlot != null) {
+        slots.add(anySlot);
+      }
+    }
+
+    return slots;
+  }
+
+  static int _findGapForTime(
+      List<CombinedScheduleEvent> events,
+      TimeOfDay time,
+      int durationMinutes,
+      ) {
+    events.sort((a, b) {
+      final timeA = _parseTimeString(a.startTime);
+      final timeB = _parseTimeString(b.startTime);
+      if (timeA == null || timeB == null) return 0;
+      return (timeA.hour * 60 + timeA.minute).compareTo(timeB.hour * 60 + timeB.minute);
+    });
+
+    final timeInMinutes = time.hour * 60 + time.minute;
+    final endTimeInMinutes = timeInMinutes + durationMinutes;
+
+    if (events.isEmpty) return -1;
+
+    final firstEventStart = _parseTimeString(events.first.startTime);
+    if (firstEventStart != null) {
+      final firstStartMinutes = firstEventStart.hour * 60 + firstEventStart.minute;
+      if (endTimeInMinutes <= firstStartMinutes) {
+        return -2;
+      }
+    }
+
+    for (int i = 0; i < events.length - 1; i++) {
+      final currentEventEnd = _parseTimeString(events[i].endTime);
+      final nextEventStart = _parseTimeString(events[i + 1].startTime);
+
+      if (currentEventEnd != null && nextEventStart != null) {
+        final currentEndMinutes = currentEventEnd.hour * 60 + currentEventEnd.minute;
+        final nextStartMinutes = nextEventStart.hour * 60 + nextEventStart.minute;
+
+        if (timeInMinutes >= currentEndMinutes &&
+            endTimeInMinutes <= nextStartMinutes) {
+          return i;
+        }
+      }
+    }
+
+    final lastEventEnd = _parseTimeString(events.last.endTime);
+    if (lastEventEnd != null) {
+      final lastEndMinutes = lastEventEnd.hour * 60 + lastEventEnd.minute;
+      if (timeInMinutes >= lastEndMinutes) {
+        return events.length - 1;
+      }
+    }
+
+    return -3;
   }
 
   static TimeOfDay? _findAnyAvailableSlot(
@@ -11297,12 +11760,14 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
     if (events.isEmpty) {
       return startBoundary;
     }
+
     events.sort((a, b) {
       final timeA = _parseTimeString(a.startTime);
       final timeB = _parseTimeString(b.startTime);
       if (timeA == null || timeB == null) return 0;
       return (timeA.hour * 60 + timeA.minute).compareTo(timeB.hour * 60 + timeB.minute);
     });
+
     final firstEventStart = _parseTimeString(events.first.startTime);
     if (firstEventStart != null) {
       if (_hasSufficientGap(startBoundary, firstEventStart, durationMinutes)) {
@@ -11310,7 +11775,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
       }
     }
 
-    // Check gaps between events
     for (int i = 0; i < events.length - 1; i++) {
       final currentEventEnd = _parseTimeString(events[i].endTime);
       final nextEventStart = _parseTimeString(events[i + 1].startTime);
@@ -11321,6 +11785,7 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
         }
       }
     }
+
     final lastEventEnd = _parseTimeString(events.last.endTime);
     if (lastEventEnd != null) {
       if (_hasSufficientGap(lastEventEnd, endBoundary, durationMinutes)) {
@@ -11355,7 +11820,6 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
     try {
       timeString = timeString.trim().toLowerCase();
 
-      // Handle 24-hour format (e.g., "14:30")
       if (timeString.contains(':')) {
         final parts = timeString.split(':');
         if (parts.length >= 2) {
@@ -11363,20 +11827,19 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
           var minute = int.tryParse(parts[1].replaceAll(RegExp(r'[^0-9]'), ''));
 
           if (hour != null && minute != null) {
-            // Check for AM/PM in the second part
             if (parts[1].contains('pm') && hour < 12) {
               hour += 12;
             } else if (parts[1].contains('am') && hour == 12) {
               hour = 0;
             }
 
-            // Validate hour range
             if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
               return TimeOfDay(hour: hour, minute: minute);
             }
           }
         }
       }
+
       final regex = RegExp(r'(\d+):(\d+)\s*(am|pm)');
       final match = regex.firstMatch(timeString);
       if (match != null) {
@@ -11391,14 +11854,12 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
             hour = 0;
           }
 
-          // Validate hour range
           if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
             return TimeOfDay(hour: hour, minute: minute);
           }
         }
       }
 
-      // Try simple hour:minute format
       final simpleMatch = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(timeString);
       if (simpleMatch != null) {
         final hour = int.tryParse(simpleMatch.group(1)!);
@@ -11431,33 +11892,29 @@ CRITICAL: All suggestions MUST be at least ${frequency.minDaysAhead} days ahead 
       ) {
     int score = 50;
 
-    // Add moderate bonuses for positive factors
-    if (matchesPrefs) score += 15; // Reduced from 20
-    if (foundInGap) score += 10; // Reduced from 25
-    if (isWeekday) score += 10; // Reduced from 15
-    if (isInTimeRange) score += 10; // Reduced from 20
+    if (matchesPrefs) score += 15;
+    if (foundInGap) score += 10;
+    if (isWeekday) score += 10;
+    if (isInTimeRange) score += 10;
 
-    // Score based on how far ahead (moderate adjustments)
     if (daysAhead >= minDaysAhead && daysAhead <= minDaysAhead * 2) {
-      score += 15; // Reduced from 30 - Optimal timing
+      score += 15;
     } else if (daysAhead > minDaysAhead * 2 && daysAhead <= minDaysAhead * 3) {
-      score += 10; // Reduced from 20 - Good timing
+      score += 10;
     } else if (daysAhead > minDaysAhead * 3) {
-      score += 5; // Reduced from 10 - Acceptable but far ahead
+      score += 5;
     } else {
-      score = 0; // Set to 0 instead of subtracting 100
+      score = 0;
     }
 
-    // Penalize for conflicts (moderate penalty)
-    score -= (conflicts * 3); // Reduced from 5
+    score -= (conflicts * 3);
 
-    // Penalize for weekends (Sunday already filtered, Saturday gets moderate penalty)
-    if (!isWeekday) score -= 15; // Reduced from 30
+    if (!isWeekday) score -= 15;
 
-    // Ensure score stays within 0-100 range
     return score.clamp(0, 100);
   }
 }
+
 class SmartMeetingSchedulerPage extends StatefulWidget {
   const SmartMeetingSchedulerPage({super.key});
 
@@ -11465,6 +11922,7 @@ class SmartMeetingSchedulerPage extends StatefulWidget {
   State<SmartMeetingSchedulerPage> createState() =>
       _SmartMeetingSchedulerPageState();
 }
+
 class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -11500,7 +11958,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     try {
       await GeminiMeetingSuggestionEngine.ensureInitialized();
     } catch (e) {
-
+      print('Gemini initialization error: $e');
     }
   }
 
@@ -11528,7 +11986,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
             _userSignkey = signkey;
             _hasLoadError = false;
           });
-
         } else {
           throw Exception('Signkey not found in user profile. Please update your profile.');
         }
@@ -11580,32 +12037,62 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
 
       print('Fetching schedule events for user: $userId, signkey: $_userSignkey');
 
-      // 1. Get user's timetable events
+      // Fetch all timetable events for this signkey (recurring weekly events)
       try {
         final timetableSnapshot = await _firestore
             .collection('timetable_events')
-            .where('userId', isEqualTo: userId)
-            .where('date', isGreaterThanOrEqualTo: DateFormat('yyyy-MM-dd').format(now))
-            .where('date', isLessThanOrEqualTo: DateFormat('yyyy-MM-dd').format(next90Days))
-            .limit(100)
+            .where('signkey', isEqualTo: _userSignkey)
+            .limit(200) // Increased limit to catch all timetable events including mentees
             .get();
 
-        print('Found ${timetableSnapshot.docs.length} timetable events');
+        print('Found ${timetableSnapshot.docs.length} timetable events (including mentees)');
+
+        // Map to convert day names to weekday numbers
+        final weekdayMap = {
+          'Monday': DateTime.monday,
+          'Tuesday': DateTime.tuesday,
+          'Wednesday': DateTime.wednesday,
+          'Thursday': DateTime.thursday,
+          'Friday': DateTime.friday,
+          'Saturday': DateTime.saturday,
+          'Sunday': DateTime.sunday,
+        };
 
         for (final doc in timetableSnapshot.docs) {
           final data = doc.data();
           try {
-            final dateString = data['date'] as String?;
-            if (dateString != null) {
-              final date = DateTime.parse(dateString);
-              allEvents.add(CombinedScheduleEvent(
-                date: date,
-                startTime: data['startTime']?.toString() ?? '09:00',
-                endTime: data['endTime']?.toString() ?? '10:00',
-                title: data['title']?.toString() ?? 'Timetable Event',
-                source: 'timetable',
-                signkey: data['signkey']?.toString(),
-              ));
+            final dayName = data['day'] as String?;
+            final startTime = data['startTime']?.toString() ?? '09:00';
+            final endTime = data['endTime']?.toString() ?? '10:00';
+            final title = data['title']?.toString() ?? 'Timetable Event';
+            final signkey = data['signkey']?.toString();
+            final eventUserId = data['userId']?.toString();
+
+            if (dayName != null) {
+              final targetWeekday = weekdayMap[dayName];
+              if (targetWeekday != null) {
+                // Generate all occurrences of this weekday in the next 90 days
+                DateTime currentDate = now;
+                while (currentDate.isBefore(next90Days) || currentDate.isAtSameMomentAs(next90Days)) {
+                  if (currentDate.weekday == targetWeekday) {
+                    // Check if this is the user's own event or a mentee's event
+                    final isMenteeEvent = eventUserId != null && eventUserId != userId;
+                    final displayTitle = isMenteeEvent ? '$title (Mentee)' : title;
+
+                    allEvents.add(CombinedScheduleEvent(
+                      date: DateTime(currentDate.year, currentDate.month, currentDate.day),
+                      startTime: startTime,
+                      endTime: endTime,
+                      title: displayTitle,
+                      source: 'timetable',
+                      signkey: signkey,
+                    ));
+                  }
+                  currentDate = currentDate.add(const Duration(days: 1));
+                }
+
+                print('Expanded timetable event: $dayName $startTime-$endTime across 90 days');
+              }
             }
           } catch (e) {
             print('Error parsing timetable event ${doc.id}: $e');
@@ -11615,7 +12102,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         print('Error fetching timetable events: $e');
       }
 
-      // 2. Get Events with matching signkey
+      // Fetch one-time Events (capital E Events table)
       try {
         final eventsSnapshot = await _firestore
             .collection('Events')
@@ -11634,15 +12121,30 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
             if (timestamp != null) {
               final dateTime = timestamp.toDate();
               final title = data['title']?.toString() ?? 'Event';
-              final startTime = data['startTime']?.toString() ?? DateFormat('HH:mm').format(dateTime);
-              final endTime = data['endTime']?.toString() ??
-                  DateFormat('HH:mm').format(dateTime.add(const Duration(hours: 1)));
+
+              // Check if this is an all-day event
+              final dateTimeStr = data['dateTime']?.toString() ?? '';
+              final isAllDay = dateTimeStr.contains('All Day');
+
+              String startTime;
+              String endTime;
+
+              if (isAllDay) {
+                // All-day events block the entire working day
+                startTime = '00:00';
+                endTime = '23:59';
+              } else {
+                // Use provided times or default to 1-hour duration
+                startTime = data['startTime']?.toString() ?? DateFormat('HH:mm').format(dateTime);
+                endTime = data['endTime']?.toString() ??
+                    DateFormat('HH:mm').format(dateTime.add(const Duration(hours: 1)));
+              }
 
               allEvents.add(CombinedScheduleEvent(
                 date: DateTime(dateTime.year, dateTime.month, dateTime.day),
                 startTime: startTime,
                 endTime: endTime,
-                title: title,
+                title: isAllDay ? '$title (All Day)' : title,
                 source: 'events',
                 signkey: data['signkey']?.toString(),
               ));
@@ -11655,7 +12157,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         print('Error fetching Events: $e');
       }
 
-      // 3. Get personal calendar events
+      // Fetch one-time calendar events (events table with uid)
       try {
         final calendarSnapshot = await _firestore
             .collection('events')
@@ -11689,45 +12191,11 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         print('Error fetching calendar events: $e');
       }
 
-      // 4. Get mentee timetable events (same signkey, different userId)
-      try {
-        final menteeSnapshot = await _firestore
-            .collection('timetable_events')
-            .where('signkey', isEqualTo: _userSignkey)
-            .where('date', isGreaterThanOrEqualTo: DateFormat('yyyy-MM-dd').format(now))
-            .where('date', isLessThanOrEqualTo: DateFormat('yyyy-MM-dd').format(next90Days))
-            .limit(100)
-            .get();
-
-        print('Found ${menteeSnapshot.docs.length} mentee events');
-
-        for (final doc in menteeSnapshot.docs) {
-          final data = doc.data();
-          final menteeUserId = data['userId']?.toString();
-          if (menteeUserId != null && menteeUserId != userId) {
-            try {
-              final dateString = data['date'] as String?;
-              if (dateString != null) {
-                final date = DateTime.parse(dateString);
-                allEvents.add(CombinedScheduleEvent(
-                  date: date,
-                  startTime: data['startTime']?.toString() ?? '09:00',
-                  endTime: data['endTime']?.toString() ?? '10:00',
-                  title: '${data['title']?.toString() ?? 'Event'} (Mentee)',
-                  source: 'timetable',
-                  signkey: data['signkey']?.toString(),
-                ));
-              }
-            } catch (e) {
-              print('Error parsing mentee event ${doc.id}: $e');
-            }
-          }
-        }
-      } catch (e) {
-        print('Error fetching mentee events: $e');
-      }
-
       print('Total events loaded: ${allEvents.length}');
+      print('Breakdown:');
+      print('- Timetable (recurring): ${allEvents.where((e) => e.source == 'timetable').length}');
+      print('- Events (one-time): ${allEvents.where((e) => e.source == 'events').length}');
+      print('- Calendar: ${allEvents.where((e) => e.source == 'calendar').length}');
     } catch (e) {
       print('Error fetching schedule events: $e');
       _showSnackBar('Error loading schedule events: ${e.toString().replaceAll('Exception: ', '')}', isError: true);
@@ -11737,7 +12205,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   }
 
   Future<void> _findAvailableDates() async {
-
     if (_userSignkey == null || _userSignkey!.isEmpty) {
       _showSnackBar('Please wait, still loading your profile...', isError: true);
       await _initializeSignkey();
@@ -11745,6 +12212,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         return;
       }
     }
+
     FocusManager.instance.primaryFocus?.unfocus();
     if (_titleController.text.trim().isEmpty) {
       _showSnackBar('Please enter a meeting title first', isError: true);
@@ -11758,12 +12226,10 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     });
 
     try {
-
       await GeminiMeetingSuggestionEngine.ensureInitialized();
 
       _allEvents = await _getAllScheduleEvents();
 
-      // Parse duration from controller
       final durationText = _durationController.text.trim();
       final durationMinutes = int.tryParse(durationText) ?? 60;
 
@@ -11773,12 +12239,12 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         return;
       }
 
-      // Create time preferences
       final timePreferences = TimePreferences(
         preferredStartTime: _preferredStartTime,
         preferredEndTime: _preferredEndTime,
         meetingDuration: Duration(minutes: durationMinutes),
       );
+
       final suggestions = await GeminiMeetingSuggestionEngine.findOptimalTimesWithAI(
         allEvents: _allEvents,
         frequency: _selectedFrequency,
@@ -12853,7 +13319,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                     ),
                   ),
                 const Spacer(),
-
               ],
             ),
             if (reasoning.isNotEmpty && reasoning.length < 100) ...[
@@ -12931,6 +13396,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     );
   }
 }
+
 class _FrequencySelectionDialog extends StatelessWidget {
   final MeetingFrequency selectedFrequency;
   final Function(MeetingFrequency) onFrequencySelected;
