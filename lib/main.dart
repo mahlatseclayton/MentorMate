@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:core';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
@@ -3010,16 +3011,65 @@ class _SuggestionsPageState extends State<SuggestionsPage> {
     "SGO (Student Governance Office)",
     "STPU (Student Transitions and Persistence Unit)",
     "FYE (First Year Experience) Program",
-    "Clubs & Societies / CSOs (Student‑Run Clubs)",
+
+    "Academic Development Unit (ADU)",
+    "Writing Centre",
+    "Maths & Science Learning Centre (MSLC)",
+    "Library Learning & Research Services",
+    "Faculty Academic Advisors",
+    "Tutoring & Supplemental Instruction (SI) Programmes",
+    "Examinations Office",
+
+    "Financial Aid Office (NSFAS & Bursaries)",
+    "Fees & Student Accounts Office",
+    "Hardship & Emergency Funding",
     "Wits Food Programme / Wits Food Bank",
+    "Residence Admissions Office",
+    "Off-Campus Accommodation Office",
+
     "Campus Health & Wellness Centre (CHWC)",
+    "Student Wellness Programme",
+    "Peer Wellness Ambassadors",
+    "Crisis Support & Referral Services",
+
     "Gender Equity Office (GEO)",
     "Disability Rights Unit (DRU)",
-    "Wits Postgraduate Association (PGA)",
-    "International Students Sub‑Council (ISSC)",
+    "Transformation Office",
+    "Sexual Harassment & Gender-Based Violence (GBV) Support Services",
+    "LGBTIQ+ Support Services",
+    "International Students Sub-Council (ISSC)",
+    "Faith & Spiritual Life (Multi-Faith Services)",
+
+    "Faculty Student Councils (FSCs)",
+    "House Committees (Residence Leadership)",
+    "Residence Life Programme",
+    "Student Discipline Office",
+
+    "Centre for Student Organisations (CSO Council)",
+    "Academic & Faculty-Based Societies",
+    "Cultural & Arts Societies",
+    "Debating & Public Speaking Societies",
+    "Community Engagement & Volunteering Societies",
+    "Technology & Coding Societies",
+    "Entrepreneurship Societies",
+
     "Wits Sports Council / Wits Sport",
-    "Wits Vuvuzela (Student Newspaper)"
+    "Intramural Sports Programme",
+    "Campus Gyms & Fitness Centres",
+
+    "Wits Postgraduate Association (PGA)",
+    "Peer Mentorship Programme",
+    "Orientation & Transition Programmes",
+
+    "Wits Vuvuzela (Student Newspaper)",
+    "VOW FM / Wits Radio Academy",
+    "Student Media Platforms",
+
+    "Campus Protection Services",
+    "Student Support Desk",
+    "IT Helpdesk & eLearning Support"
   ];
+
 
   final List<String> suggestions = [];
   bool _isLoading = false;
@@ -3029,39 +3079,84 @@ class _SuggestionsPageState extends State<SuggestionsPage> {
   final ScrollController _scrollController = ScrollController();
   bool _isInitialized = false;
   String? path_url;
+
   String buildGeminiPrompt() {
     return """
-You are an AI mentor assistant. Your task is to generate 3 mentorship session suggestions for university students.
+You are a mentorship expert at Wits University. Generate 3 COMPLETE TOPIC IDEAS for mentors to use with their mentees.
 
-Requirements:
-1. Each suggestion must include:
-   - "topic": a short title (1–7 words)
-   - "description": 1–2 sentences explaining why this topic is relevant
-   - "iceBreakers": 2–3 ice-breakers per topic
-   - "resources": 3 general resources (websites, articles, apps, or provided institution resources if any)
-2. Output must ALWAYS be JSON, structured exactly as:
+IMPORTANT: You MUST return ONLY valid JSON. Do not include any explanations, introductions, or text outside the JSON structure.
+
+CRITICAL REQUIREMENTS:
+1. Generate EXACTLY 3 topic suggestions, not 1
+2. Each topic must include ALL these elements:
+   - "topic": A clear, engaging title (4-8 words)
+     Examples: "Effective Time Management for Academic Success", "Building Resilience in University Life", "Career Exploration and Goal Setting"
+   
+   - "description": A detailed paragraph (4-6 sentences) explaining what this topic covers, why it's important, and how it benefits students
+   
+   - "keyDiscussionPoints": 4-5 main areas to explore within this topic
+   
+   - "iceBreakers": 3 conversation starters related to this topic
+   
+   - "questionsForMentees": 5-6 specific questions mentors can ask their mentees
+   
+   - "takeawaysForMentees": 3-4 key learnings or actions mentees should gain
+   
+   - "campusResources": EXACTLY 2 specific institutional resources from the provided list
+   
+   - "externalResources": EXACTLY 1-2 quality external resources
+
+3. Make descriptions DETAILED and HELPFUL (4-6 sentences each)
+
+CRITICAL RESOURCE SELECTION RULES:
+- Campus Resources: MUST select EXACTLY 2 from this list: ${campusResources.join(', ')}
+- External Resources: Include 1-2 high-quality, credible, free resources
+
+MENTEE CONTEXT TO CONSIDER:
+- Current situation: ${_mentorPromptController.text}
+- Previously discussed topics: ${suggestions.join(', ')}
+
+OUTPUT FORMAT - THIS IS CRITICAL:
+Return ONLY valid JSON with this exact structure:
 {
   "suggestions": [
     {
-      "topic": "string",
-      "description": "string",
-      "iceBreakers": ["string1", "string2", "string3"],
-      "resources": ["string1", "string2", "string3"]
+      "topic": "Clear and Engaging Topic Title",
+      "description": "A detailed 4-6 sentence explanation of what this topic covers. Explain why this topic is important for university students. Describe how discussing this topic can help mentees in their academic and personal development. Include specific benefits and outcomes students can expect from exploring this topic.",
+      "keyDiscussionPoints": ["Comprehensive point 1", "Detailed point 2", "Specific point 3", "Practical point 4", "Additional point 5"],
+      "iceBreakers": ["Engaging question 1 that relates to the topic", "Thought-provoking question 2", "Personal reflection question 3"],
+      "questionsForMentees": ["Specific question 1", "Detailed question 2", "Reflective question 3", "Practical question 4", "Forward-looking question 5", "Action-oriented question 6"],
+      "takeawaysForMentees": ["Clear learning outcome 1", "Practical skill 2", "Actionable insight 3", "Resource awareness 4"],
+      "campusResources": ["Specific Resource 1 from list", "Specific Resource 2 from list"],
+      "externalResources": ["Useful external resource 1", "Additional tool or website 2"]
     },
-    { "...": "3 topics total" }
+    {
+      "topic": "Second Engaging Topic Title",
+      "description": "Another detailed 4-6 sentence explanation...",
+      "keyDiscussionPoints": ["Point 1", "Point 2", "Point 3", "Point 4", "Point 5"],
+      "iceBreakers": ["Question 1", "Question 2", "Question 3"],
+      "questionsForMentees": ["Q1", "Q2", "Q3", "Q4", "Q5", "Q6"],
+      "takeawaysForMentees": ["Takeaway 1", "Takeaway 2", "Takeaway 3"],
+      "campusResources": ["Resource 1", "Resource 2"],
+      "externalResources": ["External 1"]
+    },
+    {
+      "topic": "Third Engaging Topic Title",
+      "description": "Third detailed 4-6 sentence explanation...",
+      "keyDiscussionPoints": ["Point 1", "Point 2", "Point 3", "Point 4", "Point 5"],
+      "iceBreakers": ["Question 1", "Question 2", "Question 3"],
+      "questionsForMentees": ["Q1", "Q2", "Q3", "Q4", "Q5", "Q6"],
+      "takeawaysForMentees": ["Takeaway 1", "Takeaway 2", "Takeaway 3"],
+      "campusResources": ["Resource 1", "Resource 2"],
+      "externalResources": ["External 1"]
+    }
   ]
 }
-3. Use the provided context to make the suggestions more relevant.
-4. Keep content culturally neutral, safe, and appropriate for students. Avoid politics, religion, medical, or financial advice.
 
-Context:
-- Mentor Notes / Text: ${_mentorPromptController.text}
-- Stored Topics: ${suggestions.join(', ')}
-- Institution Resources: ${campusResources.join(', ')}
-
-Now generate 3 relevant session suggestions based on the above context.
+IMPORTANT: Generate EXACTLY 3 different topic suggestions, all equally detailed.
 """;
   }
+
   Future<void> loadSuggestions() async {
     try {
       QuerySnapshot querySnapshot = await FirebaseFirestore.instance.collection('suggestions').get();
@@ -3072,35 +3167,37 @@ Now generate 3 relevant session suggestions based on the above context.
         }
       }
     } catch (e) {
-
+      debugPrint("Error loading suggestions: $e");
     }
   }
+
   String? apiKey;
+
   @override
   void initState() {
     super.initState();
-
     _initialize();
   }
 
   Future<void> _initialize() async {
     await dotenv.load(fileName: ".env");
     apiKey = dotenv.get('GEMINI_API_KEY');
-    path_url=dotenv.get('path_url');
-
+    path_url = dotenv.get('path_url');
     await loadSuggestions();
     setState(() {
       _isInitialized = true;
     });
   }
 
+
   Future<Map<String, dynamic>> _callGeminiAPI(String prompt) async {
     final String? key = apiKey;
-    final String? path=path_url;
+    final String? path = path_url;
 
     if (key == null || key.isEmpty) {
       throw Exception("❌ API key is NULL or EMPTY!");
     }
+
     final Uri uri = Uri.parse('$path?key=$key');
 
     final Map<String, dynamic> requestBody = {
@@ -3115,27 +3212,37 @@ Now generate 3 relevant session suggestions based on the above context.
         "temperature": 0.7,
         "topK": 40,
         "topP": 0.95,
-        "maxOutputTokens": 2048,
+        "maxOutputTokens": 4096,
       }
     };
 
-    final response = await http.post(
-      uri,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(requestBody),
-    );
-    if (response.statusCode == 200) {
-      final Map<String, dynamic> responseData = jsonDecode(response.body);
-      final String textResponse =
-      responseData['candidates'][0]['content']['parts'][0]['text'];
-      return _parseGeminiResponse(textResponse);
-    } else {
-      throw Exception(
-          'Failed to load suggestions: ${response.statusCode} | ${response.body}');
+    try {
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(requestBody),
+      ).timeout(Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = jsonDecode(response.body);
+        final String textResponse =
+        responseData['candidates'][0]['content']['parts'][0]['text'];
+
+        return _parseGeminiResponse(textResponse);
+      } else {
+        debugPrint("API Error Status: ${response.statusCode}");
+        debugPrint("API Error Body: ${response.body}");
+        throw Exception(
+            'Failed to load suggestions: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint("Network/API Error: $e");
+      rethrow;
     }
   }
+
   Future<void> _generateAISuggestions() async {
     if (_mentorPromptController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3154,46 +3261,140 @@ Now generate 3 relevant session suggestions based on the above context.
 
     try {
       final String prompt = buildGeminiPrompt();
+      debugPrint("Sending prompt to Gemini...");
+
       final Map<String, dynamic> response = await _callGeminiAPI(prompt);
 
       if (response.containsKey('suggestions') && response['suggestions'] is List) {
+        List<dynamic> suggestions = response['suggestions'];
+        if (suggestions.length < 3) {
+          while (suggestions.length < 3) {
+            suggestions.add(_createDefaultTopic(suggestions.length + 1));
+          }
+        }
+
         setState(() {
-          _aiSuggestions = response['suggestions'];
+          _aiSuggestions = suggestions;
           _isLoading = false;
           _showResults = true;
         });
       } else {
         throw Exception('Invalid response format from AI');
       }
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollController.animateTo(
-          0,
-          duration: Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
-        );
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            0,
+            duration: Duration(milliseconds: 500),
+            curve: Curves.easeInOut,
+          );
+        }
       });
 
     } catch (e) {
+      debugPrint("Error in _generateAISuggestions: $e");
       setState(() {
         _isLoading = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error generating suggestions: ${e.toString()}'),
+          content: Text('Error: ${e.toString()}'),
           backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
         ),
       );
     }
   }
+
+  Map<String, dynamic> _createDefaultTopic(int number) {
+    return {
+      "topic": "Academic Success Strategy $number",
+      "description": "This comprehensive topic helps students develop effective strategies for academic achievement in university. We explore various study techniques, time management approaches, and resource utilization methods that can significantly improve academic performance. Students will learn how to create personalized study plans, manage their coursework effectively, and leverage campus resources to enhance their learning experience. The discussion focuses on practical, actionable strategies that can be implemented immediately to improve grades and reduce academic stress.",
+      "keyDiscussionPoints": [
+        "Effective study habits and learning techniques",
+        "Time management and prioritization strategies",
+        "Utilizing academic support services effectively",
+        "Balancing academic workload with personal life",
+        "Exam preparation and stress management techniques"
+      ],
+      "iceBreakers": [
+        "What study methods have worked best for you so far?",
+        "How do you currently organize your study schedule?",
+        "What academic achievement are you most proud of?"
+      ],
+      "questionsForMentees": [
+        "What specific academic goals do you have for this semester?",
+        "How do you currently prepare for exams and assignments?",
+        "What times of day are you most productive for studying?",
+        "How do you handle difficult or challenging course material?",
+        "What academic support resources have you used before?",
+        "How do you balance your academic work with other responsibilities?"
+      ],
+      "takeawaysForMentees": [
+        "A personalized study plan for current courses",
+        "Practical time management strategies for academic success",
+        "Knowledge of available campus academic support resources",
+        "Tools for tracking and improving academic performance"
+      ],
+      "campusResources": [
+        "Centre for Student Development (CSD)",
+        "CCDU (Counselling and Careers Development Unit)"
+      ],
+      "externalResources": ["Khan Academy for supplementary learning", "Pomodoro Technique timer apps"]
+    };
+  }
+
   Map<String, dynamic> _parseGeminiResponse(String textResponse) {
     try {
-      String cleanResponse = textResponse.replaceAll('```json', '').replaceAll('```', '').trim();
-      return jsonDecode(cleanResponse);
+      debugPrint("Raw AI Response: $textResponse");
+      String cleanResponse = textResponse
+          .replaceAll('```json', '')
+          .replaceAll('```', '')
+          .replaceAll('JSON', '')
+          .trim();
+      int jsonStart = cleanResponse.indexOf('{');
+      int jsonEnd = cleanResponse.lastIndexOf('}');
+
+      if (jsonStart == -1 || jsonEnd == -1) {
+        throw Exception('No valid JSON found in response');
+      }
+      String jsonString = cleanResponse.substring(jsonStart, jsonEnd + 1);
+      Map<String, dynamic> parsed = jsonDecode(jsonString);
+      if (!parsed.containsKey('suggestions') || !(parsed['suggestions'] is List)) {
+        throw Exception('Invalid response format: missing suggestions array');
+      }
+      List<dynamic> suggestions = parsed['suggestions'];
+      for (var i = 0; i < suggestions.length; i++) {
+        if (suggestions[i] is! Map<String, dynamic>) {
+          suggestions[i] = _createDefaultTopic(i + 1);
+        }
+
+        Map<String, dynamic> suggestion = suggestions[i] as Map<String, dynamic>;
+        suggestion['topic'] ??= 'Topic ${i + 1}';
+        suggestion['description'] ??= 'A comprehensive discussion topic for mentorship sessions that helps students navigate university challenges and develop essential skills for academic and personal success.';
+        suggestion['keyDiscussionPoints'] ??= ['Main discussion areas', 'Key concepts to explore', 'Practical applications', 'Common challenges', 'Solutions and strategies'];
+        suggestion['iceBreakers'] ??= ['What interests you about this topic?', 'Have you thought about this before?', 'What would you like to learn from this discussion?'];
+        suggestion['questionsForMentees'] ??= ['What specific aspects of this topic interest you?', 'How does this relate to your current situation?', 'What challenges have you faced in this area?', 'What support would be most helpful?', 'What goals do you have related to this topic?'];
+        suggestion['takeawaysForMentees'] ??= ['Better understanding of the topic', 'Practical strategies to implement', 'Awareness of available resources', 'Clear next steps for further exploration'];
+        suggestion['campusResources'] ??= ['CCDU (Counselling and Careers Development Unit)', 'Centre for Student Development (CSD)'];
+        suggestion['externalResources'] ??= ['Relevant online resources or helpful tools'];
+      }
+
+      return parsed;
+
     } catch (e) {
-      throw Exception('Failed to parse AI response');
+      return {
+        "suggestions": [
+          _createDefaultTopic(1),
+          _createDefaultTopic(2),
+          _createDefaultTopic(3)
+        ]
+      };
     }
   }
+
   void _retryWithNewContext() {
     setState(() {
       _showResults = false;
@@ -3232,45 +3433,45 @@ Now generate 3 relevant session suggestions based on the above context.
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  'Session Topic Suggestions',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Topic Suggestions',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
-              ),
-              if (_showResults && !_isLoading)
-                IconButton(
-                  onPressed: _retryWithNewContext,
-                  icon: Icon(Icons.refresh, color: Colors.white),
-                  tooltip: 'New Search',
-                ),
-            ],
-          ),
-          SizedBox(height: 4),
-          Text(
-            _showResults
-                ? 'AI-generated session topics for your mentee'
-                : 'Get AI-powered session ideas for your mentees',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.white.withOpacity(0.8),
+                if (_showResults && !_isLoading)
+                  IconButton(
+                    onPressed: _retryWithNewContext,
+                    icon: Icon(Icons.refresh, color: Colors.white),
+                    tooltip: 'New Search',
+                  ),
+              ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
+            SizedBox(height: 4),
+            Text(
+              _showResults
+                  ? '${_aiSuggestions.length} complete topic ideas for your mentorship sessions'
+                  : 'Generate topic ideas for your mentees',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.white.withOpacity(0.8),
+              ),
+            ),
+          ],
+        )
+        );
+    }
 
   Widget _buildInputSection() {
     return Container(
@@ -3294,7 +3495,7 @@ Now generate 3 relevant session suggestions based on the above context.
               Icon(Icons.description, color: Color(0xFF667eea), size: 20),
               SizedBox(width: 8),
               Text(
-                'Mentee Context',
+                'Mentee Context & Situation',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -3308,7 +3509,7 @@ Now generate 3 relevant session suggestions based on the above context.
             controller: _mentorPromptController,
             maxLines: 3,
             decoration: InputDecoration(
-              hintText: 'Enter context prompt for the session...',
+              hintText: 'Describe your mentee\'s current challenges, interests, or goals...',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(color: Colors.grey[300]!),
@@ -3318,7 +3519,7 @@ Now generate 3 relevant session suggestions based on the above context.
                 borderSide: BorderSide(color: Color(0xFF667eea)),
               ),
               contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              helperText: 'Describe your mentee\'s current challenges, goals, or interests',
+              helperText: 'What specific areas would benefit your mentee right now?',
               helperStyle: TextStyle(
                 color: Colors.grey[500],
                 fontSize: 12,
@@ -3345,7 +3546,7 @@ Now generate 3 relevant session suggestions based on the above context.
                   Icon(Icons.auto_awesome, size: 20),
                   SizedBox(width: 8),
                   Text(
-                    'Generate Session Topics',
+                    'Generate Topic Ideas',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ],
@@ -3376,7 +3577,7 @@ Now generate 3 relevant session suggestions based on the above context.
                   Icon(Icons.lightbulb_outline, color: Color(0xFF667eea), size: 24),
                   SizedBox(width: 8),
                   Text(
-                    _isLoading ? 'Generating Topics...' : 'Suggested Session Topics',
+                    _isLoading ? 'Creating Topic Ideas...' : 'Your Topic Ideas',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -3413,13 +3614,12 @@ Now generate 3 relevant session suggestions based on the above context.
             ),
             SizedBox(height: 16),
             Text(
-              'Creating personalized session topics...',
+              'Creating topic ideas...',
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey[600],
               ),
             ),
-            SizedBox(height: 8),
           ],
         ),
       );
@@ -3435,7 +3635,7 @@ Now generate 3 relevant session suggestions based on the above context.
               Icon(Icons.auto_awesome, size: 80, color: Colors.grey[300]),
               SizedBox(height: 20),
               Text(
-                'Ready to Generate Session Topics',
+                'Ready to Generate Topic Ideas',
                 style: TextStyle(
                   fontSize: 20,
                   color: Colors.grey[600],
@@ -3447,7 +3647,7 @@ Now generate 3 relevant session suggestions based on the above context.
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
-                  'Enter your mentee\'s context above to get AI-powered session topic suggestions tailored to their specific needs',
+                  'Describe your mentee\'s situation to get complete topic ideas with discussion points, questions, and resources',
                   style: TextStyle(
                     color: Colors.grey[500],
                     fontSize: 14,
@@ -3498,7 +3698,7 @@ Now generate 3 relevant session suggestions based on the above context.
             ..._aiSuggestions.asMap().entries.map((entry) {
               final index = entry.key;
               final suggestion = entry.value;
-              return _buildSuggestionCard(suggestion, index);
+              return _buildTopicCard(suggestion, index);
             }).toList(),
 
             SizedBox(height: 20),
@@ -3508,7 +3708,7 @@ Now generate 3 relevant session suggestions based on the above context.
                 child: OutlinedButton.icon(
                   onPressed: _retryWithNewContext,
                   icon: Icon(Icons.refresh, size: 18),
-                  label: Text('Search with Different Context'),
+                  label: Text('Generate New Topics'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Color(0xFF667eea),
                     side: BorderSide(color: Color(0xFF667eea)),
@@ -3527,17 +3727,27 @@ Now generate 3 relevant session suggestions based on the above context.
     );
   }
 
-  Widget _buildSuggestionCard(Map<String, dynamic> suggestion, int index) {
+  Widget _buildTopicCard(Map<String, dynamic> suggestion, int index) {
+    Map<String, dynamic> safeSuggestion = Map<String, dynamic>.from(suggestion);
+    safeSuggestion['topic'] ??= 'Topic ${index + 1}';
+    safeSuggestion['description'] ??= 'A comprehensive discussion topic for mentorship sessions that helps students navigate university challenges and develop essential skills for academic and personal success.';
+    safeSuggestion['keyDiscussionPoints'] ??= ['Discussion area 1', 'Discussion area 2', 'Discussion area 3'];
+    safeSuggestion['iceBreakers'] ??= ['Ice breaker 1', 'Ice breaker 2', 'Ice breaker 3'];
+    safeSuggestion['questionsForMentees'] ??= ['Question 1', 'Question 2', 'Question 3', 'Question 4'];
+    safeSuggestion['takeawaysForMentees'] ??= ['Takeaway 1', 'Takeaway 2', 'Takeaway 3'];
+    safeSuggestion['campusResources'] ??= ['Campus resource 1', 'Campus resource 2'];
+    safeSuggestion['externalResources'] ??= ['External resource'];
+
     return Container(
-      margin: EdgeInsets.only(bottom: 16),
+      margin: EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 6,
-            offset: Offset(0, 2),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 10,
+            offset: Offset(0, 4),
           ),
         ],
       ),
@@ -3546,14 +3756,14 @@ Now generate 3 relevant session suggestions based on the above context.
         children: [
           Container(
             width: double.infinity,
-            padding: EdgeInsets.all(16),
+            padding: EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
                 colors: [
-                  Color(0xFF667eea).withOpacity(0.1),
-                  Color(0xFF764ba2).withOpacity(0.05),
+                  Color(0xFF667eea),
+                  Color(0xFF764ba2),
                 ],
               ),
               borderRadius: BorderRadius.only(
@@ -3561,39 +3771,232 @@ Now generate 3 relevant session suggestions based on the above context.
                 topRight: Radius.circular(16),
               ),
             ),
-            child: Text(
-              suggestion['topic'],
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[800],
-              ),
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  suggestion['description'],
+                  'TOPIC ${index + 1}',
                   style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                    height: 1.5,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withOpacity(0.9),
+                    letterSpacing: 1,
                   ),
                 ),
-                SizedBox(height: 20),
-                _buildSection(
-                  icon: Icons.chat_bubble_outline,
-                  title: 'Conversation Starters',
-                  items: suggestion['iceBreakers'],
+                SizedBox(height: 8),
+                Text(
+                  safeSuggestion['topic']!,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
-                SizedBox(height: 20),
+              ],
+            ),
+          ),
+
+          Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Color(0xFF667eea).withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Color(0xFF667eea).withOpacity(0.2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.description, size: 18, color: Color(0xFF667eea)),
+                          SizedBox(width: 8),
+                          Text(
+                            'Topic Overview',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF667eea),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        safeSuggestion['description']!,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[700],
+                          height: 1.6,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                SizedBox(height: 16),
                 _buildSection(
-                  icon: Icons.assignment_outlined,
-                  title: 'Campus Resources',
-                  items: suggestion['resources'],
+                  title: 'Key Discussion Points',
+                  items: List<String>.from(safeSuggestion['keyDiscussionPoints']!),
+                  icon: Icons.list,
+                  color: Color(0xFF764ba2),
+                  isNumbered: true,
+                ),
+
+                SizedBox(height: 16),
+
+                // Ice Breakers
+                _buildSection(
+                  title: 'Ice Breakers',
+                  items: List<String>.from(safeSuggestion['iceBreakers']!),
+                  icon: Icons.chat_bubble_outline,
+                  color: Colors.blue,
+                ),
+
+                SizedBox(height: 16),
+
+                // Questions for Mentees
+                Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green.withOpacity(0.2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.question_answer, size: 18, color: Colors.green[700]),
+                          SizedBox(width: 8),
+                          Text(
+                            'Questions for Your Mentee',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 8),
+                      ...List<String>.from(safeSuggestion['questionsForMentees']!).asMap().entries.map((entry) => Padding(
+                        padding: EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 24,
+                              height: 24,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: Colors.green.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${entry.key + 1}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green[700],
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                entry.value,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[700],
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )).toList(),
+                    ],
+                  ),
+                ),
+
+                SizedBox(height: 16),
+
+                // Takeaways for Mentees
+                Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.lightbulb_outline, size: 18, color: Colors.orange[700]),
+                          SizedBox(width: 8),
+                          Text(
+                            'Key Takeaways for Mentee',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.orange[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 8),
+                      ...List<String>.from(safeSuggestion['takeawaysForMentees']!).map((takeaway) => Padding(
+                        padding: EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.check_circle, size: 16, color: Colors.orange),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                takeaway,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[700],
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )).toList(),
+                    ],
+                  ),
+                ),
+
+                SizedBox(height: 16),
+
+                // Campus Resources
+                _buildSection(
+                  title: 'Campus Resources to Explore',
+                  items: List<String>.from(safeSuggestion['campusResources']!),
+                  icon: Icons.school,
+                  color: Colors.purple,
+                  showIcon: Icons.verified,
+                ),
+
+                SizedBox(height: 16),
+
+                // External Resources
+                _buildSection(
+                  title: 'External Resources & Tools',
+                  items: List<String>.from(safeSuggestion['externalResources']!),
+                  icon: Icons.public,
+                  color: Colors.blue,
+                  showIcon: Icons.link,
                 ),
               ],
             ),
@@ -3603,46 +4006,83 @@ Now generate 3 relevant session suggestions based on the above context.
     );
   }
 
-  Widget _buildSection({required IconData icon, required String title, required List<dynamic> items}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 18, color: Color(0xFF667eea)),
-            SizedBox(width: 8),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 8),
-        ...items.map((item) => Padding(
-          padding: EdgeInsets.only(bottom: 6),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildSection({
+    required String title,
+    required List<String> items,
+    required IconData icon,
+    required Color color,
+    bool isNumbered = false,
+    IconData? showIcon,
+  }) {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Icon(Icons.chevron_right, size: 16, color: Color(0xFF667eea)),
+              Icon(icon, size: 18, color: color),
               SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  item.toString(),
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                    height: 1.4,
-                  ),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: color,
                 ),
               ),
             ],
           ),
-        )).toList(),
-      ],
+          SizedBox(height: 8),
+          ...items.asMap().entries.map((entry) => Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (isNumbered)
+                  Container(
+                    width: 24,
+                    height: 24,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${entry.key + 1}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                  )
+                else if (showIcon != null)
+                  Icon(showIcon, size: 16, color: color)
+                else
+                  Icon(Icons.chevron_right, size: 16, color: color),
+
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    entry.value,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[700],
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )).toList(),
+        ],
+      ),
     );
   }
 
@@ -10815,7 +11255,6 @@ enum MeetingFrequency {
     }
   }
 }
-
 class CombinedScheduleEvent {
   final DateTime date;
   final String startTime;
@@ -10852,7 +11291,6 @@ class CombinedScheduleEvent {
     };
   }
 }
-
 class TimePreferences {
   final TimeOfDay? preferredStartTime;
   final TimeOfDay? preferredEndTime;
@@ -10875,13 +11313,11 @@ class TimePreferences {
     };
   }
 }
-
 extension TimeOfDayExtension on TimeOfDay {
   String format24Hour() {
     return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
 }
-
 class GeminiMeetingSuggestionEngine {
   static String? _apiKey;
   static bool _isInitialized = false;
@@ -11914,7 +12350,6 @@ DO NOT output the same time for multiple dates. Be creative and find the BEST VA
     return score.clamp(0, 100);
   }
 }
-
 class SmartMeetingSchedulerPage extends StatefulWidget {
   const SmartMeetingSchedulerPage({super.key});
 
@@ -11922,7 +12357,6 @@ class SmartMeetingSchedulerPage extends StatefulWidget {
   State<SmartMeetingSchedulerPage> createState() =>
       _SmartMeetingSchedulerPageState();
 }
-
 class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -13396,7 +13830,6 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     );
   }
 }
-
 class _FrequencySelectionDialog extends StatelessWidget {
   final MeetingFrequency selectedFrequency;
   final Function(MeetingFrequency) onFrequencySelected;
