@@ -37,7 +37,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MentorMate',
+      title: 'MentorMenteeConnect',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         useMaterial3: true,
@@ -147,7 +147,7 @@ class _WelcomePageState extends State<WelcomePage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'MentorMate',
+                      'MentorMenteeConnect',
                       style: TextStyle(
                         fontSize: 36,
                         fontWeight: FontWeight.bold,
@@ -614,7 +614,7 @@ class _SignUpPageState extends State<SignUpPage> {
                   const SizedBox(height: 8),
 
                   Text(
-                    'Join MentorMate as a mentor or mentee',
+                    'Join MentorMenteeConnect as a mentor or mentee',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.white.withOpacity(0.9),
@@ -1153,7 +1153,7 @@ void _changePass()async{
                   const SizedBox(height: 8),
 
                   Text(
-                    'Sign in to your MentorMate account',
+                    'Sign in to your MentorMenteeConnect account',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.white.withOpacity(0.9),
@@ -1378,7 +1378,7 @@ Future <String> getKey(String uid)async {
                   Icon(Icons.people_alt_rounded, color: Colors.white, size: 28),
                   SizedBox(width: 12),
                   Text(
-                    "MentorMate",
+                    "MentorMenteeConnect",
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
@@ -2777,9 +2777,8 @@ Future <String>getUsername()async{
                 ),
                 SizedBox(height: 16),
                 StreamBuilder<QuerySnapshot>(
-                  stream: announcementsRef
-                      .where('createdBy', isEqualTo: currentUserId)
-                      .snapshots(),
+                  // Remove the where clause to get all announcements and meetings
+                  stream: announcementsRef.snapshots(),
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
                       return Text('Error loading announcements');
@@ -2789,13 +2788,24 @@ Future <String>getUsername()async{
                       return Center(child: CircularProgressIndicator());
                     }
 
-                    final allAnnouncements = snapshot.data!.docs;
+                    final allItems = snapshot.data!.docs;
                     final now = DateTime.now();
 
-                    final filteredAnnouncements = allAnnouncements.where((doc) {
-                      final announcement = doc.data() as Map<String, dynamic>;
+                    final filteredItems = allItems.where((doc) {
+                      final item = doc.data() as Map<String, dynamic>;
 
-                      final expiresAt = announcement['expiresAt'] as Timestamp?;
+                      // Check if it's created by current user
+                      if (item['createdBy'] != currentUserId) {
+                        return false;
+                      }
+
+                      // Check if it's either announcement or meeting
+                      final type = item['type'] as String?;
+                      if (type != 'announcement' && type != 'meeting') {
+                        return false;
+                      }
+
+                      final expiresAt = item['expiresAt'] as Timestamp?;
                       if (expiresAt == null) {
                         return false;
                       }
@@ -2804,7 +2814,7 @@ Future <String>getUsername()async{
                       return expiresDateTime.isAfter(now);
                     }).toList();
 
-                    if (filteredAnnouncements.isEmpty) {
+                    if (filteredItems.isEmpty) {
                       return Column(
                         children: [
                           Icon(
@@ -2825,19 +2835,19 @@ Future <String>getUsername()async{
                       );
                     }
 
-                    filteredAnnouncements.sort((a, b) {
+                    filteredItems.sort((a, b) {
                       final aExpiresAt = (a.data() as Map<String, dynamic>)['expiresAt'] as Timestamp;
                       final bExpiresAt = (b.data() as Map<String, dynamic>)['expiresAt'] as Timestamp;
                       return aExpiresAt.compareTo(bExpiresAt);
                     });
 
-                    final recentAnnouncements = filteredAnnouncements.take(5).toList();
+                    final recentItems = filteredItems.take(5).toList();
 
                     return Column(
-                      children: recentAnnouncements.map((doc) {
-                        final announcement = doc.data() as Map<String, dynamic>;
-                        final expiresAt = announcement['expiresAt'] as Timestamp;
-                        final isMeeting = announcement['type'] == 'meeting';
+                      children: recentItems.map((doc) {
+                        final item = doc.data() as Map<String, dynamic>;
+                        final expiresAt = item['expiresAt'] as Timestamp;
+                        final isMeeting = item['type'] == 'meeting';
                         final expiresDateTime = expiresAt.toDate();
 
                         String timeRemaining = '';
@@ -2884,7 +2894,7 @@ Future <String>getUsername()async{
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        announcement['title'],
+                                        item['title'],
                                         style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
@@ -2893,7 +2903,7 @@ Future <String>getUsername()async{
                                       ),
                                       SizedBox(height: 2),
                                       Text(
-                                        announcement['date'],
+                                        item['date'],
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: Colors.grey[600],
@@ -2907,10 +2917,21 @@ Future <String>getUsername()async{
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
-                                      if (announcement['venue'] != null) ...[
+                                      if (item['venue'] != null) ...[
                                         SizedBox(height: 2),
                                         Text(
-                                          'Venue: ${announcement['venue']}',
+                                          'Venue: ${item['venue']}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                      // Show time for meetings
+                                      if (isMeeting && item['time'] != null) ...[
+                                        SizedBox(height: 2),
+                                        Text(
+                                          'Time: ${item['time']}',
                                           style: TextStyle(
                                             fontSize: 12,
                                             color: Colors.grey[600],
@@ -2935,7 +2956,6 @@ Future <String>getUsername()async{
       ),
     );
   }
-
   Future<Map<String, dynamic>> _getLatestMeetingWithAttendance() async {
     try {
       final meetingsSnapshot = await meetingsRef
@@ -3890,7 +3910,14 @@ class _CalendarPageState extends State<CalendarPage> {
       ),
     );
   }
+Future<String>getEmail ()async{
 
+      final id = await FirebaseAuth.instance.currentUser!.uid;
+      DocumentSnapshot doc = await FirebaseFirestore.instance.collection(
+          'users').doc(id).get();
+      return doc['email'];
+
+}
   void _addEvent(DateTime date, String title, String description, TimeOfDay? time) async {
     DateTime finalDateTime = DateTime(
       date.year,
@@ -3900,8 +3927,10 @@ class _CalendarPageState extends State<CalendarPage> {
       time?.minute ?? 0,
     );
 
+
     String? uid = await FirebaseAuth.instance.currentUser?.uid;
     final signKey = await getKey(uid!);
+    final email=await getEmail();
     String formattedDateTime = '${date.day}/${date.month}/${date.year} • ${time != null ? time.format(context) : 'All Day'}';
     final event = {
       'title': title,
@@ -3916,15 +3945,17 @@ class _CalendarPageState extends State<CalendarPage> {
     };
 
     try {
-      await FirebaseFirestore.instance
-          .collection('Events')
-          .add(event);
+      //specific email to be sent not to everyone
+      // await FirebaseFirestore.instance
+      //     .collection('Events')
+      //     .add(event);
       await FirebaseFirestore.instance
           .collection('events')
           .add({
         'title': title,
         'description': description,
         'signkey': signKey,
+        'studentEmail':email,
         'dateTime': Timestamp.fromDate(finalDateTime),
         'isoDate': finalDateTime.toIso8601String(),
         'uid': uid,
@@ -5234,7 +5265,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                   Icon(Icons.people_alt_rounded, color: Colors.white, size: 28),
                   SizedBox(width: 12),
                   Text(
-                    "MentorMate",
+                    "MentorMenteeConnect",
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
@@ -5417,7 +5448,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
       },
     );
   }
-
   Widget _buildHomeContent() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -5514,7 +5544,14 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                     final filteredItems = allItems.where((doc) {
                       final item = doc.data() as Map<String, dynamic>;
 
+                      // Filter by signkey (mentee-specific)
                       if (item['signkey'] != _menteeSignKey) {
+                        return false;
+                      }
+
+                      // Check if it's either announcement or meeting
+                      final type = item['type'] as String?;
+                      if (type != 'announcement' && type != 'meeting') {
                         return false;
                       }
 
@@ -5666,6 +5703,18 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                                // Show attendance info for past meetings that have attendance data
+                                if (!expiresDateTime.isAfter(now) && isMeeting && item['attendedStudents'] != null) ...[
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Attendance: ${(item['attendedStudents'] as List).length} attended',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                      fontStyle: FontStyle.italic,
                                     ),
                                   ),
                                 ],
@@ -6992,8 +7041,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
 
     overlayState.insert(_addButtonOverlay!);
-
-    // Auto-remove after 3 seconds
     Future.delayed(const Duration(seconds: 3), () {
       _removeAddButtonOverlay();
     });
@@ -7068,7 +7115,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // =============== HELPER METHODS ===============
 
   void _showToast(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
@@ -7385,8 +7431,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // =============== FETCH SIGNKEY METHOD ===============
-  // =============== FETCH SIGNKEY METHOD ===============
   Future<void> _loadSignkey() async {
     try {
       final userId = _auth.currentUser!.uid;
@@ -7397,15 +7441,15 @@ class _ProfilePageState extends State<ProfilePage> {
 
       if (userDoc.exists) {
         final userData = userDoc.data() as Map<String, dynamic>;
-        final loadedSignkey = userData['signkey'] as String?; // Use different variable name
+        final loadedSignkey = userData['signkey'] as String?;
 
-        print('Loaded signkey from DB: $loadedSignkey'); // Add debug print
+        print('Loaded signkey from DB: $loadedSignkey');
 
         if (loadedSignkey != null && loadedSignkey.isNotEmpty) {
           setState(() {
-            _signkey = loadedSignkey; // Set the class variable
+            _signkey = loadedSignkey;
           });
-          print('Signkey set to: $_signkey');
+
         } else {
           print('No signkey found in user document or signkey is empty');
         }
@@ -8387,7 +8431,6 @@ class CustomTimeEventDialog extends StatefulWidget {
   @override
   State<CustomTimeEventDialog> createState() => _CustomTimeEventDialogState();
 }
-
 class _CustomTimeEventDialogState extends State<CustomTimeEventDialog> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -9047,7 +9090,6 @@ class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
     super.dispose();
   }
 }
-
 class HexColor extends Color {
   HexColor(final String hex) : super(int.parse(hex.replaceFirst('#', '0xff')));
 }
@@ -9487,7 +9529,7 @@ class MentorHelpSupportPage extends StatelessWidget {
           children: [
             _buildSectionHeader('Mentor Dashboard Guide'),
             _buildInfoCard(
-              'Welcome to your MentorMate dashboard! This comprehensive guide will help you '
+              'Welcome to your MentorMenteeConnect dashboard! This comprehensive guide will help you '
                   'understand all the tools and features available to manage your mentees effectively '
                   'and create an engaging learning environment.',
             ),
@@ -9888,7 +9930,7 @@ class MentorHelpSupportPage extends StatelessWidget {
               ),
             ),
             SizedBox(height: 32),
-            _buildDeveloperCredit(),
+
             SizedBox(height: 20),
           ],
         ),
@@ -10218,53 +10260,7 @@ class MentorHelpSupportPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDeveloperCredit() {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            Icons.developer_mode,
-            size: 40,
-            color: Colors.grey.shade600,
-          ),
-          SizedBox(height: 12),
-          Text(
-            'MentorMate Platform Developed by',
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 14,
-            ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            'Mahlatse Clayton Maredi',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF667eea),
-            ),
-          ),
 
-          SizedBox(height: 4),
-          Text(
-            'Dedicated to enhancing mentorship through technology',
-            style: TextStyle(
-              color: Colors.grey.shade500,
-              fontSize: 12,
-              fontStyle: FontStyle.italic,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
 }
 class MenteeHelpSupportPage extends StatelessWidget {
   const MenteeHelpSupportPage({super.key});
@@ -10290,9 +10286,9 @@ class MenteeHelpSupportPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionHeader('Welcome to MentorMate'),
+            _buildSectionHeader('Welcome to MentorMenteeConnect'),
             _buildInfoCard(
-              'MentorMate is your dedicated platform for connecting with mentors, '
+              'MentorMenteeConnect is your dedicated platform for connecting with mentors, '
                   'managing your learning journey, and accessing educational resources. '
                   'This guide will help you understand all the features available to you.',
             ),
@@ -10446,7 +10442,7 @@ class MenteeHelpSupportPage extends StatelessWidget {
               ),
             ),
             SizedBox(height: 32),
-            _buildDeveloperCredit(),
+
             SizedBox(height: 20),
           ],
         ),
@@ -10655,53 +10651,7 @@ class MenteeHelpSupportPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDeveloperCredit() {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            Icons.developer_mode,
-            size: 40,
-            color: Colors.grey.shade600,
-          ),
-          SizedBox(height: 12),
-          Text(
-            'MentorMate Platform Developed by',
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 14,
-            ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            'Mahlatse Clayton Maredi',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF667eea),
-            ),
-          ),
 
-          SizedBox(height: 4),
-          Text(
-            'Dedicated to enhancing mentorship through technology',
-            style: TextStyle(
-              color: Colors.grey.shade500,
-              fontSize: 12,
-              fontStyle: FontStyle.italic,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
 }
 enum MeetingFrequency {
   daily('Daily', Icons.event_repeat, 'Every day'),
@@ -10734,7 +10684,6 @@ enum MeetingFrequency {
     }
   }
 }
-
 class CombinedScheduleEvent {
   final DateTime date;
   final String startTime;
@@ -10772,7 +10721,6 @@ class CombinedScheduleEvent {
     };
   }
 }
-
 class TimePreferences {
   final TimeOfDay? preferredStartTime;
   final TimeOfDay? preferredEndTime;
@@ -10795,7 +10743,6 @@ class TimePreferences {
     };
   }
 }
-
 extension TimeOfDayExtension on TimeOfDay {
   String format24Hour() {
     return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
@@ -11518,7 +11465,6 @@ class SmartMeetingSchedulerPage extends StatefulWidget {
   State<SmartMeetingSchedulerPage> createState() =>
       _SmartMeetingSchedulerPageState();
 }
-
 class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
