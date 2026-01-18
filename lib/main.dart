@@ -18,6 +18,7 @@ import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:math';
 import 'package:image_picker/image_picker.dart';
+import 'dart:html' as html;
 import 'package:http/http.dart' as http;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:uuid/uuid.dart';
@@ -7243,45 +7244,87 @@ class _ProfilePageState extends State<ProfilePage> {
     return studentNo.isNotEmpty ? '$studentNo@students.wits.ac.za' : '';
   }
 
-
   Future<void> _pickImageFromGallery() async {
     try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 80,
-      );
+      final input = html.FileUploadInputElement();
+      input.accept = 'image/*';
+      input.click();
 
-      if (image != null) {
-        await _uploadImageToFirebase(File(image.path));
-      }
+      input.onChange.listen((event) async {
+        final files = input.files;
+        if (files != null && files.isNotEmpty) {
+          final file = files[0];
+
+          if (file.size > 15 * 1024 * 1024) {
+            _showToast('Image too large (max 15MB)', isError: true);
+            return;
+          }
+
+          final reader = html.FileReader();
+
+          reader.onLoadEnd.listen((event) async {
+            if (reader.result != null) {
+              final bytes = reader.result as List<int>;
+              await _uploadImageToFirebase(bytes, file.name);
+            }
+          });
+
+          reader.onError.listen((event) {
+            _showToast('Failed to read image file', isError: true);
+          });
+
+          reader.readAsArrayBuffer(file);
+        }
+      });
     } catch (e) {
+      print('Error picking image: $e');
       _showToast('Failed to pick image', isError: true);
     }
   }
 
-  Future<void> _uploadImageToFirebase(File imageFile) async {
+  Future<void> _uploadImageToFirebase(List<int> imageBytes, String fileName) async {
     try {
       final userId = _auth.currentUser!.uid;
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final uniqueFileName = 'profile_${userId}_$timestamp.jpg';
+
       final Reference storageRef = FirebaseStorage.instance
           .ref()
           .child('profile_pictures')
-          .child('$userId.jpg');
+          .child(uniqueFileName);
 
       _showToast('Uploading image...');
 
-      final UploadTask uploadTask = storageRef.putFile(imageFile);
-      final TaskSnapshot snapshot = await uploadTask;
-      final String downloadUrl = await snapshot.ref.getDownloadURL();
+      final metadata = SettableMetadata(
+        contentType: 'image/jpeg',
+        cacheControl: 'public, max-age=31536000',
+      );
+
+      final uploadTask = storageRef.putData(
+          Uint8List.fromList(imageBytes),
+          metadata
+      );
+
+      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+        final progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        print('Upload progress: $progress%');
+      });
+
+      final snapshot = await uploadTask;
+      final downloadUrl = await snapshot.ref.getDownloadURL();
 
       await _saveImageUrlToFirestore(downloadUrl);
+
       setState(() {
         _profileImageUrl = downloadUrl;
       });
 
       _showToast('Profile picture updated!');
+    } on FirebaseException catch (e) {
+      print('Firebase upload error: $e');
+      _showToast('Upload failed: ${e.message}', isError: true);
     } catch (e) {
+      print('Upload error: $e');
       _showToast('Failed to upload image', isError: true);
     }
   }
@@ -7289,12 +7332,16 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _saveImageUrlToFirestore(String imageUrl) async {
     try {
       final userId = _auth.currentUser!.uid;
-      await _firestore
+      await FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
-          .update({'profile': imageUrl});
+          .update({
+        'profile': imageUrl,
+        'profileUpdatedAt': FieldValue.serverTimestamp()
+      });
     } catch (e) {
-      throw e;
+      print('Firestore error: $e');
+      rethrow;
     }
   }
 
