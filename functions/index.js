@@ -1,15 +1,376 @@
-const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
-
+const functions = require('firebase-functions');
 admin.initializeApp();
+const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
+const PATH_URL = defineSecret('PATH_URL');
+function createDefaultTopic(number){
+  return {
+    "topic": `Academic Success Strategy ${number}`,
+    "description": "This comprehensive topic helps students develop effective strategies for academic achievement in university. We explore various study techniques, time management approaches, and resource utilization methods that can significantly improve academic performance. Students will learn how to create personalized study plans, manage their coursework effectively, and leverage campus resources to enhance their learning experience. The discussion focuses on practical, actionable strategies that can be implemented immediately to improve grades and reduce academic stress.",
+    "keyDiscussionPoints": [
+      "Effective study habits and learning techniques",
+      "Time management and prioritization strategies",
+      "Utilizing academic support services effectively",
+      "Balancing academic workload with personal life",
+      "Exam preparation and stress management techniques"
+    ],
+    "iceBreakers": [
+      "What study methods have worked best for you so far?",
+      "How do you currently organize your study schedule?",
+      "What academic achievement are you most proud of?"
+    ],
+    "questionsForMentees": [
+      "What specific academic goals do you have for this semester?",
+      "How do you currently prepare for exams and assignments?",
+      "What times of day are you most productive for studying?",
+      "How do you handle difficult or challenging course material?",
+      "What academic support resources have you used before?",
+      "How do you balance your academic work with other responsibilities?"
+    ],
+    "takeawaysForMentees": [
+      "A personalized study plan for current courses",
+      "Practical time management strategies for academic success",
+      "Knowledge of available campus academic support resources",
+      "Tools for tracking and improving academic performance"
+    ],
+    "campusResources": [
+      "Centre for Student Development (CSD)",
+      "CCDU (Counselling and Careers Development Unit)"
+    ],
+    "externalResources": ["Khan Academy for supplementary learning", "Pomodoro Technique timer apps"]
+  };
+}
+function parseGeminiResponse(textResponse) {
+  try {
+    let cleanResponse = textResponse
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .replace(/JSON/g, '')
+      .trim();
 
+    let jsonStart = cleanResponse.indexOf('{');
+    let jsonEnd = cleanResponse.lastIndexOf('}');
+
+    if (jsonStart === -1 || jsonEnd === -1) {
+      throw new Error('No valid JSON found in response');
+    }
+
+    let jsonString = cleanResponse.substring(jsonStart, jsonEnd + 1);
+    let parsed = JSON.parse(jsonString);
+
+    if (!parsed.suggestions || !Array.isArray(parsed.suggestions)) {
+      throw new Error('Invalid response format: missing suggestions array');
+    }
+
+    let suggestions = parsed.suggestions;
+    for (let i = 0; i < suggestions.length; i++) {
+      if (typeof suggestions[i] !== 'object' || suggestions[i] === null) {
+        suggestions[i] = createDefaultTopic(i + 1);
+      }
+
+      let suggestion = suggestions[i];
+      suggestion.topic = suggestion.topic || `Topic ${i + 1}`;
+      suggestion.description = suggestion.description || 'A comprehensive discussion topic for mentorship sessions that helps students navigate university challenges and develop essential skills for academic and personal success.';
+      suggestion.keyDiscussionPoints = suggestion.keyDiscussionPoints || ['Main discussion areas', 'Key concepts to explore', 'Practical applications', 'Common challenges', 'Solutions and strategies'];
+      suggestion.iceBreakers = suggestion.iceBreakers || ['What interests you about this topic?', 'Have you thought about this before?', 'What would you like to learn from this discussion?'];
+      suggestion.questionsForMentees = suggestion.questionsForMentees || ['What specific aspects of this topic interest you?', 'How does this relate to your current situation?', 'What challenges have you faced in this area?', 'What support would be most helpful?', 'What goals do you have related to this topic?'];
+      suggestion.takeawaysForMentees = suggestion.takeawaysForMentees || ['Better understanding of the topic', 'Practical strategies to implement', 'Awareness of available resources', 'Clear next steps for further exploration'];
+      suggestion.campusResources = suggestion.campusResources || ['CCDU (Counselling and Careers Development Unit)', 'Centre for Student Development (CSD)'];
+      suggestion.externalResources = suggestion.externalResources || ['Relevant online resources or helpful tools'];
+    }
+
+    return parsed;
+
+  } catch (e) {
+    console.error('Parse error, returning default topics:', e);
+    return {
+      suggestions: [
+        createDefaultTopic(1),
+        createDefaultTopic(2),
+        createDefaultTopic(3)
+      ]
+    };
+  }
+}
+exports.generateMeetingSuggestions = onCall(
+  {
+    secrets: ["GEMINI_API_KEY", "PATH_URL"],
+    timeoutSeconds: 120,
+    memory: "1GB"
+  },
+  async (request) => {
+    const apiKey = GEMINI_API_KEY.value();
+    const pathUrl = PATH_URL.value();
+
+    if (!apiKey || apiKey.trim() === '' || !pathUrl || pathUrl.trim() === '') {
+      throw new HttpsError(
+        'internal',
+        'API credentials not configured'
+      );
+    }
+
+    const {
+      allEvents,
+      frequency,
+      userSignkey,
+      meetingTitle,
+      timePreferences,
+      numberOfSuggestions,
+      now
+    } = request.data;
+
+    try {
+
+      const prompt = buildMeetingSuggestionPrompt({
+        allEvents,
+        frequency,
+        userSignkey,
+        meetingTitle,
+        timePreferences,
+        numberOfSuggestions,
+        now: new Date(now)
+      });
+
+      const apiUrl = `${pathUrl}?key=${apiKey}`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: prompt }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 4096,
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Gemini API error:', response.status, errorText);
+        throw new HttpsError(
+          'internal',
+          `Gemini API error: ${response.status}`
+        );
+      }
+
+      const result = await response.json();
+
+      if (!result.candidates || !result.candidates[0] || !result.candidates[0].content) {
+        throw new HttpsError(
+          'internal',
+          'Invalid response format from Gemini API'
+        );
+      }
+
+      const textResponse = result.candidates[0].content.parts[0].text;
+      const parsedResponse = parseMeetingSuggestionResponse(textResponse, numberOfSuggestions);
+
+      return {
+        success: true,
+        suggestions: parsedResponse.suggestions || [],
+        rawResponse: textResponse
+      };
+
+    } catch (error) {
+      console.error('Error generating meeting suggestions:', error);
+
+      if (error.code === 'internal' || error.code === 'invalid-argument') {
+        throw error;
+      }
+
+
+      return {
+        success: false,
+        suggestions: [],
+        error: error.message
+      };
+    }
+  }
+);
+function buildMeetingSuggestionPrompt(data) {
+
+  const { allEvents, frequency, userSignkey, meetingTitle, timePreferences, numberOfSuggestions, now } = data;
+
+  return `
+You are an AI meeting scheduler. Analyze the schedule and suggest ${numberOfSuggestions} best meeting times.
+
+Meeting: ${meetingTitle}
+User: ${userSignkey}
+Frequency: ${frequency.title}
+Duration: ${timePreferences.meetingDuration || 60} minutes
+${timePreferences.hasTimeRange ? `Time range: ${timePreferences.preferredStartTime} to ${timePreferences.preferredEndTime}` : 'Any time between 8:00 and 20:00'}
+
+Schedule events: ${JSON.stringify(allEvents)}
+
+Suggest ${numberOfSuggestions} optimal times with different dates and times.
+Format as JSON array with date (YYYY-MM-DD), time (HH:MM), score, and reasoning.
+`;
+}
+function parseMeetingSuggestionResponse(textResponse, expectedCount) {
+  try {
+    let cleanResponse = textResponse
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .replace(/JSON/g, '')
+      .trim();
+
+    let jsonStart = cleanResponse.indexOf('{');
+    let jsonEnd = cleanResponse.lastIndexOf('}');
+
+    if (jsonStart === -1 || jsonEnd === -1) {
+      throw new Error('No valid JSON found in response');
+    }
+
+    let jsonString = cleanResponse.substring(jsonStart, jsonEnd + 1);
+    let parsed = JSON.parse(jsonString);
+
+    if (!parsed.suggestions || !Array.isArray(parsed.suggestions)) {
+      parsed.suggestions = [];
+    }
+    while (parsed.suggestions.length < expectedCount) {
+      parsed.suggestions.push({
+        date: new Date(Date.now() + (parsed.suggestions.length + 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        time: '10:00',
+        score: 50,
+        conflicts: 0,
+        reasoning: 'Fallback suggestion',
+        matchesPreferences: false,
+        preferenceMatches: [],
+        foundInGap: false,
+        daysAhead: parsed.suggestions.length + 1,
+        timetableConflict: false
+      });
+    }
+    parsed.suggestions = parsed.suggestions.slice(0, expectedCount);
+
+    return parsed;
+
+  } catch (e) {
+    console.error('Parse error:', e);
+
+    const suggestions = [];
+    for (let i = 0; i < expectedCount; i++) {
+      suggestions.push({
+        date: new Date(Date.now() + (i + 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        time: '10:00',
+        score: 50,
+        conflicts: 0,
+        reasoning: 'Fallback suggestion',
+        matchesPreferences: false,
+        preferenceMatches: [],
+        foundInGap: false,
+        daysAhead: i + 1,
+        timetableConflict: false
+      });
+    }
+    return { suggestions };
+  }
+}
+exports.generateTopicSuggestions = onCall(
+  {
+    secrets: ["GEMINI_API_KEY", "PATH_URL"],
+    timeoutSeconds: 120,
+    memory: "1GB"
+  },
+  async (request) => {
+    const apiKey = GEMINI_API_KEY.value();
+    const pathUrl = PATH_URL.value();
+
+    if (!apiKey || apiKey.trim() === '') {
+      throw new HttpsError(
+        'internal',
+        'GEMINI_API_KEY is not configured in Firebase Secrets'
+      );
+    }
+
+    if (!pathUrl || pathUrl.trim() === '') {
+      throw new HttpsError(
+        'internal',
+        'PATH_URL is not configured in Firebase Secrets'
+      );
+    }
+
+    const prompt = request.data.prompt;
+    const campusResources = request.data.campusResources;
+    const apiUrl = `${pathUrl}?key=${apiKey}`;
+
+    console.log('Calling Gemini API at:', pathUrl);
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: prompt }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 4096,
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Gemini API error:', response.status, errorText);
+        throw new HttpsError(
+          'internal',
+          `Gemini API error: ${response.status}`
+        );
+      }
+      const result = await response.json();
+
+      if (!result.candidates || !result.candidates[0] || !result.candidates[0].content) {
+        throw new HttpsError(
+          'internal',
+          'Invalid response format from Gemini API'
+        );
+      }
+      const textResponse = result.candidates[0].content.parts[0].text;
+      const parsedResponse = parseGeminiResponse(textResponse);
+      return {
+        success: true,
+        suggestions: parsedResponse.suggestions || [],
+        rawResponse: textResponse
+      };
+
+    } catch (error) {
+      console.error('Error calling Gemini API:', error);
+
+      if (error.code === 'internal' || error.code === 'invalid-argument') {
+        throw error;
+      }
+      return {
+        success: false,
+        suggestions: [
+          createDefaultTopic(1),
+          createDefaultTopic(2),
+          createDefaultTopic(3)
+        ],
+        error: error.message,
+        isFallback: true
+      };
+    }
+  }
+);
 const db = admin.firestore();
-
 const EMAIL_PASSWORD = defineSecret("EMAIL_PASSWORD");
-
 exports.sendImmediateEventNotification = onDocumentCreated(
   {
     document: "Events/{eventId}",

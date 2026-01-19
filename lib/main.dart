@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -28,8 +29,6 @@ void main()async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  await dotenv.load(fileName: ".env");
-
 
   runApp(MyApp());
 }
@@ -1020,7 +1019,7 @@ class _SignInPageState extends State<SignInPage> {
         }else {
                 _showToast("Verify email to log in",isError:true);
         }
-        //
+
       } on FirebaseAuthException catch (e) {
         String message = "Login failed. Please try again.";
 
@@ -3084,7 +3083,7 @@ class _SuggestionsPageState extends State<SuggestionsPage> {
   List<dynamic> _aiSuggestions = [];
   final ScrollController _scrollController = ScrollController();
   bool _isInitialized = false;
-  String? path_url;
+
 
   String buildGeminiPrompt() {
     return """
@@ -3177,7 +3176,6 @@ IMPORTANT: Generate EXACTLY 3 different topic suggestions, all equally detailed.
     }
   }
 
-  String? apiKey;
 
   @override
   void initState() {
@@ -3186,67 +3184,12 @@ IMPORTANT: Generate EXACTLY 3 different topic suggestions, all equally detailed.
   }
 
   Future<void> _initialize() async {
-    await dotenv.load(fileName: ".env");
-    apiKey = dotenv.get('GEMINI_API_KEY');
-    path_url = dotenv.get('path_url');
+
     await loadSuggestions();
     setState(() {
       _isInitialized = true;
     });
   }
-
-
-  Future<Map<String, dynamic>> _callGeminiAPI(String prompt) async {
-    final String? key = apiKey;
-    final String? path = path_url;
-
-    if (key == null || key.isEmpty) {
-      throw Exception("❌ API key is NULL or EMPTY!");
-    }
-
-    final Uri uri = Uri.parse('$path?key=$key');
-
-    final Map<String, dynamic> requestBody = {
-      "contents": [
-        {
-          "parts": [
-            {"text": prompt}
-          ]
-        }
-      ],
-      "generationConfig": {
-        "temperature": 0.7,
-        "topK": 40,
-        "topP": 0.95,
-        "maxOutputTokens": 4096,
-      }
-    };
-
-    try {
-      final response = await http.post(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(requestBody),
-      ).timeout(Duration(seconds: 30));
-
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData = jsonDecode(response.body);
-        final String textResponse =
-        responseData['candidates'][0]['content']['parts'][0]['text'];
-
-        return _parseGeminiResponse(textResponse);
-      } else {
-
-        throw Exception(
-            'Failed to load suggestions: ${response.statusCode}');
-      }
-    } catch (e) {
-      rethrow;
-    }
-  }
-
   Future<void> _generateAISuggestions() async {
     if (_mentorPromptController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3265,10 +3208,18 @@ IMPORTANT: Generate EXACTLY 3 different topic suggestions, all equally detailed.
 
     try {
       final String prompt = buildGeminiPrompt();
-      final Map<String, dynamic> response = await _callGeminiAPI(prompt);
+      final HttpsCallable callable = FirebaseFunctions.instance
+          .httpsCallable('generateTopicSuggestions');
 
-      if (response.containsKey('suggestions') && response['suggestions'] is List) {
-        List<dynamic> suggestions = response['suggestions'];
+      final result = await callable.call({
+        'prompt': prompt,
+        'campusResources': campusResources,
+      });
+
+      final data = result.data as Map<String, dynamic>;
+
+      if (data['success'] == true) {
+        List<dynamic> suggestions = data['suggestions'] ?? [];
         if (suggestions.length < 3) {
           while (suggestions.length < 3) {
             suggestions.add(_createDefaultTopic(suggestions.length + 1));
@@ -3281,7 +3232,15 @@ IMPORTANT: Generate EXACTLY 3 different topic suggestions, all equally detailed.
           _showResults = true;
         });
       } else {
-        throw Exception('Invalid response format from AI');
+        setState(() {
+          _aiSuggestions = [
+            _createDefaultTopic(1),
+            _createDefaultTopic(2),
+            _createDefaultTopic(3),
+          ];
+          _isLoading = false;
+          _showResults = true;
+        });
       }
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -3293,19 +3252,36 @@ IMPORTANT: Generate EXACTLY 3 different topic suggestions, all equally detailed.
           );
         }
       });
-
     } catch (e) {
       setState(() {
         _isLoading = false;
       });
 
+      String errorMessage = 'Failed to generate suggestions';
+      if (e is FirebaseFunctionsException) {
+        errorMessage = 'Server error: ${e.message}';
+      } else if (e is PlatformException) {
+        errorMessage = 'Network error: ${e.message}';
+      } else {
+        errorMessage = 'Error: ${e.toString()}';
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: ${e.toString()}'),
+          content: Text(errorMessage),
           backgroundColor: Colors.red,
           duration: Duration(seconds: 5),
         ),
       );
+
+      setState(() {
+        _aiSuggestions = [
+          _createDefaultTopic(1),
+          _createDefaultTopic(2),
+          _createDefaultTopic(3),
+        ];
+        _showResults = true;
+      });
     }
   }
 
@@ -3347,54 +3323,6 @@ IMPORTANT: Generate EXACTLY 3 different topic suggestions, all equally detailed.
     };
   }
 
-  Map<String, dynamic> _parseGeminiResponse(String textResponse) {
-    try {
-
-      String cleanResponse = textResponse
-          .replaceAll('```json', '')
-          .replaceAll('```', '')
-          .replaceAll('JSON', '')
-          .trim();
-      int jsonStart = cleanResponse.indexOf('{');
-      int jsonEnd = cleanResponse.lastIndexOf('}');
-
-      if (jsonStart == -1 || jsonEnd == -1) {
-        throw Exception('No valid JSON found in response');
-      }
-      String jsonString = cleanResponse.substring(jsonStart, jsonEnd + 1);
-      Map<String, dynamic> parsed = jsonDecode(jsonString);
-      if (!parsed.containsKey('suggestions') || !(parsed['suggestions'] is List)) {
-        throw Exception('Invalid response format: missing suggestions array');
-      }
-      List<dynamic> suggestions = parsed['suggestions'];
-      for (var i = 0; i < suggestions.length; i++) {
-        if (suggestions[i] is! Map<String, dynamic>) {
-          suggestions[i] = _createDefaultTopic(i + 1);
-        }
-
-        Map<String, dynamic> suggestion = suggestions[i] as Map<String, dynamic>;
-        suggestion['topic'] ??= 'Topic ${i + 1}';
-        suggestion['description'] ??= 'A comprehensive discussion topic for mentorship sessions that helps students navigate university challenges and develop essential skills for academic and personal success.';
-        suggestion['keyDiscussionPoints'] ??= ['Main discussion areas', 'Key concepts to explore', 'Practical applications', 'Common challenges', 'Solutions and strategies'];
-        suggestion['iceBreakers'] ??= ['What interests you about this topic?', 'Have you thought about this before?', 'What would you like to learn from this discussion?'];
-        suggestion['questionsForMentees'] ??= ['What specific aspects of this topic interest you?', 'How does this relate to your current situation?', 'What challenges have you faced in this area?', 'What support would be most helpful?', 'What goals do you have related to this topic?'];
-        suggestion['takeawaysForMentees'] ??= ['Better understanding of the topic', 'Practical strategies to implement', 'Awareness of available resources', 'Clear next steps for further exploration'];
-        suggestion['campusResources'] ??= ['CCDU (Counselling and Careers Development Unit)', 'Centre for Student Development (CSD)'];
-        suggestion['externalResources'] ??= ['Relevant online resources or helpful tools'];
-      }
-
-      return parsed;
-
-    } catch (e) {
-      return {
-        "suggestions": [
-          _createDefaultTopic(1),
-          _createDefaultTopic(2),
-          _createDefaultTopic(3)
-        ]
-      };
-    }
-  }
 
   void _retryWithNewContext() {
     setState(() {
@@ -11366,44 +11294,6 @@ extension TimeOfDayExtension on TimeOfDay {
   }
 }
 class GeminiMeetingSuggestionEngine {
-  static String? _apiKey;
-  static bool _isInitialized = false;
-  static bool _isInitializing = false;
-
-  static Future<void> _initializeApiKey() async {
-    if (_isInitialized || _isInitializing) return;
-
-    _isInitializing = true;
-
-    try {
-      await dotenv.load(fileName: ".env");
-      _apiKey = dotenv.get('GEMINI_API_KEY');
-      if (_apiKey == null || _apiKey!.isEmpty) {
-        throw Exception('GEMINI_API_KEY not found in .env file');
-      }
-
-      _isInitialized = true;
-    } catch (e) {
-
-      _apiKey = null;
-    } finally {
-      _isInitializing = false;
-    }
-  }
-
-  static Future<void> ensureInitialized() async {
-    if (!_isInitialized) {
-      await _initializeApiKey();
-    }
-  }
-
-  static Future<String?> get apiKey async {
-    if (!_isInitialized) {
-      await ensureInitialized();
-    }
-    return _apiKey;
-  }
-
   static Future<List<Map<String, dynamic>>> findOptimalTimesWithAI({
     required List<CombinedScheduleEvent> allEvents,
     required MeetingFrequency frequency,
@@ -11413,64 +11303,39 @@ class GeminiMeetingSuggestionEngine {
     int numberOfSuggestions = 3,
   }) async {
     try {
-      await ensureInitialized();
-    } catch (e) {
-
-    }
-
-    final currentApiKey = await _getValidApiKey();
-    if (currentApiKey == null) {
-
-      return _getFallbackSuggestions(
-        allEvents,
-        frequency,
-        timePreferences,
-        _generateCandidateDates(frequency),
-        userSignkey,
-        numberOfSuggestions,
-      );
-    }
-
-    try {
       final now = DateTime.now();
       final candidateDates = _generateCandidateDates(frequency);
-      final prompt = _buildPrompt(
-        allEvents: allEvents,
-        frequency: frequency,
-        userSignkey: userSignkey,
-        meetingTitle: meetingTitle,
-        timePreferences: timePreferences,
-        numberOfSuggestions: numberOfSuggestions,
-        now: now,
-        candidateDates: candidateDates,
-      );
 
-      final response = await http.post(
-        Uri.parse(
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$currentApiKey',
-        ),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'contents': [
-            {
-              'parts': [
-                {'text': prompt}
-              ]
-            }
-          ],
-          'generationConfig': {
-            'temperature': 0.7,
-            'topK': 40,
-            'topP': 0.95,
-            'maxOutputTokens': 1024,
-          }
-        }),
-      );
+      final requestData = {
+        'allEvents': allEvents.map((e) => e.toJson()).toList(),
+        'frequency': {
+          'title': frequency.title,
+          'description': frequency.description,
+          'minDaysAhead': frequency.minDaysAhead,
+        },
+        'userSignkey': userSignkey,
+        'meetingTitle': meetingTitle,
+        'timePreferences': {
+          'hasTimeRange': timePreferences.hasTimeRange,
+          'preferredStartTime': timePreferences.preferredStartTime?.format24Hour(),
+          'preferredEndTime': timePreferences.preferredEndTime?.format24Hour(),
+          'meetingDuration': timePreferences.meetingDuration?.inMinutes ?? 60,
+        },
+        'numberOfSuggestions': numberOfSuggestions,
+        'now': now.toIso8601String(),
+        'candidateDates': candidateDates.map((d) => d.toIso8601String()).toList(),
+      };
 
-      if (response.statusCode == 200) {
-        print('Gemini API response received successfully');
-        return _parseGeminiResponse(
-          response.body,
+      final HttpsCallable callable = FirebaseFunctions.instance
+          .httpsCallable('generateMeetingSuggestions');
+
+      final result = await callable.call(requestData);
+      final data = result.data as Map<String, dynamic>;
+
+      if (data['success'] == true) {
+        List<dynamic> suggestions = data['suggestions'] ?? [];
+        return _parseCloudFunctionResponse(
+          suggestions,
           now,
           frequency,
           numberOfSuggestions,
@@ -11501,29 +11366,88 @@ class GeminiMeetingSuggestionEngine {
     }
   }
 
-  static Future<String?> _getValidApiKey() async {
-    if (!_isInitialized) {
+  static List<Map<String, dynamic>> _parseCloudFunctionResponse(
+      List<dynamic> suggestions,
+      DateTime now,
+      MeetingFrequency frequency,
+      int numberOfSuggestions,
+      List<CombinedScheduleEvent> allEvents,
+      TimePreferences timePreferences,
+      List<DateTime> candidateDates,
+      String userSignkey,
+      ) {
+    final List<Map<String, dynamic>> results = [];
+
+    for (var suggestion in suggestions) {
       try {
-        await ensureInitialized();
+        final suggestionMap = suggestion as Map<String, dynamic>;
+        final date = DateTime.parse(suggestionMap['date']);
+        final daysAhead = suggestionMap['daysAhead'] ?? date.difference(now).inDays;
+
+        if (daysAhead < frequency.minDaysAhead || date.weekday == DateTime.sunday) {
+          continue;
+        }
+
+        final timeStr = suggestionMap['time'] as String;
+        if (!RegExp(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$').hasMatch(timeStr)) {
+          continue;
+        }
+
+        final timetableConflict = suggestionMap['timetableConflict'] ?? false;
+        if (timetableConflict) {
+          continue;
+        }
+
+        final timeParts = timeStr.split(':');
+        final startTime = TimeOfDay(hour: int.parse(timeParts[0]), minute: int.parse(timeParts[1]));
+        final durationMinutes = timePreferences.meetingDuration?.inMinutes ?? 60;
+
+        final conflicts = _checkConflictsForTime(
+          date,
+          startTime,
+          durationMinutes,
+          allEvents,
+          userSignkey,
+        );
+
+        if (conflicts > 0) {
+          continue;
+        }
+
+        results.add({
+          'date': date,
+          'time': timeStr,
+          'score': suggestionMap['score'] ?? 0,
+          'conflicts': conflicts,
+          'reasoning': suggestionMap['reasoning'] ?? '',
+          'matchesPreferences': suggestionMap['matchesPreferences'] ?? false,
+          'preferenceMatches': List<String>.from(suggestionMap['preferenceMatches'] ?? []),
+          'foundInGap': suggestionMap['foundInGap'] ?? false,
+          'daysAhead': daysAhead,
+          'timetableConflict': timetableConflict,
+        });
       } catch (e) {
-        print('Failed to ensure initialization: $e');
-        return null;
+        continue;
       }
     }
-    if (_apiKey == null || _apiKey!.isEmpty) {
-      print('API key is null or empty');
-      return null;
-    }
-    if (_apiKey!.length < 20) {
-      return null;
+
+    if (results.length < numberOfSuggestions) {
+      final fallbackResults = _getFallbackSuggestions(
+        allEvents,
+        frequency,
+        timePreferences,
+        candidateDates,
+        userSignkey,
+        numberOfSuggestions - results.length,
+      );
+      results.addAll(fallbackResults);
     }
 
-    return _apiKey;
+    return results.take(numberOfSuggestions).toList();
   }
 
   static List<DateTime> _generateCandidateDates(MeetingFrequency frequency) {
     final now = DateTime.now();
-    final minStartDate = now.add(Duration(days: frequency.minDaysAhead));
     final List<DateTime> dates = [];
 
     for (int i = frequency.minDaysAhead; i <= 90; i++) {
@@ -11534,333 +11458,6 @@ class GeminiMeetingSuggestionEngine {
     }
 
     return dates;
-  }
-
-  static String _buildPrompt({
-    required List<CombinedScheduleEvent> allEvents,
-    required MeetingFrequency frequency,
-    required String userSignkey,
-    required String meetingTitle,
-    required TimePreferences timePreferences,
-    required int numberOfSuggestions,
-    required DateTime now,
-    required List<DateTime> candidateDates,
-  }) {
-    final eventsJson = allEvents.map((e) => e.toJson()).toList();
-    final durationMinutes = timePreferences.meetingDuration?.inMinutes ?? 60;
-    final hasTimeRange = timePreferences.hasTimeRange;
-    final startTimeStr = hasTimeRange ? timePreferences.preferredStartTime!.format24Hour() : '';
-    final endTimeStr = hasTimeRange ? timePreferences.preferredEndTime!.format24Hour() : '';
-    final minStartDate = now.add(Duration(days: frequency.minDaysAhead));
-
-    return '''
-You are an AI meeting scheduler. Analyze the provided schedule data and suggest the ${numberOfSuggestions} best meeting times.
-
-CRITICAL RULES:
-1. NEVER suggest meetings on Sundays (weekday == 7)
-2. ${hasTimeRange ? 'Only suggest times within the preferred time range: $startTimeStr to $endTimeStr' : 'Any time between 8:00 and 20:00 is acceptable'}
-3. All suggestions MUST be at least ${frequency.minDaysAhead} days ahead of today
-4. Use 24-hour format for all times (e.g., "14:30" not "2:30 PM")
-5. CRITICAL: Do NOT suggest times that conflict with ANY timetable_events
-6. CRITICAL: Verify suggested times are not within the duration of any existing event
-7. CRITICAL: Each suggestion must have DIFFERENT dates and DIFFERENT times
-
-Meeting Frequency: ${frequency.title} (${frequency.description})
-Minimum days ahead required: ${frequency.minDaysAhead} days
-Earliest acceptable date: ${DateFormat('yyyy-MM-dd').format(minStartDate)}
-Plan meetings sufficiently ahead for proper scheduling
-
-Current Date: ${DateFormat('yyyy-MM-dd').format(now)}
-Meeting Title: $meetingTitle
-User Signkey: $userSignkey
-Meeting Duration: $durationMinutes minutes
-
-User Preferences:
-- Preferred Time Range: ${hasTimeRange ? '$startTimeStr to $endTimeStr' : 'Any time'}
-- Meeting Duration: $durationMinutes minutes
-
-SCHEDULE DATA STRUCTURE:
-Events are categorized by source:
-1. 'timetable' - Recurring weekly events (including mentees)
-   - These are FIXED commitments that repeat every week
-   - Source: 'timetable'
-   - Signkey: Identifies the owner
-   - Title: Event title (may include "(Mentee)" suffix for mentee events)
-   - These events appear for EVERY occurrence of their weekday in the next 90 days
-   
-2. 'events' - One-time events (Events table with capital E)
-   - Source: 'events'
-   - May be all-day events (00:00-23:59)
-   - Can be for user or mentees
-   
-3. 'calendar' - Calendar events
-   - Source: 'calendar'
-   - Typically user's own events
-
-Schedule Data (next 90 days):
-${jsonEncode(eventsJson)}
-
-ANALYSIS REQUIREMENTS:
-1. FIRST PRIORITY: Check ALL timetable_events - these are mandatory weekly commitments
-2. SECOND PRIORITY: Check other events (events, calendar)
-3. For each candidate date, check ALL events on that date:
-   - Calculate event start and end times in minutes
-   - Calculate suggested meeting duration: start + $durationMinutes minutes
-   - Check if suggested time overlaps with ANY event's duration
-   
-4. TIMETABLE_EVENTS SPECIAL HANDLING:
-   - Timetable events are expanded to EVERY occurrence of their weekday
-   - For example: Monday 09:00-10:00 event appears on EVERY Monday in next 90 days
-   - These are ABSOLUTE conflicts - cannot schedule over them
-   - Mentee timetable events (signkey = "$userSignkey" but marked as mentee) are also conflicts
-   
-5. CONFLICT DETECTION LOGIC:
-   - For each event on candidate date:
-     1. Parse startTime and endTime to minutes
-     2. Calculate suggestedStartMinutes and suggestedEndMinutes
-     3. Check overlap: suggestedStart < eventEnd AND suggestedEnd > eventStart
-     4. If overlap exists, it's a conflict
-   
-6. GAP FINDING STRATEGY:
-   - Sort all events on the day by start time
-   - Check gaps:
-     a. Before first event (if day starts after 8:00 or preferred start)
-     b. Between consecutive events
-     c. After last event (if day ends before 20:00 or preferred end)
-   - Minimum gap needed: $durationMinutes minutes
-   
-7. MENTEE EVENTS IDENTIFICATION:
-   - Look for "(Mentee)" suffix in title OR different userId
-   - These are also conflicts for scheduling purposes
-   - User needs to be available for mentee meetings
-
-VARIETY ENFORCEMENT - CRITICAL:
-You MUST provide suggestions with VARIED dates and times. Follow these rules:
-
-1. DATE VARIETY:
-   - Each suggestion must be on a DIFFERENT date
-   - Spread suggestions across different days of the week
-   - Avoid consecutive days unless absolutely necessary
-   - Prefer pattern: Monday → Wednesday → Friday
-   - Minimum 2 days gap between suggestions
-
-2. TIME VARIETY:
-   - Each suggestion must have a DIFFERENT time
-   - Minimum 90 minutes difference between suggestion times
-   - Spread across time categories:
-     • Morning (08:00-11:00)
-     • Afternoon (12:00-15:00)
-     • Late Afternoon (16:00-18:00)
-   - ${hasTimeRange ? 'Within preferred range: $startTimeStr to $endTimeStr' : 'Within working hours: 08:00-20:00'}
-
-3. GAP TYPE VARIETY:
-   - Try to include different gap types:
-     • free_day (completely free day)
-     • between_events (gap between existing events)
-     • after_last (after last event of day)
-     • before_first (before first event of day)
-
-4. ORDER OF PRIORITY:
-   - First suggestion: Highest scoring overall
-   - Second suggestion: Different weekday AND different time category
-   - Third suggestion: Different from both previous suggestions in weekday and time
-
-CONFLICT SCORING:
-- Any conflict with timetable_event: -1000 points (AUTOMATIC REJECTION)
-- Conflict with regular event: -100 points
-- Partial conflict (within 15 minutes): -50 points
-- Mentee event conflict: -150 points
-- No conflicts: +100 points
-- Variety bonus (different weekday from previous): +20 points
-- Variety bonus (different time category from previous): +15 points
-
-TIME SLOT QUALITY SCORING:
-- Slot accommodates full $durationMinutes: +80 points
-- Matches exact time preference: +60 points
-- Within preferred time range: +40 points
-- Found in natural gap between events: +30 points
-- Weekday (Mon-Fri): +20 points
-- Saturday: +10 points
-- Sunday: -100 points (NOT ALLOWED)
-- Proximity to ideal scheduling (${frequency.minDaysAhead}-${frequency.minDaysAhead*2} days): +30 points
-- More than ${frequency.minDaysAhead*3} days ahead: +10 points
-
-REJECTION CRITERIA (DO NOT SUGGEST IF):
-1. Day is Sunday
-2. Less than ${frequency.minDaysAhead} days ahead
-3. Any overlap with timetable_events
-4. Slot shorter than $durationMinutes minutes
-5. Outside working hours (8:00-20:00 unless custom range)
-6. Too similar to previous suggestion (< 90 minutes difference)
-7. Same weekday as previous suggestion (unless no alternatives)
-
-OUTPUT FORMAT (JSON only, no markdown):
-{
-  "suggestions": [
-    {
-      "date": "2025-12-22",
-      "time": "10:00",
-      "score": 95,
-      "conflicts": 0,
-      "reasoning": "Monday morning slot, free from timetable conflicts, matches preferences",
-      "matchesPreferences": true,
-      "preferenceMatches": ["time", "duration"],
-      "foundInGap": true,
-      "daysAhead": 14,
-      "timetableConflict": false,
-      "gapType": "free_day",
-      "timeCategory": "morning",
-      "weekday": "Monday"
-    },
-    {
-      "date": "2025-12-24",
-      "time": "14:30",
-      "score": 92,
-      "conflicts": 0,
-      "reasoning": "Wednesday afternoon slot, found gap between events, different time from Monday",
-      "matchesPreferences": true,
-      "preferenceMatches": ["time"],
-      "foundInGap": true,
-      "daysAhead": 16,
-      "timetableConflict": false,
-      "gapType": "between_events",
-      "timeCategory": "afternoon",
-      "weekday": "Wednesday"
-    },
-    {
-      "date": "2025-12-26",
-      "time": "16:45",
-      "score": 90,
-      "conflicts": 0,
-      "reasoning": "Friday late afternoon, after last event, completes varied weekly spread",
-      "matchesPreferences": true,
-      "preferenceMatches": ["time"],
-      "foundInGap": true,
-      "daysAhead": 18,
-      "timetableConflict": false,
-      "gapType": "after_last",
-      "timeCategory": "late_afternoon",
-      "weekday": "Friday"
-    }
-  ]
-}
-
-CRITICAL OUTPUT RULES:
-1. Return EXACTLY ${numberOfSuggestions} suggestions
-2. Sort by score (highest first)
-3. Each suggestion MUST be on a DIFFERENT date
-4. Each suggestion MUST have a DIFFERENT time (minimum 90 minutes difference)
-5. Prefer different weekdays for each suggestion
-6. Include variety in time categories (morning/afternoon/late_afternoon)
-7. Each suggestion MUST be conflict-free with ALL timetable events
-8. Include gapType and timeCategory in each suggestion
-9. Add weekday field showing day name
-10. Ensure reasoning explains why this time/date was chosen and how it differs from others
-
-SAMPLE VARIED OUTPUT FOR ${numberOfSuggestions} SUGGESTIONS:
-- Suggestion 1: Monday morning (e.g., 09:30)
-- Suggestion 2: Wednesday afternoon (e.g., 14:00) 
-- Suggestion 3: Friday late afternoon (e.g., 16:30)
-- Different dates, different times, different weekdays, different time categories
-
-DO NOT output the same time for multiple dates. Be creative and find the BEST VARIED options.
-''';
-  }
-
-  static Future<List<Map<String, dynamic>>> _parseGeminiResponse(
-      String responseBody,
-      DateTime now,
-      MeetingFrequency frequency,
-      int numberOfSuggestions,
-      List<CombinedScheduleEvent> allEvents,
-      TimePreferences timePreferences,
-      List<DateTime> candidateDates,
-      String userSignkey,
-      ) async {
-    try {
-      final data = jsonDecode(responseBody);
-      final text = data['candidates'][0]['content']['parts'][0]['text'];
-      String cleanedText = text.trim();
-      cleanedText = cleanedText.replaceAll('```json', '');
-      cleanedText = cleanedText.replaceAll('```', '');
-      cleanedText = cleanedText.trim();
-
-      final suggestions = jsonDecode(cleanedText);
-      final List<Map<String, dynamic>> results = [];
-      for (var suggestion in suggestions['suggestions']) {
-        try {
-          final date = DateTime.parse(suggestion['date']);
-          final daysAhead = suggestion['daysAhead'] ?? date.difference(now).inDays;
-
-          if (daysAhead < frequency.minDaysAhead || date.weekday == DateTime.sunday) {
-            continue;
-          }
-
-          final timeStr = suggestion['time'] as String;
-          if (!RegExp(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$').hasMatch(timeStr)) {
-            continue;
-          }
-
-          final timetableConflict = suggestion['timetableConflict'] ?? false;
-          if (timetableConflict) {
-            continue;
-          }
-
-          final timeParts = timeStr.split(':');
-          final startTime = TimeOfDay(hour: int.parse(timeParts[0]), minute: int.parse(timeParts[1]));
-          final durationMinutes = timePreferences.meetingDuration?.inMinutes ?? 60;
-
-          final conflicts = _checkConflictsForTime(
-              date,
-              startTime,
-              durationMinutes,
-              allEvents,
-              userSignkey
-          );
-
-          if (conflicts > 0) {
-            continue;
-          }
-
-          results.add({
-            'date': date,
-            'time': timeStr,
-            'score': suggestion['score'] ?? 0,
-            'conflicts': conflicts,
-            'reasoning': suggestion['reasoning'] ?? '',
-            'matchesPreferences': suggestion['matchesPreferences'] ?? false,
-            'preferenceMatches': List<String>.from(suggestion['preferenceMatches'] ?? []),
-            'foundInGap': suggestion['foundInGap'] ?? false,
-            'daysAhead': daysAhead,
-            'timetableConflict': timetableConflict,
-          });
-        } catch (e) {
-        }
-      }
-
-      if (results.length < numberOfSuggestions) {
-        final fallbackResults = _getFallbackSuggestions(
-          allEvents,
-          frequency,
-          timePreferences,
-          candidateDates,
-          userSignkey,
-          numberOfSuggestions - results.length,
-        );
-        results.addAll(fallbackResults);
-      }
-
-      return results.take(numberOfSuggestions).toList();
-    } catch (e) {
-      return _getFallbackSuggestions(
-        allEvents,
-        frequency,
-        timePreferences,
-        candidateDates,
-        userSignkey,
-        numberOfSuggestions,
-      );
-    }
   }
 
   static int _checkConflictsForTime(
@@ -12157,10 +11754,10 @@ DO NOT output the same time for multiple dates. Be creative and find the BEST VA
 
     if (slots.isEmpty) {
       final anySlot = _findAnyAvailableSlot(
-          events,
-          durationMinutes,
-          workingStart,
-          workingEnd
+        events,
+        durationMinutes,
+        workingStart,
+        workingEnd,
       );
       if (anySlot != null) {
         slots.add(anySlot);
@@ -12225,7 +11822,7 @@ DO NOT output the same time for multiple dates. Be creative and find the BEST VA
       List<CombinedScheduleEvent> events,
       int durationMinutes,
       TimeOfDay startBoundary,
-      TimeOfDay endBoundary
+      TimeOfDay endBoundary,
       ) {
     if (events.isEmpty) {
       return startBoundary;
@@ -12358,7 +11955,7 @@ DO NOT output the same time for multiple dates. Be creative and find the BEST VA
       bool isWeekday,
       int daysAhead,
       int minDaysAhead,
-      bool isInTimeRange
+      bool isInTimeRange,
       ) {
     int score = 50;
 
@@ -12419,16 +12016,9 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   void initState() {
     super.initState();
     _initializeSignkey();
-    _initializeGeminiEngine();
+
   }
 
-  Future<void> _initializeGeminiEngine() async {
-    try {
-      await GeminiMeetingSuggestionEngine.ensureInitialized();
-    } catch (e) {
-      print('Gemini initialization error: $e');
-    }
-  }
 
   Future<void> _initializeSignkey() async {
     if (_isLoadingSignkey) return;
@@ -12666,7 +12256,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     });
 
     try {
-      await GeminiMeetingSuggestionEngine.ensureInitialized();
+
 
       _allEvents = await _getAllScheduleEvents();
 
