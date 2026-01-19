@@ -422,7 +422,7 @@ class _SignUpPageState extends State<SignUpPage> {
 
     try {
       String? mentorId = await _findMentorBySignKey(_signkeyController.text);
-      if (mentorId == null) {
+      if (mentorId == null && _selectedRole=="mentee") {
         _showToast( "Invalid signkey. Please check with your mentor.",isError:true);
         return;
       }
@@ -474,10 +474,6 @@ class _SignUpPageState extends State<SignUpPage> {
       _showToast("Account created! Check your email to verify your account.",
         );
         await FirebaseAuth.instance.signOut();
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => SignInPage()),
-        );
 
       } else {
         _showToast(  "Failed to send verification email.",isError:true);
@@ -958,6 +954,7 @@ class _SignInPageState extends State<SignInPage> {
   Future<bool> getConfirm()async{
   User? user= FirebaseAuth.instance.currentUser;
       bool isConfirm=user?.emailVerified ??false;
+
    return isConfirm;
 
 }
@@ -984,83 +981,93 @@ class _SignInPageState extends State<SignInPage> {
     super.dispose();
   }
   void _login() async {
-    String email = _studentNumberController.text.trim() + "@students.wits.ac.za";
+    String email = _studentNumberController.text.trim() +
+        "@students.wits.ac.za";
     String password = _passwordController.text.trim();
+    final bool c = await getConfirm();
 
-    try {
-      // Try login
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      String? uid = FirebaseAuth.instance.currentUser?.uid;
-      DocumentSnapshot doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-
-      _showToast( "Login successful.",
-
-      );
-
-      // Role handling
-      if (doc['role'] == 'mentee') {
-        saveLoginSession(uid!, 'mentee');
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => MenteeHomePage()),
+      try {
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: email,
+          password: password,
         );
-      } else {
-        saveLoginSession(uid!, 'mentor');
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => MentorHomePage()),
+        if (c == true) {
+          String? uid = FirebaseAuth.instance.currentUser?.uid;
+          DocumentSnapshot doc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .get();
+
+          _showToast("Login successful.",
+
+          );
+
+          if (doc['role'] == 'mentee') {
+            saveLoginSession(uid!, 'mentee');
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => MenteeHomePage()),
+            );
+          } else {
+            saveLoginSession(uid!, 'mentor');
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => MentorHomePage()),
+            );
+          }
+
+          initializeFCMToken();
+        }else {
+                _showToast("Verify email to log in",isError:true);
+        }
+        //
+      } on FirebaseAuthException catch (e) {
+        String message = "Login failed. Please try again.";
+
+        switch (e.code) {
+          case "invalid-email":
+            message = "Invalid student number or email format.";
+            break;
+
+          case "user-not-found":
+            message = "No user found with this student number.";
+            break;
+
+          case "wrong-password":
+            message = "Incorrect password.";
+            break;
+
+          case "user-disabled":
+            message = "Your account has been disabled. Contact support.";
+            break;
+
+          case "too-many-requests":
+            message =
+            "Too many attempts. Try again later or reset your password.";
+            break;
+
+          case "network-request-failed":
+            message = "No internet connection. Please check your network.";
+            break;
+
+          default:
+            message = "Error: ${e.message}";
+        }
+
+        _showToast(message
         );
-      }
 
-      initializeFCMToken();
 
-    } on FirebaseAuthException catch (e) {
-      String message = "Login failed. Please try again.";
-
-      switch (e.code) {
-        case "invalid-email":
-          message = "Invalid student number or email format.";
-          break;
-
-        case "user-not-found":
-          message = "No user found with this student number.";
-          break;
-
-        case "wrong-password":
-          message = "Incorrect password.";
-          break;
-
-        case "user-disabled":
-          message = "Your account has been disabled. Contact support.";
-          break;
-
-        case "too-many-requests":
-          message =
-          "Too many attempts. Try again later or reset your password.";
-          break;
-
-        case "network-request-failed":
-          message = "No internet connection. Please check your network.";
-          break;
-
-        default:
-          message = "Error: ${e.message}";
-      }
-
-      _showToast( message
-      );
-    } catch (e) {
-      _showToast(  "Something went wrong. Please try again.",isError:true
-
-      );
     }
+       catch (e) {
+        _showToast("Something went wrong. Please try again.", isError: true
+
+        );
+      }
+
+
+
+
   }
   void _showToast(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
@@ -6808,7 +6815,7 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
                   Padding(
                     padding: const EdgeInsets.all(20),
                     child: Text(
-                      'Thanks! 👍',
+                      'Thanks!',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
