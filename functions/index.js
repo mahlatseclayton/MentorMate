@@ -1,7 +1,7 @@
-const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
-const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { defineSecret } = require("firebase-functions/params");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
+const {onSchedule} = require("firebase-functions/v2/scheduler");
+const {defineSecret} = require("firebase-functions/params");
+const {onCall,HttpsError} = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 const functions = require('firebase-functions');
@@ -45,6 +45,7 @@ function createDefaultTopic(number){
     "externalResources": ["Khan Academy for supplementary learning", "Pomodoro Technique timer apps"]
   };
 }
+//topic suggestion engine
 function parseGeminiResponse(textResponse) {
   try {
     let cleanResponse = textResponse
@@ -57,226 +58,59 @@ function parseGeminiResponse(textResponse) {
     let jsonEnd = cleanResponse.lastIndexOf('}');
 
     if (jsonStart === -1 || jsonEnd === -1) {
-      throw new Error('No valid JSON found in response');
+      try {
+        const parsed = JSON.parse(cleanResponse);
+        return formatResponse(parsed);
+      } catch {
+        throw new Error('No valid JSON found in response');
+      }
     }
 
     let jsonString = cleanResponse.substring(jsonStart, jsonEnd + 1);
     let parsed = JSON.parse(jsonString);
 
-    if (!parsed.suggestions || !Array.isArray(parsed.suggestions)) {
-      throw new Error('Invalid response format: missing suggestions array');
-    }
-
-    let suggestions = parsed.suggestions;
-    for (let i = 0; i < suggestions.length; i++) {
-      if (typeof suggestions[i] !== 'object' || suggestions[i] === null) {
-        suggestions[i] = createDefaultTopic(i + 1);
-      }
-
-      let suggestion = suggestions[i];
-      suggestion.topic = suggestion.topic || `Topic ${i + 1}`;
-      suggestion.description = suggestion.description || 'A comprehensive discussion topic for mentorship sessions that helps students navigate university challenges and develop essential skills for academic and personal success.';
-      suggestion.keyDiscussionPoints = suggestion.keyDiscussionPoints || ['Main discussion areas', 'Key concepts to explore', 'Practical applications', 'Common challenges', 'Solutions and strategies'];
-      suggestion.iceBreakers = suggestion.iceBreakers || ['What interests you about this topic?', 'Have you thought about this before?', 'What would you like to learn from this discussion?'];
-      suggestion.questionsForMentees = suggestion.questionsForMentees || ['What specific aspects of this topic interest you?', 'How does this relate to your current situation?', 'What challenges have you faced in this area?', 'What support would be most helpful?', 'What goals do you have related to this topic?'];
-      suggestion.takeawaysForMentees = suggestion.takeawaysForMentees || ['Better understanding of the topic', 'Practical strategies to implement', 'Awareness of available resources', 'Clear next steps for further exploration'];
-      suggestion.campusResources = suggestion.campusResources || ['CCDU (Counselling and Careers Development Unit)', 'Centre for Student Development (CSD)'];
-      suggestion.externalResources = suggestion.externalResources || ['Relevant online resources or helpful tools'];
-    }
-
-    return parsed;
+    return formatResponse(parsed);
 
   } catch (e) {
-    console.error('Parse error, returning default topics:', e);
     return {
-      suggestions: [
-        createDefaultTopic(1),
-        createDefaultTopic(2),
-        createDefaultTopic(3)
-      ]
+      suggestions: [createDefaultTopic(1)]
     };
   }
 }
-exports.generateMeetingSuggestions = onCall(
-  {
-    secrets: ["GEMINI_API_KEY", "PATH_URL"],
-    timeoutSeconds: 120,
-    memory: "1GB"
-  },
-  async (request) => {
-    const apiKey = GEMINI_API_KEY.value();
-    const pathUrl = PATH_URL.value();
 
-    if (!apiKey || apiKey.trim() === '' || !pathUrl || pathUrl.trim() === '') {
-      throw new HttpsError(
-        'internal',
-        'API credentials not configured'
-      );
-    }
+function formatResponse(parsed) {
+  let suggestions = [];
 
-    const {
-      allEvents,
-      frequency,
-      userSignkey,
-      meetingTitle,
-      timePreferences,
-      numberOfSuggestions,
-      now
-    } = request.data;
-
-    try {
-
-      const prompt = buildMeetingSuggestionPrompt({
-        allEvents,
-        frequency,
-        userSignkey,
-        meetingTitle,
-        timePreferences,
-        numberOfSuggestions,
-        now: new Date(now)
-      });
-
-      const apiUrl = `${pathUrl}?key=${apiKey}`;
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{ text: prompt }]
-          }],
-          generationConfig: {
-            temperature: 0.7,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 4096,
-          }
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Gemini API error:', response.status, errorText);
-        throw new HttpsError(
-          'internal',
-          `Gemini API error: ${response.status}`
-        );
-      }
-
-      const result = await response.json();
-
-      if (!result.candidates || !result.candidates[0] || !result.candidates[0].content) {
-        throw new HttpsError(
-          'internal',
-          'Invalid response format from Gemini API'
-        );
-      }
-
-      const textResponse = result.candidates[0].content.parts[0].text;
-      const parsedResponse = parseMeetingSuggestionResponse(textResponse, numberOfSuggestions);
-
-      return {
-        success: true,
-        suggestions: parsedResponse.suggestions || [],
-        rawResponse: textResponse
-      };
-
-    } catch (error) {
-      console.error('Error generating meeting suggestions:', error);
-
-      if (error.code === 'internal' || error.code === 'invalid-argument') {
-        throw error;
-      }
-
-
-      return {
-        success: false,
-        suggestions: [],
-        error: error.message
-      };
-    }
+  if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+    suggestions = parsed.suggestions;
+  } else if (Array.isArray(parsed)) {
+    suggestions = parsed;
+  } else if (parsed.topic || parsed.description) {
+    suggestions = [parsed];
+  } else {
+    suggestions = [createDefaultTopic(1)];
   }
-);
-function buildMeetingSuggestionPrompt(data) {
 
-  const { allEvents, frequency, userSignkey, meetingTitle, timePreferences, numberOfSuggestions, now } = data;
+  const formattedSuggestions = suggestions.map((suggestion, index) => {
+    if (typeof suggestion !== 'object' || suggestion === null) {
+      return createDefaultTopic(index + 1);
+    }
 
-  return `
-You are an AI meeting scheduler. Analyze the schedule and suggest ${numberOfSuggestions} best meeting times.
+    return {
+      topic: suggestion.topic || `Topic ${index + 1}`,
+      description: suggestion.description || 'A comprehensive discussion topic for mentorship sessions.',
+      keyDiscussionPoints: suggestion.keyDiscussionPoints || ['Main discussion areas', 'Key concepts'],
+      iceBreakers: suggestion.iceBreakers || ['What interests you about this topic?'],
+      questionsForMentees: suggestion.questionsForMentees || ['What aspects interest you?'],
+      takeawaysForMentees: suggestion.takeawaysForMentees || ['Better understanding'],
+      campusResources: suggestion.campusResources || ['CCDU', 'Centre for Student Development'],
+      externalResources: suggestion.externalResources || ['Online resources']
+    };
+  });
 
-Meeting: ${meetingTitle}
-User: ${userSignkey}
-Frequency: ${frequency.title}
-Duration: ${timePreferences.meetingDuration || 60} minutes
-${timePreferences.hasTimeRange ? `Time range: ${timePreferences.preferredStartTime} to ${timePreferences.preferredEndTime}` : 'Any time between 8:00 and 20:00'}
-
-Schedule events: ${JSON.stringify(allEvents)}
-
-Suggest ${numberOfSuggestions} optimal times with different dates and times.
-Format as JSON array with date (YYYY-MM-DD), time (HH:MM), score, and reasoning.
-`;
+  return { suggestions: formattedSuggestions };
 }
-function parseMeetingSuggestionResponse(textResponse, expectedCount) {
-  try {
-    let cleanResponse = textResponse
-      .replace(/```json/g, '')
-      .replace(/```/g, '')
-      .replace(/JSON/g, '')
-      .trim();
 
-    let jsonStart = cleanResponse.indexOf('{');
-    let jsonEnd = cleanResponse.lastIndexOf('}');
-
-    if (jsonStart === -1 || jsonEnd === -1) {
-      throw new Error('No valid JSON found in response');
-    }
-
-    let jsonString = cleanResponse.substring(jsonStart, jsonEnd + 1);
-    let parsed = JSON.parse(jsonString);
-
-    if (!parsed.suggestions || !Array.isArray(parsed.suggestions)) {
-      parsed.suggestions = [];
-    }
-    while (parsed.suggestions.length < expectedCount) {
-      parsed.suggestions.push({
-        date: new Date(Date.now() + (parsed.suggestions.length + 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        time: '10:00',
-        score: 50,
-        conflicts: 0,
-        reasoning: 'Fallback suggestion',
-        matchesPreferences: false,
-        preferenceMatches: [],
-        foundInGap: false,
-        daysAhead: parsed.suggestions.length + 1,
-        timetableConflict: false
-      });
-    }
-    parsed.suggestions = parsed.suggestions.slice(0, expectedCount);
-
-    return parsed;
-
-  } catch (e) {
-    console.error('Parse error:', e);
-
-    const suggestions = [];
-    for (let i = 0; i < expectedCount; i++) {
-      suggestions.push({
-        date: new Date(Date.now() + (i + 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        time: '10:00',
-        score: 50,
-        conflicts: 0,
-        reasoning: 'Fallback suggestion',
-        matchesPreferences: false,
-        preferenceMatches: [],
-        foundInGap: false,
-        daysAhead: i + 1,
-        timetableConflict: false
-      });
-    }
-    return { suggestions };
-  }
-}
 exports.generateTopicSuggestions = onCall(
   {
     secrets: ["GEMINI_API_KEY", "PATH_URL"],
@@ -305,35 +139,35 @@ exports.generateTopicSuggestions = onCall(
     const campusResources = request.data.campusResources;
     const apiUrl = `${pathUrl}?key=${apiKey}`;
 
-    console.log('Calling Gemini API at:', pathUrl);
-
     try {
+      const requestBody = {
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 4096,
+        }
+      };
+
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{ text: prompt }]
-          }],
-          generationConfig: {
-            temperature: 0.7,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 4096,
-          }
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Gemini API error:', response.status, errorText);
         throw new HttpsError(
           'internal',
-          `Gemini API error: ${response.status}`
+          `Gemini API error: ${response.status} - ${errorText}`
         );
       }
+
       const result = await response.json();
 
       if (!result.candidates || !result.candidates[0] || !result.candidates[0].content) {
@@ -342,8 +176,93 @@ exports.generateTopicSuggestions = onCall(
           'Invalid response format from Gemini API'
         );
       }
+
       const textResponse = result.candidates[0].content.parts[0].text;
       const parsedResponse = parseGeminiResponse(textResponse);
+
+      const suggestions = parsedResponse.suggestions && parsedResponse.suggestions.length > 0
+        ? parsedResponse.suggestions
+        : [createDefaultTopic(1)];
+
+      return {
+        success: true,
+        suggestions: suggestions,
+        rawResponse: textResponse
+      };
+
+    } catch (error) {
+      const fallbackTopic = [createDefaultTopic(1)];
+
+      return {
+        success: false,
+        suggestions: fallbackTopic,
+        error: error.message,
+        isFallback: true
+      };
+    }
+  }
+);
+//meeting scheduler
+exports.generateMeetingSuggestions = onCall(
+  {
+    secrets: ["GEMINI_API_KEY", "PATH_URL"],
+    timeoutSeconds: 120,
+    memory: "1GB"
+  },
+  async (request) => {
+    const apiKey = GEMINI_API_KEY.value();
+    const pathUrl = PATH_URL.value();
+
+    if (!apiKey || apiKey.trim() === '' || !pathUrl || pathUrl.trim() === '') {
+      throw new HttpsError('internal', 'API credentials not configured');
+    }
+
+    const { allEvents, frequency, userSignkey, meetingTitle, timePreferences, numberOfSuggestions, now } = request.data;
+
+    try {
+      const prompt = buildMeetingSuggestionPrompt({
+        allEvents,
+        frequency,
+        userSignkey,
+        meetingTitle,
+        timePreferences,
+        numberOfSuggestions,
+        now: new Date(now)
+      });
+
+      const apiUrl = `${pathUrl}?key=${apiKey}`;
+      const requestBody = {
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 4096,
+        }
+      };
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new HttpsError('internal', `Gemini API error: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.candidates || !result.candidates[0] || !result.candidates[0].content) {
+        throw new HttpsError('internal', 'Invalid response format from Gemini API');
+      }
+
+      const textResponse = result.candidates[0].content.parts[0].text;
+      const parsedResponse = parseMeetingSuggestionResponse(textResponse, numberOfSuggestions);
+
       return {
         success: true,
         suggestions: parsedResponse.suggestions || [],
@@ -351,24 +270,292 @@ exports.generateTopicSuggestions = onCall(
       };
 
     } catch (error) {
-      console.error('Error calling Gemini API:', error);
+      const fallbackSuggestions = generateUniqueFallbackSuggestions(numberOfSuggestions);
 
-      if (error.code === 'internal' || error.code === 'invalid-argument') {
-        throw error;
-      }
       return {
         success: false,
-        suggestions: [
-          createDefaultTopic(1),
-          createDefaultTopic(2),
-          createDefaultTopic(3)
-        ],
+        suggestions: fallbackSuggestions,
         error: error.message,
         isFallback: true
       };
     }
   }
 );
+function buildMeetingSuggestionPrompt(data) {
+  const { allEvents, frequency, meetingTitle, timePreferences, numberOfSuggestions, now } = data;
+
+  const formattedEvents = allEvents.map(event => {
+    return `- ${event.date}: ${event.startTime}-${event.endTime} "${event.title}"`;
+  }).join('\n');
+
+  const timeRange = timePreferences.hasTimeRange
+    ? `Preferred time range: ${timePreferences.preferredStartTime} to ${timePreferences.preferredEndTime}`
+    : 'Any time between 08:00 and 20:00';
+
+  const meetingDuration = timePreferences.meetingDuration || 60;
+
+  return `You are an AI meeting scheduler. Analyze the schedule and suggest ${numberOfSuggestions} optimal meeting times.
+
+Return ONLY valid JSON. Do not include any explanations, markdown, or text outside the JSON.
+
+MEETING DETAILS:
+- Title: ${meetingTitle}
+- Duration: ${meetingDuration} minutes
+- Frequency: ${frequency.title} (schedule at least ${frequency.minDaysAhead} days ahead)
+- ${timeRange}
+
+SCHEDULE EVENTS:
+${formattedEvents}
+
+IMPORTANT:
+1. Generate EXACTLY ${numberOfSuggestions} UNIQUE meeting time suggestions
+2. Each suggestion must have a DIFFERENT time (not all at the same hour)
+3. All dates must be in YYYY-MM-DD format
+4. All times must be in 24-hour HH:MM format
+5. Avoid Sundays
+6. Avoid conflicts with existing events
+7. Prefer times within the preferred time range if specified
+8. All suggestions must be at least ${frequency.minDaysAhead} days in the future
+
+OUTPUT FORMAT:
+{
+  "suggestions": [
+    {
+      "date": "YYYY-MM-DD",
+      "time": "HH:MM",
+      "score": 85,
+      "conflicts": 0,
+      "reasoning": "Brief explanation",
+      "matchesPreferences": true,
+      "foundInGap": true,
+      "daysAhead": 7,
+      "timetableConflict": false
+    }
+  ]
+}
+
+Current date: ${new Date(now).toISOString().split('T')[0]}
+Return ONLY the JSON object above, nothing else.`;
+}
+function parseMeetingSuggestionResponse(textResponse, expectedCount) {
+  try {
+    let cleanResponse = textResponse
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .replace(/JSON/g, '')
+      .trim();
+
+    let jsonStart = cleanResponse.indexOf('{');
+    let jsonEnd = cleanResponse.lastIndexOf('}');
+
+    if (jsonStart === -1 || jsonEnd === -1) {
+      jsonStart = cleanResponse.indexOf('[');
+      jsonEnd = cleanResponse.lastIndexOf(']');
+
+      if (jsonStart === -1 || jsonEnd === -1) {
+        throw new Error('No valid JSON found in response');
+      }
+    }
+
+    const jsonString = cleanResponse.substring(jsonStart, jsonEnd + 1);
+    let parsed = JSON.parse(jsonString);
+
+    let suggestions = [];
+
+    if (Array.isArray(parsed)) {
+      suggestions = parsed;
+    } else if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+      suggestions = parsed.suggestions;
+    } else if (parsed.dates && Array.isArray(parsed.dates)) {
+      suggestions = parsed.dates;
+    } else if (parsed.meetings && Array.isArray(parsed.meetings)) {
+      suggestions = parsed.meetings;
+    } else {
+      suggestions = [];
+    }
+
+    const formattedSuggestions = suggestions.slice(0, expectedCount).map((suggestion, index) => {
+      try {
+        let dateStr = suggestion.date || suggestion.Date || suggestion.startDate ||
+                     suggestion.datetime || suggestion.dateTime;
+
+        if (dateStr && typeof dateStr.toDate === 'function') {
+          dateStr = dateStr.toDate().toISOString().split('T')[0];
+        }
+
+        if (dateStr && dateStr.includes('T')) {
+          dateStr = dateStr.split('T')[0];
+        }
+
+        let timeStr = suggestion.time || suggestion.Time || suggestion.startTime ||
+                     suggestion.timeSlot || suggestion.slot;
+
+        if (!timeStr && suggestion.datetime) {
+          const datetimeParts = suggestion.datetime.split('T');
+          if (datetimeParts[1]) {
+            timeStr = datetimeParts[1].substring(0, 5);
+          }
+        }
+
+        if (!dateStr || !timeStr) {
+          throw new Error('Missing date or time');
+        }
+
+        const dateParts = dateStr.split('-');
+        if (dateParts.length !== 3) {
+          throw new Error(`Invalid date format: ${dateStr}`);
+        }
+
+        const year = parseInt(dateParts[0]);
+        const month = parseInt(dateParts[1]) - 1;
+        const day = parseInt(dateParts[2]);
+
+        const date = new Date(year, month, day);
+        if (isNaN(date.getTime())) {
+          throw new Error(`Invalid date: ${dateStr}`);
+        }
+
+        const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        if (!timeRegex.test(timeStr)) {
+          timeStr = timeStr.replace(/[^\d:]/g, '');
+          if (!timeRegex.test(timeStr)) {
+            throw new Error(`Invalid time format: ${timeStr}`);
+          }
+        }
+
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const suggestionDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        const daysAhead = Math.floor((suggestionDate - today) / (1000 * 60 * 60 * 24));
+
+        if (daysAhead < 0) {
+          throw new Error('Date is in the past');
+        }
+
+        return {
+          date: dateStr,
+          time: timeStr,
+          score: suggestion.score || suggestion.rating || suggestion.priority ||
+                suggestion.confidence || (80 - (index * 10)),
+          conflicts: suggestion.conflicts || suggestion.conflictCount || 0,
+          reasoning: suggestion.reasoning || suggestion.explanation ||
+                    suggestion.reason || `Optimal time suggestion ${index + 1}`,
+          matchesPreferences: suggestion.matchesPreferences || suggestion.prefMatch ||
+                            suggestion.preferred || false,
+          preferenceMatches: Array.isArray(suggestion.preferenceMatches) ?
+                           suggestion.preferenceMatches :
+                           (suggestion.preferenceMatches ? [suggestion.preferenceMatches] : []),
+          foundInGap: suggestion.foundInGap || suggestion.gap || false,
+          daysAhead: daysAhead,
+          timetableConflict: suggestion.timetableConflict || false
+        };
+
+      } catch (error) {
+        const fallbackDate = new Date(Date.now() + (index + 1) * 24 * 60 * 60 * 1000);
+        return {
+          date: fallbackDate.toISOString().split('T')[0],
+          time: `${(9 + (index % 4)).toString().padStart(2, '0')}:${(index * 15) % 60}`,
+          score: 50,
+          conflicts: 0,
+          reasoning: `Fallback suggestion ${index + 1}`,
+          matchesPreferences: false,
+          preferenceMatches: [],
+          foundInGap: false,
+          daysAhead: index + 1,
+          timetableConflict: false
+        };
+      }
+    });
+
+    while (formattedSuggestions.length < expectedCount) {
+      const index = formattedSuggestions.length;
+      const fallbackDate = new Date(Date.now() + (index + 1) * 24 * 60 * 60 * 1000);
+
+      formattedSuggestions.push({
+        date: fallbackDate.toISOString().split('T')[0],
+        time: `${(10 + (index % 4)).toString().padStart(2, '0')}:${(index * 20) % 60}`,
+        score: 40,
+        conflicts: 0,
+        reasoning: `Additional fallback suggestion ${index + 1}`,
+        matchesPreferences: false,
+        preferenceMatches: [],
+        foundInGap: false,
+        daysAhead: index + 1,
+        timetableConflict: false
+      });
+    }
+
+    const uniqueSuggestions = ensureUniqueTimes(formattedSuggestions.slice(0, expectedCount));
+    return { suggestions: uniqueSuggestions };
+
+  } catch (e) {
+    const uniqueFallbackSuggestions = generateUniqueFallbackSuggestions(expectedCount);
+    return { suggestions: uniqueFallbackSuggestions };
+  }
+}
+function ensureUniqueTimes(suggestions) {
+  const timeMap = new Map();
+  const uniqueSuggestions = [];
+
+  for (const suggestion of suggestions) {
+    const timeKey = `${suggestion.date}-${suggestion.time}`;
+    if (!timeMap.has(timeKey)) {
+      timeMap.set(timeKey, true);
+      uniqueSuggestions.push(suggestion);
+    } else {
+      const newTime = generateAlternateTime(suggestion.time, uniqueSuggestions.length);
+      uniqueSuggestions.push({
+        ...suggestion,
+        time: newTime,
+        reasoning: `${suggestion.reasoning} (time adjusted for uniqueness)`
+      });
+    }
+  }
+
+  return uniqueSuggestions;
+}
+function generateAlternateTime(originalTime, index) {
+  const [hour, minute] = originalTime.split(':').map(Number);
+  const newHour = (hour + Math.floor(index / 2)) % 24;
+  const newMinute = (minute + (index * 15)) % 60;
+  return `${newHour.toString().padStart(2, '0')}:${newMinute.toString().padStart(2, '0')}`;
+}
+function generateUniqueFallbackSuggestions(count) {
+  const suggestions = [];
+  const usedTimes = new Set();
+
+  for (let i = 0; i < count; i++) {
+    let timeStr;
+    let attempts = 0;
+
+    do {
+      const hour = 9 + Math.floor(i / 2) + (attempts % 3);
+      const minute = (i * 15 + attempts * 5) % 60;
+      timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+      attempts++;
+    } while (usedTimes.has(timeStr) && attempts < 10);
+
+    usedTimes.add(timeStr);
+
+    const date = new Date(Date.now() + (i + 1) * 24 * 60 * 60 * 1000);
+    const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+
+    suggestions.push({
+      date: date.toISOString().split('T')[0],
+      time: timeStr,
+      score: 70 - (i * 5),
+      conflicts: 0,
+      reasoning: `${dayName} at ${timeStr}, ${i + 1} days ahead`,
+      matchesPreferences: false,
+      preferenceMatches: [],
+      foundInGap: false,
+      daysAhead: i + 1,
+      timetableConflict: false
+    });
+  }
+
+  return suggestions;
+}
 const db = admin.firestore();
 const EMAIL_PASSWORD = defineSecret("EMAIL_PASSWORD");
 exports.sendImmediateEventNotification = onDocumentCreated(
@@ -954,13 +1141,23 @@ function parseStringDate(dateString) {
 }
 
 function formatTime(dateTime) {
-  return dateTime.toLocaleString("en-ZA", {
-    weekday: "short",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-//    timeZone: "Africa/Johannesburg",
-  });
+  try {
+    const utcDate = new Date(
+      dateTime.getTime() + dateTime.getTimezoneOffset() * 60000
+    );
+
+    return utcDate.toLocaleString("en-ZA", {
+      weekday: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch (e) {
+    return dateTime
+      .toISOString()
+      .replace("T", " ")
+      .substring(0, 16);
+  }
 }

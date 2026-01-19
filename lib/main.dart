@@ -1,8 +1,5 @@
-import 'dart:convert';
+
 import 'dart:core';
-import 'dart:io';
-import 'dart:math' as math;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:table_calendar/table_calendar.dart';
@@ -16,14 +13,11 @@ import 'firebase_options.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:math';
 import 'package:image_picker/image_picker.dart';
 import 'dart:html' as html;
-import 'package:http/http.dart' as http;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:uuid/uuid.dart';
-import 'package:hexcolor/hexcolor.dart';
 void main()async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
@@ -45,6 +39,15 @@ class MyApp extends StatelessWidget {
       ),
       home: const StartUpPage(),
       debugShowCheckedModeBanner: false,
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            viewInsets: EdgeInsets.zero,
+            viewPadding: EdgeInsets.zero,
+          ),
+          child: child!,
+        );
+      },
     );
   }
 }
@@ -973,6 +976,25 @@ class _SignInPageState extends State<SignInPage> {
       }
     }
   }
+  Future<void>_resend()async{
+    try {
+      String email=_studentNumberController.text+"@students.wits.ac.za";
+      String password=_passwordController.text;
+      if(email.isEmpty || password.isEmpty){
+        _showToast("All fields are required!",isError:true);
+        return;
+      }
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
+
+      User? user = FirebaseAuth.instance.currentUser;
+      user?.sendEmailVerification();
+      _showToast("Verification email sent!",isError:false);
+    }catch(e){
+      _showToast("Failed to send verification email! $e",isError:true);
+    }
+
+  }
   @override
   void dispose() {
     _studentNumberController.dispose();
@@ -980,93 +1002,89 @@ class _SignInPageState extends State<SignInPage> {
     super.dispose();
   }
   void _login() async {
-    String email = _studentNumberController.text.trim() +
-        "@students.wits.ac.za";
+    String email = _studentNumberController.text.trim() + "@students.wits.ac.za";
     String password = _passwordController.text.trim();
-    final bool c = await getConfirm();
 
-      try {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: email,
-          password: password,
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      User? user = FirebaseAuth.instance.currentUser;
+
+      if (user == null) {
+        _showToast("Login failed. Please try again.", isError: true);
+        return;
+      }
+
+      if (!user.emailVerified) {
+        _showToast("Please verify your email to log in.", isError: true);
+        await FirebaseAuth.instance.signOut();
+        return;
+      }
+
+      String? uid = user.uid;
+      DocumentSnapshot doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+
+      _showToast("Login successful.");
+
+      if (doc['role'] == 'mentee') {
+        saveLoginSession(uid!, 'mentee');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => MenteeHomePage()),
         );
-        if (c == true) {
-          String? uid = FirebaseAuth.instance.currentUser?.uid;
-          DocumentSnapshot doc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(uid)
-              .get();
-
-          _showToast("Login successful.",
-
-          );
-
-          if (doc['role'] == 'mentee') {
-            saveLoginSession(uid!, 'mentee');
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => MenteeHomePage()),
-            );
-          } else {
-            saveLoginSession(uid!, 'mentor');
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => MentorHomePage()),
-            );
-          }
-
-          initializeFCMToken();
-        }else {
-                _showToast("Verify email to log in",isError:true);
-        }
-
-      } on FirebaseAuthException catch (e) {
-        String message = "Login failed. Please try again.";
-
-        switch (e.code) {
-          case "invalid-email":
-            message = "Invalid student number or email format.";
-            break;
-
-          case "user-not-found":
-            message = "No user found with this student number.";
-            break;
-
-          case "wrong-password":
-            message = "Incorrect password.";
-            break;
-
-          case "user-disabled":
-            message = "Your account has been disabled. Contact support.";
-            break;
-
-          case "too-many-requests":
-            message =
-            "Too many attempts. Try again later or reset your password.";
-            break;
-
-          case "network-request-failed":
-            message = "No internet connection. Please check your network.";
-            break;
-
-          default:
-            message = "Error: ${e.message}";
-        }
-
-        _showToast(message
-        );
-
-
-    }
-       catch (e) {
-        _showToast("Something went wrong. Please try again.", isError: true
-
+      } else {
+        saveLoginSession(uid!, 'mentor');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => MentorHomePage()),
         );
       }
 
+      initializeFCMToken();
 
+    } on FirebaseAuthException catch (e) {
+      String message = "Login failed. Please try again.";
 
+      switch (e.code) {
+        case "invalid-email":
+          message = "Invalid student number or email format.";
+          break;
 
+        case "user-not-found":
+          message = "No user found with this student number.";
+          break;
+
+        case "wrong-password":
+          message = "Incorrect password.";
+          break;
+
+        case "user-disabled":
+          message = "Your account has been disabled. Contact support.";
+          break;
+
+        case "too-many-requests":
+          message = "Too many attempts. Try again later or reset your password.";
+          break;
+
+        case "network-request-failed":
+          message = "No internet connection. Please check your network.";
+          break;
+
+        default:
+          message = "Error: ${e.message}";
+      }
+
+      _showToast(message, isError: true);
+
+    } catch (e) {
+      _showToast("Something went wrong. Please try again.:$e", isError: true);
+    }
   }
   void _showToast(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
@@ -1310,6 +1328,17 @@ void _changePass()async{
                               ),
                             ],
                           ),
+                          GestureDetector(
+                            onTap: (){
+                              _resend();
+
+                            },
+                            child:  Text("Resend verification code",
+                                style:TextStyle(
+                                  color:Colors.white
+                                )),
+                          ),
+
                         ],
                       ),
                     ),
@@ -3087,13 +3116,13 @@ class _SuggestionsPageState extends State<SuggestionsPage> {
 
   String buildGeminiPrompt() {
     return """
-You are a mentorship expert at Wits University. Generate 3 COMPLETE TOPIC IDEAS for mentors to use with their mentees.
+You are a mentorship expert at Wits University. Generate 1 COMPLETE TOPIC IDEA for mentors to use with their mentees.
 
 IMPORTANT: You MUST return ONLY valid JSON. Do not include any explanations, introductions, or text outside the JSON structure.
 
 CRITICAL REQUIREMENTS:
-1. Generate EXACTLY 3 topic suggestions, not 1
-2. Each topic must include ALL these elements:
+1. Generate EXACTLY 1 topic suggestion
+2. The topic must include ALL these elements:
    - "topic": A clear, engaging title (4-8 words)
      Examples: "Effective Time Management for Academic Success", "Building Resilience in University Life", "Career Exploration and Goal Setting"
    
@@ -3111,7 +3140,7 @@ CRITICAL REQUIREMENTS:
    
    - "externalResources": EXACTLY 1-2 quality external resources
 
-3. Make descriptions DETAILED and HELPFUL (4-6 sentences each)
+3. Make description DETAILED and HELPFUL (4-6 sentences)
 
 CRITICAL RESOURCE SELECTION RULES:
 - Campus Resources: MUST select EXACTLY 2 from this list: ${campusResources.join(', ')}
@@ -3134,31 +3163,11 @@ Return ONLY valid JSON with this exact structure:
       "takeawaysForMentees": ["Clear learning outcome 1", "Practical skill 2", "Actionable insight 3", "Resource awareness 4"],
       "campusResources": ["Specific Resource 1 from list", "Specific Resource 2 from list"],
       "externalResources": ["Useful external resource 1", "Additional tool or website 2"]
-    },
-    {
-      "topic": "Second Engaging Topic Title",
-      "description": "Another detailed 4-6 sentence explanation...",
-      "keyDiscussionPoints": ["Point 1", "Point 2", "Point 3", "Point 4", "Point 5"],
-      "iceBreakers": ["Question 1", "Question 2", "Question 3"],
-      "questionsForMentees": ["Q1", "Q2", "Q3", "Q4", "Q5", "Q6"],
-      "takeawaysForMentees": ["Takeaway 1", "Takeaway 2", "Takeaway 3"],
-      "campusResources": ["Resource 1", "Resource 2"],
-      "externalResources": ["External 1"]
-    },
-    {
-      "topic": "Third Engaging Topic Title",
-      "description": "Third detailed 4-6 sentence explanation...",
-      "keyDiscussionPoints": ["Point 1", "Point 2", "Point 3", "Point 4", "Point 5"],
-      "iceBreakers": ["Question 1", "Question 2", "Question 3"],
-      "questionsForMentees": ["Q1", "Q2", "Q3", "Q4", "Q5", "Q6"],
-      "takeawaysForMentees": ["Takeaway 1", "Takeaway 2", "Takeaway 3"],
-      "campusResources": ["Resource 1", "Resource 2"],
-      "externalResources": ["External 1"]
     }
   ]
 }
 
-IMPORTANT: Generate EXACTLY 3 different topic suggestions, all equally detailed.
+IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly one object in the "suggestions" array.
 """;
   }
 
@@ -3220,11 +3229,7 @@ IMPORTANT: Generate EXACTLY 3 different topic suggestions, all equally detailed.
 
       if (data['success'] == true) {
         List<dynamic> suggestions = data['suggestions'] ?? [];
-        if (suggestions.length < 3) {
-          while (suggestions.length < 3) {
-            suggestions.add(_createDefaultTopic(suggestions.length + 1));
-          }
-        }
+
 
         setState(() {
           _aiSuggestions = suggestions;
@@ -3233,11 +3238,7 @@ IMPORTANT: Generate EXACTLY 3 different topic suggestions, all equally detailed.
         });
       } else {
         setState(() {
-          _aiSuggestions = [
-            _createDefaultTopic(1),
-            _createDefaultTopic(2),
-            _createDefaultTopic(3),
-          ];
+          _aiSuggestions = [_createDefaultTopic(1)];
           _isLoading = false;
           _showResults = true;
         });
@@ -3275,11 +3276,7 @@ IMPORTANT: Generate EXACTLY 3 different topic suggestions, all equally detailed.
       );
 
       setState(() {
-        _aiSuggestions = [
-          _createDefaultTopic(1),
-          _createDefaultTopic(2),
-          _createDefaultTopic(3),
-        ];
+        _aiSuggestions = [_createDefaultTopic(1)];
         _showResults = true;
       });
     }

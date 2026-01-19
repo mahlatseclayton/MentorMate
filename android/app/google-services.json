@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "502974249840",
-    "project_id": "mentormate-ce439",
-    "storage_bucket": "mentormate-ce439.firebasestorage.app"
+    "project_number": "42704641356",
+    "project_id": "mentormenteeconnect2",
+    "storage_bucket": "mentormenteeconnect2.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:502974249840:android:e7bf836fbd139c9fa6edb5",
+        "mobilesdk_app_id": "1:42704641356:android:7cc2df9371522d39ba03e9",
         "android_client_info": {
           "package_name": "com.example.mentor_mate"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAluAXUtxbdxPl7uq0brWncQ08IFxv93SY"
+          "current_key": "AIzaSyBYDLW5v3cVD5RXnLG213sOBiv6OQdIe38"
         }
       ],
       "services": {

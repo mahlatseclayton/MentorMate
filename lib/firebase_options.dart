@@ -37,29 +37,30 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCviJoznPmTzrSJ1cG3JM7JBDJqWGJw3vQ',
-    appId: '1:502974249840:web:9be87f12c6049747a6edb5',
-    messagingSenderId: '502974249840',
-    projectId: 'mentormate-ce439',
-    authDomain: 'mentormate-ce439.firebaseapp.com',
-    storageBucket: 'mentormate-ce439.firebasestorage.app',
-    measurementId: 'G-HT0VCFRVVM',
+    apiKey: 'AIzaSyAHeXc5xLwvc2QGYmgk-x6_kRGxnc8Oe_c',
+    appId: '1:42704641356:web:d22d5df0b41b4478ba03e9',
+    messagingSenderId: '42704641356',
+    projectId: 'mentormenteeconnect2',
+    authDomain: 'mentormenteeconnect2.firebaseapp.com',
+    storageBucket: 'mentormenteeconnect2.firebasestorage.app',
+    measurementId: 'G-6LTST8TETN',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAluAXUtxbdxPl7uq0brWncQ08IFxv93SY',
-    appId: '1:502974249840:android:e7bf836fbd139c9fa6edb5',
-    messagingSenderId: '502974249840',
-    projectId: 'mentormate-ce439',
-    storageBucket: 'mentormate-ce439.firebasestorage.app',
+    apiKey: 'AIzaSyBYDLW5v3cVD5RXnLG213sOBiv6OQdIe38',
+    appId: '1:42704641356:android:7cc2df9371522d39ba03e9',
+    messagingSenderId: '42704641356',
+    projectId: 'mentormenteeconnect2',
+    storageBucket: 'mentormenteeconnect2.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAXwgPpIX56FuBwbexEV-0Dm0HxK4EwezY',
-    appId: '1:502974249840:ios:053593e3ee339d26a6edb5',
-    messagingSenderId: '502974249840',
-    projectId: 'mentormate-ce439',
-    storageBucket: 'mentormate-ce439.firebasestorage.app',
+    apiKey: 'AIzaSyCECkOD1I56Y-7IMNubqyfRp6vicP9DhZg',
+    appId: '1:42704641356:ios:0eefba25985e9f21ba03e9',
+    messagingSenderId: '42704641356',
+    projectId: 'mentormenteeconnect2',
+    storageBucket: 'mentormenteeconnect2.firebasestorage.app',
     iosBundleId: 'com.example.mentorMate',
   );
+
 }
