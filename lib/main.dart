@@ -16,7 +16,7 @@ import 'package:flutter/services.dart';
 import 'dart:math';
 import 'package:image_picker/image_picker.dart';
 import 'dart:html' as html;
-import 'package:firebase_messaging/firebase_messaging.dart';
+
 import 'package:uuid/uuid.dart';
 void main()async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -961,21 +961,7 @@ class _SignInPageState extends State<SignInPage> {
 
 }
 
-  Future<void> initializeFCMToken() async {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId != null) {
-      String? token = await FirebaseMessaging.instance.getToken();
-      if (token != null) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .set({
-          'fcmToken': token,
-          'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
-    }
-  }
+
   Future<void>_resend()async{
     try {
       String email=_studentNumberController.text+"@students.wits.ac.za";
@@ -1018,11 +1004,11 @@ class _SignInPageState extends State<SignInPage> {
         return;
       }
 
-      if (!user.emailVerified) {
-        _showToast("Please verify your email to log in.", isError: true);
-        await FirebaseAuth.instance.signOut();
-        return;
-      }
+      // if (!user.emailVerified) {
+      //   _showToast("Please verify your email to log in.", isError: true);
+      //   await FirebaseAuth.instance.signOut();
+      //   return;
+      // }
 
       String? uid = user.uid;
       DocumentSnapshot doc = await FirebaseFirestore.instance
@@ -1046,7 +1032,7 @@ class _SignInPageState extends State<SignInPage> {
         );
       }
 
-      initializeFCMToken();
+
 
     } on FirebaseAuthException catch (e) {
       String message = "Login failed. Please try again.";
@@ -1369,11 +1355,6 @@ class _MentorHomePageState extends State<MentorHomePage> {
   TextEditingController _announcementDescriptionController = TextEditingController();
   DateTime _announcementSelectedDate = DateTime.now();
   TimeOfDay _announcementSelectedTime = TimeOfDay.now();
-
-  TextEditingController _quizTitleController = TextEditingController();
-  TextEditingController _quizDescriptionController = TextEditingController();
-  TextEditingController _quizDueDateController = TextEditingController();
-  List<Map<String, dynamic>> _quizQuestions = [];
 
   TextEditingController _meetingTitleController = TextEditingController();
   TextEditingController _meetingVenueController = TextEditingController();
@@ -2462,6 +2443,7 @@ Future <String>getUsername()async{
           .get();
       return menteesSnapshot.docs.length;
     } catch (e) {
+      print(e);
       return 0;
     }
   }
@@ -3025,7 +3007,9 @@ Future <String>getUsername()async{
       };
 
     } catch (e) {
+      print(e);
       return {'hasMeetings': false};
+
     }
   }
 }
@@ -3181,7 +3165,7 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
         }
       }
     } catch (e) {
-      debugPrint("Error loading suggestions: $e");
+     print("Error loading suggestions: $e");
     }
   }
 
@@ -4037,37 +4021,11 @@ class _CalendarPageState extends State<CalendarPage> {
     _selectedDay = DateTime.now();
     _loadEventsFromFirebase();
     _loadEventsFromFirebase2();
-    _initializeNotifications();
+
   }
 
-  Future<void> _initializeNotifications() async {
-    final settings = await FirebaseMessaging.instance.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
 
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-    }
-    final token = await FirebaseMessaging.instance.getToken();
-    if (token != null) {
-      await _saveFCMToken(token);
-    }
-    FirebaseMessaging.instance.onTokenRefresh.listen(_saveFCMToken);
-  }
 
-  Future<void> _saveFCMToken(String token) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .update({
-        'fcmToken': token,
-        'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-      });
-    }
-  }
 
   void _showAddEventDialog() {
     TextEditingController titleController = TextEditingController();
@@ -5454,6 +5412,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
         });
       }
     } catch (e) {
+
     }
   }
   CollectionReference get announcementsRef => _firestore.collection('announcements');
@@ -6400,6 +6359,8 @@ class _SuggestionsViewState extends State<SuggestionsView> {
             }
 
             if (snapshot.hasError) {
+              print('Firestore Error: ${snapshot.error}');
+
               return Center(child: Text('Error loading suggestions'));
             }
 

@@ -561,7 +561,6 @@ const EMAIL_PASSWORD = defineSecret("EMAIL_PASSWORD");
 exports.sendImmediateEventNotification = onDocumentCreated(
   {
     document: "Events/{eventId}",
-    region: "us-central1",
     secrets: [EMAIL_PASSWORD],
   },
   async (event) => {
@@ -586,7 +585,6 @@ exports.sendImmediateEventNotification = onDocumentCreated(
 exports.sendImmediateEventToStudent = onDocumentCreated(
   {
     document: "events/{eventId}",
-    region: "us-central1",
     secrets: [EMAIL_PASSWORD],
   },
   async (event) => {
@@ -640,8 +638,6 @@ exports.sendImmediateEventToStudent = onDocumentCreated(
 exports.send5HourReminders = onSchedule(
   {
     schedule: "every 15 minutes",
-//    timeZone: "Africa/Johannesburg",
-    region: "us-central1",
     secrets: [EMAIL_PASSWORD],
   },
   async () => {
