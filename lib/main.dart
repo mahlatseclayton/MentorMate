@@ -393,7 +393,7 @@ class _SignUpPageState extends State<SignUpPage> {
   Future<String?> _findMentorBySignKey(String signkey) async {
     try {
       final mentorSnapshot = await FirebaseFirestore.instance
-          .collection('users')
+          .collection('signkeys')
           .where('signkey', isEqualTo: signkey)
           .where('role', isEqualTo: 'mentor')
           .limit(1)
@@ -408,7 +408,20 @@ class _SignUpPageState extends State<SignUpPage> {
       return null;
     }
   }
+  Future<void>addSignKey(String key)async {
+    try {
+      await FirebaseFirestore.instance.collection('signkeys').add(
+          {
+            'signkey': key,
+            'role': 'mentor',
+          }
+      );
+      print("Signkey added successfully!");
+    } catch (e) {
 
+      print("Error: failed to add key!$e");
+    }
+  }
   void createAccount() async {
     String fName = _nameController.text;
     String lName = _surnameController.text;
@@ -418,33 +431,29 @@ class _SignUpPageState extends State<SignUpPage> {
     String? imageUrl = "";
 
     if (password != cpassword) {
-      _showToast( "Passwords do not match");
+      _showToast("Passwords do not match", isError: true);
       return;
     }
 
     try {
       String? mentorId = await _findMentorBySignKey(_signkeyController.text);
-      if (mentorId == null && _selectedRole=="mentee") {
-        _showToast( "Invalid signkey. Please check with your mentor.",isError:true);
+      if (mentorId == null && _selectedRole == "mentee") {
+        _showToast("Invalid signkey. Please check with your mentor.", isError: true);
         return;
       }
+
       UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(email: email, password: password);
 
-      User? user = FirebaseAuth.instance.currentUser;
-      String? uid = user?.uid;
+      String uid = userCredential.user!.uid;
 
-
-      if (uid == null) {
-        _showToast(  "Account creation failed.",isError:true);
-        return;
-      }
       Map<String, dynamic> userData = {
         'fName': fName,
+        'uid': uid,
         'lName': lName,
         'role': _selectedRole,
         'studentNo': _studentNumberController.text,
-        'email':_studentNumberController.text+'@students.wits.ac.za',
+        'email': email,
         'profile': imageUrl,
         'createdAt': FieldValue.serverTimestamp(),
       };
@@ -452,46 +461,33 @@ class _SignUpPageState extends State<SignUpPage> {
       if (_selectedRole == 'mentor') {
         String signkey = _generateSignKey();
         userData['signkey'] = signkey;
-
+        await addSignKey(signkey);
         await FirebaseFirestore.instance.collection('users').doc(uid).set(userData);
         _showMentorSignKeyDialog(signkey);
-
-      } else if (_selectedRole == 'mentee') {
+      } else {
         if (_signkeyController.text.isEmpty) {
-          _showToast(  "Please enter your mentor's signkey");
+          _showToast("Please enter your mentor's signkey", isError: true);
           return;
         }
-
-
-
         userData['mentor_id'] = mentorId;
         userData['signkey'] = _signkeyController.text;
-
         await FirebaseFirestore.instance.collection('users').doc(uid).set(userData);
       }
 
-      if (user != null) {
-        await user.sendEmailVerification();
-        await user.reload();
-      _showToast("Account created! Check your email to verify your account.",
-        );
-        await FirebaseAuth.instance.signOut();
-
-      } else {
-        _showToast(  "Failed to send verification email.",isError:true);
-      }
-
+      await userCredential.user!.sendEmailVerification();
+      await userCredential.user!.reload();
+      _showToast("Account created! Check your email to verify your account.");
+      await FirebaseAuth.instance.signOut();
     } on FirebaseAuthException catch (e) {
       if (e.code == 'weak-password') {
-        _showToast(  "Password is too weak.",isError:true);
+        _showToast("Password is too weak.", isError: true);
       } else if (e.code == 'email-already-in-use') {
-        _showToast( "Student number already exists.",isError:true);
+        _showToast("Student number already exists.", isError: true);
       } else {
-        _showToast(  e.message ?? "Unknown error occurred.",isError:true);
+        _showToast(e.message ?? "Unknown error occurred.", isError: true);
       }
     }
   }
-
 
   void _showMentorSignKeyDialog(String signkey) {
     showDialog(
@@ -1004,11 +1000,11 @@ class _SignInPageState extends State<SignInPage> {
         return;
       }
 
-      // if (!user.emailVerified) {
-      //   _showToast("Please verify your email to log in.", isError: true);
-      //   await FirebaseAuth.instance.signOut();
-      //   return;
-      // }
+      if (!user.emailVerified) {
+        _showToast("Please verify your email to log in.", isError: true);
+        await FirebaseAuth.instance.signOut();
+        return;
+      }
 
       String? uid = user.uid;
       DocumentSnapshot doc = await FirebaseFirestore.instance
@@ -1104,7 +1100,7 @@ void _changePass()async{
     _showToast(  "Recovery email sent."
         );}
     else{
-      _showToast(  "Failed to send recovery email.",isError:true
+      _showToast(  "Student number is required!.",isError:true
      );
     }
 }
@@ -1319,7 +1315,7 @@ void _changePass()async{
                               _resend();
 
                             },
-                            child:  Text("Resend verification code",
+                            child:  Text("Resend verification email!",
                                 style:TextStyle(
                                   color:Colors.white
                                 )),
@@ -1903,6 +1899,7 @@ Future <String> getKey(String uid)async {
                                     'date': date,
                                     'isoDate': isoDate,
                                     'meetingId': meetingId,
+                                    'signkey':signKey,
                                     'mentorId': currentUserId,
                                     'createdAt': FieldValue.serverTimestamp(),
                                     'expiresAt': Timestamp.fromDate(expiresAt),
@@ -3087,8 +3084,6 @@ class _SuggestionsPageState extends State<SuggestionsPage> {
     "Student Support Desk",
     "IT Helpdesk & eLearning Support"
   ];
-
-
   final List<String> suggestions = [];
   bool _isLoading = false;
   bool _showResults = false;
@@ -4853,12 +4848,12 @@ class _MenteesPageState extends State<MenteesPage> {
         _isLoading = true;
         _errorMessage = '';
       });
+
+      final currentUserDoc = await usersRef.doc(currentUserId).get();
+      final signkey = currentUserDoc['signkey'];
       final menteesSnapshot = await usersRef
           .where('role', isEqualTo: 'mentee')
-          .where('mentor_id', isEqualTo: currentUserId)
-          .get();
-      final meetingsSnapshot = await meetingsRef
-          .where('mentorId', isEqualTo: currentUserId)
+          .where('signkey', isEqualTo: signkey)
           .get();
       List<Map<String, dynamic>> menteesData = [];
       Map<String, String> profileImages = {};
@@ -4867,7 +4862,15 @@ class _MenteesPageState extends State<MenteesPage> {
         final mentee = menteeDoc.data() as Map<String, dynamic>;
         final menteeId = menteeDoc.id;
         profileImages[menteeId] = mentee['profile'] ?? '';
-        final attendanceData = await _calculateMenteeAttendance(menteeId, meetingsSnapshot.docs);
+        final meetingsSnapshot = await meetingsRef
+            .where('signkey', isEqualTo: signkey)
+            .get();
+
+        final attendanceData = await _calculateMenteeAttendance(
+            menteeId,
+            meetingsSnapshot.docs
+        );
+
         menteesData.add({
           'id': menteeId,
           'name': mentee['fName'] ?? '',
@@ -4887,7 +4890,7 @@ class _MenteesPageState extends State<MenteesPage> {
 
     } catch (e) {
       setState(() {
-        _errorMessage = 'Error loading mentees: $e';
+        _errorMessage = 'Error loading mentees: ${e.toString()}';
         _isLoading = false;
       });
     }
@@ -6071,9 +6074,10 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
           return Center(child: CircularProgressIndicator());
         }
         final allRegisters = snapshot.data!.docs;
+
         final registers = allRegisters.where((doc) {
           final register = doc.data() as Map<String, dynamic>;
-          final isMyMentor = register['mentorId'] == _mentorId;
+          final isMyMentor = register['signkey'] == _menteeSignKey;
           final expiresAt = register['expiresAt'] as Timestamp?;
           final isActive = expiresAt != null &&
               expiresAt.toDate().isAfter(DateTime.now());
