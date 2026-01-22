@@ -151,7 +151,7 @@ class _WelcomePageState extends State<WelcomePage> {
                     Text(
                       'MentorMenteeConnect',
                       style: TextStyle(
-                        fontSize: 36,
+                        fontSize: 34,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                         letterSpacing: 1.1,
@@ -422,37 +422,62 @@ class _SignUpPageState extends State<SignUpPage> {
       print("Error: failed to add key!$e");
     }
   }
-  void createAccount() async {
-    String fName = _nameController.text;
-    String lName = _surnameController.text;
-    String email = _studentNumberController.text + "@students.wits.ac.za";
+  bool _isCreatingAccount = false;
+
+  Future<void> createAccount() async {
+    if (_isCreatingAccount) return;
+    _isCreatingAccount = true;
+
+    String fName = _nameController.text.trim();
+    String lName = _surnameController.text.trim();
+    String studentNo = _studentNumberController.text.trim();
+    String email = "$studentNo@students.wits.ac.za";
     String password = _passwordController.text;
     String cpassword = _confirmPasswordController.text;
     String? imageUrl = "";
 
-    if (password != cpassword) {
-      _showToast("Passwords do not match", isError: true);
-      return;
-    }
-
     try {
-      String? mentorId = await _findMentorBySignKey(_signkeyController.text);
-      if (mentorId == null && _selectedRole == "mentee") {
-        _showToast("Invalid signkey. Please check with your mentor.", isError: true);
+      if (fName.isEmpty || lName.isEmpty || studentNo.isEmpty) {
+        _showToast("Please fill in all required fields", isError: true);
         return;
       }
 
-      UserCredential userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
+      if (password != cpassword) {
+        _showToast("Passwords do not match", isError: true);
+        return;
+      }
 
-      String uid = userCredential.user!.uid;
+      String? mentorId;
+      if (_selectedRole == "mentee") {
+        if (_signkeyController.text.trim().isEmpty) {
+          _showToast("Please enter your mentor's signkey", isError: true);
+          return;
+        }
+
+        mentorId = await _findMentorBySignKey(_signkeyController.text.trim());
+        if (mentorId == null) {
+          _showToast("Invalid signkey. Please check with your mentor.", isError: true);
+          return;
+        }
+      }
+
+      UserCredential userCredential =
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final user = userCredential.user;
+      if (user == null) throw Exception("User creation failed");
+
+      String uid = user.uid;
 
       Map<String, dynamic> userData = {
-        'fName': fName,
         'uid': uid,
+        'fName': fName,
         'lName': lName,
         'role': _selectedRole,
-        'studentNo': _studentNumberController.text,
+        'studentNo': studentNo,
         'email': email,
         'profile': imageUrl,
         'createdAt': FieldValue.serverTimestamp(),
@@ -461,22 +486,26 @@ class _SignUpPageState extends State<SignUpPage> {
       if (_selectedRole == 'mentor') {
         String signkey = _generateSignKey();
         userData['signkey'] = signkey;
+
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .set(userData);
+
         await addSignKey(signkey);
-        await FirebaseFirestore.instance.collection('users').doc(uid).set(userData);
         _showMentorSignKeyDialog(signkey);
       } else {
-        if (_signkeyController.text.isEmpty) {
-          _showToast("Please enter your mentor's signkey", isError: true);
-          return;
-        }
         userData['mentor_id'] = mentorId;
-        userData['signkey'] = _signkeyController.text;
-        await FirebaseFirestore.instance.collection('users').doc(uid).set(userData);
+        userData['signkey'] = _signkeyController.text.trim();
+
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .set(userData);
       }
 
-      await userCredential.user!.sendEmailVerification();
-      await userCredential.user!.reload();
-      _showToast("Account created! Check your email to verify your account.");
+      await user.sendEmailVerification();
+      _showToast("Account created! Check your email to verify.");
       await FirebaseAuth.instance.signOut();
     } on FirebaseAuthException catch (e) {
       if (e.code == 'weak-password') {
@@ -484,10 +513,15 @@ class _SignUpPageState extends State<SignUpPage> {
       } else if (e.code == 'email-already-in-use') {
         _showToast("Student number already exists.", isError: true);
       } else {
-        _showToast(e.message ?? "Unknown error occurred.", isError: true);
+        _showToast(e.message ?? "Authentication error.", isError: true);
       }
+    } catch (e) {
+      _showToast("Something went wrong. Try again.", isError: true);
+    } finally {
+      _isCreatingAccount = false;
     }
   }
+
 
   void _showMentorSignKeyDialog(String signkey) {
     showDialog(
@@ -958,25 +992,51 @@ class _SignInPageState extends State<SignInPage> {
 }
 
 
-  Future<void>_resend()async{
+  Future<void> _resend() async {
     try {
-      String email=_studentNumberController.text+"@students.wits.ac.za";
-      String password=_passwordController.text;
-      if(email.isEmpty || password.isEmpty){
-        _showToast("All fields are required!",isError:true);
+      String email = "${_studentNumberController.text.trim()}@students.wits.ac.za";
+      String password = _passwordController.text;
+
+      if (email.isEmpty || password.isEmpty) {
+        _showToast("All fields are required!", isError: true);
         return;
       }
-      UserCredential userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
 
-      User? user = FirebaseAuth.instance.currentUser;
-      user?.sendEmailVerification();
-      _showToast("Verification email sent!",isError:false);
-    }catch(e){
-      _showToast("Failed to send verification email! $e",isError:true);
+      UserCredential userCredential =
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      User? user = userCredential.user;
+
+      if (user == null) {
+        _showToast("User not found.", isError: true);
+        return;
+      }
+
+      if (user.emailVerified) {
+        _showToast("Email is already verified.", isError: false);
+        return;
+      }
+
+      await user.sendEmailVerification();
+      _showToast("Verification email sent!", isError: false);
+
+      await FirebaseAuth.instance.signOut();
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found') {
+        _showToast("Account does not exist.", isError: true);
+      } else if (e.code == 'wrong-password') {
+        _showToast("Incorrect password.", isError: true);
+      } else {
+        _showToast(e.message ?? "Authentication error.", isError: true);
+      }
+    } catch (e) {
+      _showToast("Failed to send verification email.", isError: true);
     }
-
   }
+
   @override
   void dispose() {
     _studentNumberController.dispose();
@@ -2283,7 +2343,7 @@ void _logout()async{
   await FirebaseAuth.instance.signOut();
   Navigator.pushReplacement(
     context,
-    MaterialPageRoute(builder: (_) => const SignInPage()),
+    MaterialPageRoute(builder: (_) => const WelcomePage()),
   );
 }
 
@@ -3414,7 +3474,10 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
             controller: _mentorPromptController,
             maxLines: 3,
             decoration: InputDecoration(
-              hintText: 'Describe your mentee\'s current challenges, interests, or goals...',
+              hintText: 'Describe your mentee\'s current challenges ,interests and goals ...',
+              hintStyle: TextStyle(
+              fontSize: 12,
+              color:Colors.grey),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(color: Colors.grey[300]!),
@@ -3427,7 +3490,7 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
               helperText: 'What specific areas would benefit your mentee right now?',
               helperStyle: TextStyle(
                 color: Colors.grey[500],
-                fontSize: 12,
+                fontSize: 11,
               ),
             ),
           ),
@@ -5749,7 +5812,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
     await FirebaseAuth.instance.signOut();
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => const SignInPage() ),
+      MaterialPageRoute(builder: (_) => const WelcomePage() ),
     );
   }
   void _showLogoutDialog() {
