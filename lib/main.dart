@@ -7149,7 +7149,8 @@ class _ProfilePageState extends State<ProfilePage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final Uuid _uuid = const Uuid();
-
+  final TextEditingController _deleteConfirmationController = TextEditingController();
+  bool _isDeleting = false;
   OverlayEntry? _addButtonOverlay;
 
   @override
@@ -7577,7 +7578,150 @@ class _ProfilePageState extends State<ProfilePage> {
     overlayState.insert(_addButtonOverlay!);
   }
 
+  Future<void> _deleteAccount() async {
+    bool confirmDelete = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Delete Account"),
+        content: Text("Are you sure you want to delete your account? This action cannot be undone."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text("Delete"),
+          ),
+        ],
+      ),
+    );
 
+    if (!confirmDelete) return;
+
+    setState(() {
+      _isDeleting = true;
+    });
+
+    try {
+      final userId = _auth.currentUser!.uid;
+      await _firestore.collection('users').doc(userId).delete();
+      final eventsQuery = await _firestore
+          .collection('timetable_events')
+          .where('userId', isEqualTo: userId)
+          .get();
+
+      for (var doc in eventsQuery.docs) {
+        await doc.reference.delete();
+      }
+      try {
+        await _auth.currentUser!.delete();
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => WelcomePage()),
+              (route) => false,
+        );
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Account deleted successfully"),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'requires-recent-login') {
+          await _auth.signOut();
+
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => WelcomePage()),
+                (route) => false,
+          );
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Account data deleted. Please login again if you want to delete authentication."),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        } else {
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Auth deletion failed: ${e.message}"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Failed to delete account: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+
+    setState(() => _isDeleting = false);
+  }
+
+  Widget _buildDeleteAccountSection() {
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      elevation: 3,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Account Settings",
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF667eea),
+              ),
+            ),
+            SizedBox(height: 16),
+            Text(
+              "This action cannot be undone. All your data will be permanently deleted.",
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 14,
+              ),
+            ),
+            SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: Icon(Icons.delete_outline, size: 20),
+                label: Text(
+                  "Delete My Account",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: () => _deleteAccount(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
   Widget _buildAddEventOption(IconData icon, String title, String description, VoidCallback onTap) {
     return Material(
       color: Colors.transparent,
@@ -7781,6 +7925,8 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildInfoCard(),
             const SizedBox(height: 32),
             _buildWeeklyTimetable(),
+            const SizedBox(height: 32),
+            _buildDeleteAccountSection(),
             const SizedBox(height: 24),
           ],
         ),
