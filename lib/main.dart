@@ -1,4 +1,5 @@
-
+import 'package:flutter/material.dart';
+import 'package:flutter/animation.dart';
 import 'dart:core';
 import 'package:flutter/material.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -18,14 +19,14 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:html' as html;
 
 import 'package:uuid/uuid.dart';
-void main()async {
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   runApp(MyApp());
 }
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -33,36 +34,28 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'MentorMenteeConnect',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-      ),
+      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
       home: const StartUpPage(),
       debugShowCheckedModeBanner: false,
       builder: (context, child) {
         return MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            viewInsets: EdgeInsets.zero,
-            viewPadding: EdgeInsets.zero,
-          ),
+          data: MediaQuery.of(
+            context,
+          ).copyWith(viewInsets: EdgeInsets.zero, viewPadding: EdgeInsets.zero),
           child: child!,
         );
       },
     );
   }
 }
-class WelcomePage extends StatefulWidget {
-  const WelcomePage({super.key});
 
-  @override
-  State<WelcomePage> createState() => _WelcomePageState();
-}
 class StartUpPage extends StatefulWidget {
   const StartUpPage({super.key});
 
   @override
   State<StartUpPage> createState() => _StartUpPageState();
 }
+
 class _StartUpPageState extends State<StartUpPage> {
   @override
   void initState() {
@@ -116,54 +109,49 @@ class _StartUpPageState extends State<StartUpPage> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
+
+class WelcomePage extends StatefulWidget {
+  const WelcomePage({super.key});
+
+  @override
+  State<WelcomePage> createState() => _WelcomePageState();
+}
+
 class _WelcomePageState extends State<WelcomePage> {
   @override
   Widget build(BuildContext context) {
+    final isWeb = MediaQuery.of(context).size.width > 600;
+
     return Scaffold(
-      body: SafeArea(
-        child: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF667eea),
-                Color(0xFF764ba2),
-              ],
-            ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
           ),
+        ),
+        child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(20.0),
+            padding: EdgeInsets.symmetric(
+              horizontal: isWeb ? 60 : 24,
+              vertical: isWeb ? 40 : 20,
+            ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 30),
-
-
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                // Top section with subtle indicator
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      'MentorMenteeConnect',
-                      style: TextStyle(
-                        fontSize: 34,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Smart mentorship platform\nStreamline meetings and communication',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.9),
-                        height: 1.4,
+                    Container(
+                      width: 60,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ],
@@ -171,78 +159,193 @@ class _WelcomePageState extends State<WelcomePage> {
 
                 const SizedBox(height: 40),
 
-
+                // Main content
                 Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      children: [
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Animated logo
+                      TweenAnimationBuilder(
+                        tween: Tween<double>(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 800),
+                        curve: Curves.easeOutBack,
+                        builder: (context, double value, child) {
+                          return Transform.scale(
+                            scale: value,
+                            child: Container(
+                              width: isWeb ? 100 : 80,
+                              height: isWeb ? 100 : 80,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                  width: 2,
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.auto_awesome,
+                                color: Colors.white,
+                                size: 40,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
 
-                        _buildFeatureCard(
-                          title: 'Smart Scheduling',
-                          subtitle: 'AI-powered meeting suggestions',
-                          description: 'Find optimal times for mentor-mentee meetings',
-                          icon: Icons.schedule_outlined,
+                      const SizedBox(height: 30),
+
+                      // Title with fade-in animation
+                      TweenAnimationBuilder(
+                        tween: Tween<double>(begin: 0, end: 1),
+                        duration: const Duration(milliseconds: 600),
+                        builder: (context, double value, child) {
+                          return Opacity(
+                            opacity: value,
+                            child: Transform.translate(
+                              offset: Offset(0, 20 * (1 - value)),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Welcome to',
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.white70,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'MentorMentee\nConnect',
+                              style: TextStyle(
+                                fontSize: 48,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                height: 1.1,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            Container(
+                              width: 60,
+                              height: 3,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            Text(
+                              'Bridge the gap between mentors\nand mentees with smart tools',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.white.withOpacity(0.9),
+                                height: 1.5,
+                              ),
+                            ),
+                          ],
                         ),
-
-                        const SizedBox(height: 12),
-
-
-                        _buildFeatureCard(
-                          title: 'Anonymous Feedback',
-                          subtitle: 'Safe communication channel',
-                          description: 'Share concerns and suggestions privately',
-                          icon: Icons.announcement_outlined,
-                        ),
-
-                        const SizedBox(height: 12),
-
-
-                        _buildFeatureCard(
-                          title: 'Shared Calendar',
-                          subtitle: 'Coordinated scheduling',
-                          description: 'View combined timetables and assessments',
-                          icon: Icons.calendar_month_outlined,
-                        ),
-
-                        const SizedBox(height: 12),
-
-
-                        _buildFeatureCard(
-                          title: 'Topic Suggestions',
-                          subtitle: 'Structured meeting agendas',
-                          description: 'Collect and discuss relevant topics',
-                          icon: Icons.lightbulb_outline,
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
 
-                const SizedBox(height: 20),
-
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {
-                              Navigator.push(context, MaterialPageRoute(builder: (_)=>SignUpPage()));},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFF667eea),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                // Bottom section with button
+                Column(
+                  children: [
+                    // Decorative element
+                    Row(
+                      children: List.generate(
+                        3,
+                        (index) => Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(right: index < 2 ? 8 : 0),
+                            child: Container(
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(
+                                  0.2 + (index * 0.1),
+                                ),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                      elevation: 2,
                     ),
-                    child: const Text(
-                      'Get Started',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+
+                    const SizedBox(height: 30),
+
+                    // Get Started button
+                    Container(
+                      width: double.infinity,
+                      constraints: BoxConstraints(
+                        maxWidth: isWeb ? 400 : double.infinity,
+                      ),
+                      child: Column(
+                        children: [
+                          ElevatedButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => SignUpPage()),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFF667eea),
+                              padding: EdgeInsets.symmetric(
+                                vertical: isWeb ? 20 : 18,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              elevation: 8,
+                              minimumSize: Size(
+                                double.infinity,
+                                isWeb ? 64 : 58,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Text(
+                                  'Get Started',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                      0xFF667eea,
+                                    ).withOpacity(0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.arrow_forward,
+                                    size: 20,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 16),
+                        ],
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
@@ -251,93 +354,15 @@ class _WelcomePageState extends State<WelcomePage> {
       ),
     );
   }
-
-  Widget _buildFeatureCard({
-    required String title,
-    required String subtitle,
-    required String description,
-    required IconData icon,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.95),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0xFF667eea).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              icon,
-              color: const Color(0xFF667eea),
-              size: 20,
-            ),
-          ),
-
-          const SizedBox(width: 12),
-
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
-                ),
-
-                const SizedBox(height: 2),
-
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: const Color(0xFF667eea),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                Text(
-                  description,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
+
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
 
   @override
   State<SignUpPage> createState() => _SignUpPageState();
 }
+
 class _SignUpPageState extends State<SignUpPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
@@ -346,7 +371,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _signkeyController = TextEditingController();
-  bool isError=true;
+  bool isError = true;
   String _selectedRole = 'mentee';
   @override
   void _showToast(String message, {bool isError = false}) {
@@ -367,13 +392,12 @@ class _SignUpPageState extends State<SignUpPage> {
         ),
         backgroundColor: isError ? Colors.red : Colors.green,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 2),
       ),
     );
   }
+
   void dispose() {
     _nameController.dispose();
     _surnameController.dispose();
@@ -385,9 +409,13 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   String _generateSignKey() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789qwertyuioplkjhgfdsazxcvbnm';
+    const chars =
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789qwertyuioplkjhgfdsazxcvbnm';
     final random = Random();
-    return List.generate(6, (index) => chars[random.nextInt(chars.length)]).join();
+    return List.generate(
+      6,
+      (index) => chars[random.nextInt(chars.length)],
+    ).join();
   }
 
   Future<String?> _findMentorBySignKey(String signkey) async {
@@ -404,24 +432,22 @@ class _SignUpPageState extends State<SignUpPage> {
       }
       return null;
     } catch (e) {
-
       return null;
     }
   }
-  Future<void>addSignKey(String key)async {
+
+  Future<void> addSignKey(String key) async {
     try {
-      await FirebaseFirestore.instance.collection('signkeys').add(
-          {
-            'signkey': key,
-            'role': 'mentor',
-          }
-      );
+      await FirebaseFirestore.instance.collection('signkeys').add({
+        'signkey': key,
+        'role': 'mentor',
+      });
       print("Signkey added successfully!");
     } catch (e) {
-
       print("Error: failed to add key!$e");
     }
   }
+
   bool _isCreatingAccount = false;
 
   Future<void> createAccount() async {
@@ -456,16 +482,16 @@ class _SignUpPageState extends State<SignUpPage> {
 
         mentorId = await _findMentorBySignKey(_signkeyController.text.trim());
         if (mentorId == null) {
-          _showToast("Invalid signkey. Please check with your mentor.", isError: true);
+          _showToast(
+            "Invalid signkey. Please check with your mentor.",
+            isError: true,
+          );
           return;
         }
       }
 
-      UserCredential userCredential =
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
 
       final user = userCredential.user;
       if (user == null) throw Exception("User creation failed");
@@ -522,7 +548,6 @@ class _SignUpPageState extends State<SignUpPage> {
     }
   }
 
-
   void _showMentorSignKeyDialog(String signkey) {
     showDialog(
       context: context,
@@ -578,7 +603,10 @@ class _SignUpPageState extends State<SignUpPage> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (_) => SignInPage()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => SignInPage()),
+              );
             },
             child: Text('Continue to Sign In'),
           ),
@@ -596,10 +624,7 @@ class _SignUpPageState extends State<SignUpPage> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF667eea),
-                Color(0xFF764ba2),
-              ],
+              colors: [Color(0xFF667eea), Color(0xFF764ba2)],
             ),
           ),
           child: Padding(
@@ -657,15 +682,15 @@ class _SignUpPageState extends State<SignUpPage> {
                       child: Column(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.95),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.08),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
                                 ),
                               ],
                             ),
@@ -681,12 +706,21 @@ class _SignUpPageState extends State<SignUpPage> {
                                           });
                                         },
                                         child: Container(
-                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 14,
+                                          ),
                                           decoration: BoxDecoration(
                                             color: _selectedRole == 'mentee'
                                                 ? const Color(0xFF667eea)
-                                                : Colors.grey[300],
-                                            borderRadius: BorderRadius.circular(8),
+                                                : Colors.grey[200],
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            border: _selectedRole == 'mentee'
+                                                ? null
+                                                : Border.all(
+                                                    color: Colors.grey[300]!,
+                                                  ),
                                           ),
                                           child: Column(
                                             children: [
@@ -703,7 +737,8 @@ class _SignUpPageState extends State<SignUpPage> {
                                                 style: TextStyle(
                                                   fontSize: 14,
                                                   fontWeight: FontWeight.w600,
-                                                  color: _selectedRole == 'mentee'
+                                                  color:
+                                                      _selectedRole == 'mentee'
                                                       ? Colors.white
                                                       : Colors.grey[600],
                                                 ),
@@ -722,12 +757,21 @@ class _SignUpPageState extends State<SignUpPage> {
                                           });
                                         },
                                         child: Container(
-                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 14,
+                                          ),
                                           decoration: BoxDecoration(
                                             color: _selectedRole == 'mentor'
                                                 ? const Color(0xFF667eea)
-                                                : Colors.grey[300],
-                                            borderRadius: BorderRadius.circular(8),
+                                                : Colors.grey[200],
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            border: _selectedRole == 'mentor'
+                                                ? null
+                                                : Border.all(
+                                                    color: Colors.grey[300]!,
+                                                  ),
                                           ),
                                           child: Column(
                                             children: [
@@ -744,7 +788,8 @@ class _SignUpPageState extends State<SignUpPage> {
                                                 style: TextStyle(
                                                   fontSize: 14,
                                                   fontWeight: FontWeight.w600,
-                                                  color: _selectedRole == 'mentor'
+                                                  color:
+                                                      _selectedRole == 'mentor'
                                                       ? Colors.white
                                                       : Colors.grey[600],
                                                 ),
@@ -757,18 +802,26 @@ class _SignUpPageState extends State<SignUpPage> {
                                   ],
                                 ),
 
-                                const SizedBox(height: 20),
+                                const SizedBox(height: 24),
 
                                 TextFormField(
                                   controller: _nameController,
                                   decoration: InputDecoration(
                                     labelText: 'First Name',
-                                    prefixIcon: Icon(Icons.person_outline, color: Colors.grey[600]),
+                                    prefixIcon: Icon(
+                                      Icons.person_outline,
+                                      color: const Color(0xFF667eea),
+                                    ),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
                                     ),
                                     filled: true,
                                     fillColor: Colors.grey[50],
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
                                   ),
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
@@ -784,12 +837,20 @@ class _SignUpPageState extends State<SignUpPage> {
                                   controller: _surnameController,
                                   decoration: InputDecoration(
                                     labelText: 'Last Name',
-                                    prefixIcon: Icon(Icons.person_outline, color: Colors.grey[600]),
+                                    prefixIcon: Icon(
+                                      Icons.person_outline,
+                                      color: const Color(0xFF667eea),
+                                    ),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
                                     ),
                                     filled: true,
                                     fillColor: Colors.grey[50],
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
                                   ),
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
@@ -805,12 +866,20 @@ class _SignUpPageState extends State<SignUpPage> {
                                   controller: _studentNumberController,
                                   decoration: InputDecoration(
                                     labelText: 'Student Number',
-                                    prefixIcon: Icon(Icons.numbers_outlined, color: Colors.grey[600]),
+                                    prefixIcon: Icon(
+                                      Icons.numbers_outlined,
+                                      color: const Color(0xFF667eea),
+                                    ),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
                                     ),
                                     filled: true,
                                     fillColor: Colors.grey[50],
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
                                   ),
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
@@ -824,18 +893,56 @@ class _SignUpPageState extends State<SignUpPage> {
                                   TextFormField(
                                     controller: _signkeyController,
                                     decoration: InputDecoration(
-                                      labelText: 'Mentor Sign Key *',
-                                      prefixIcon: Icon(Icons.vpn_key, color: Colors.grey[600]),
+                                      labelText: 'Mentor Sign Key',
+                                      prefixIcon: Icon(
+                                        Icons.vpn_key,
+                                        color: const Color(0xFF667eea),
+                                      ),
+                                      suffixIcon: Container(
+                                        margin: const EdgeInsets.all(8),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(
+                                            0xFF667eea,
+                                          ).withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          'required',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Color(0xFF667eea),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
                                       border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide.none,
                                       ),
                                       filled: true,
                                       fillColor: Colors.grey[50],
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 14,
+                                          ),
                                       hintText: 'Enter 6-character code',
-                                      helperText: 'Get this code from your assigned mentor',
+                                      helperText:
+                                          'Get this code from your assigned mentor',
+                                      helperStyle: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 12,
+                                      ),
                                     ),
                                     validator: (value) {
-                                      if (_selectedRole == 'mentee' && (value == null || value.isEmpty)) {
+                                      if (_selectedRole == 'mentee' &&
+                                          (value == null || value.isEmpty)) {
                                         return 'Please enter your mentor sign key';
                                       }
                                       if (value != null && value.length != 6) {
@@ -853,12 +960,20 @@ class _SignUpPageState extends State<SignUpPage> {
                                   obscureText: true,
                                   decoration: InputDecoration(
                                     labelText: 'Password',
-                                    prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
+                                    prefixIcon: Icon(
+                                      Icons.lock_outline,
+                                      color: const Color(0xFF667eea),
+                                    ),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
                                     ),
                                     filled: true,
                                     fillColor: Colors.grey[50],
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
                                   ),
                                   validator: (value) {
                                     if (value == null || value.length < 6) {
@@ -875,12 +990,20 @@ class _SignUpPageState extends State<SignUpPage> {
                                   obscureText: true,
                                   decoration: InputDecoration(
                                     labelText: 'Confirm Password',
-                                    prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
+                                    prefixIcon: Icon(
+                                      Icons.lock_outline,
+                                      color: const Color(0xFF667eea),
+                                    ),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
                                     ),
                                     filled: true,
                                     fillColor: Colors.grey[50],
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
                                   ),
                                   validator: (value) {
                                     if (value != _passwordController.text) {
@@ -903,20 +1026,42 @@ class _SignUpPageState extends State<SignUpPage> {
                                   createAccount();
                                 }
                               },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: const Color(0xFF667eea),
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                elevation: 2,
-                              ),
+                              style:
+                                  ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: const Color(0xFF667eea),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    elevation: 4,
+                                    minimumSize: const Size(
+                                      double.infinity,
+                                      54,
+                                    ),
+                                  ).copyWith(
+                                    overlayColor:
+                                        MaterialStateProperty.resolveWith<
+                                          Color?
+                                        >((states) {
+                                          if (states.contains(
+                                            MaterialState.pressed,
+                                          )) {
+                                            return const Color(
+                                              0xFF667eea,
+                                            ).withOpacity(0.1);
+                                          }
+                                          return null;
+                                        }),
+                                  ),
                               child: const Text(
                                 'Create Account',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
                                 ),
                               ),
                             ),
@@ -936,15 +1081,33 @@ class _SignUpPageState extends State<SignUpPage> {
                               ),
                               GestureDetector(
                                 onTap: () {
-                                  Navigator.push(context, MaterialPageRoute(builder: (_) => SignInPage()));
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => SignInPage(),
+                                    ),
+                                  );
                                 },
-                                child: Text(
-                                  'Sign In',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    decoration: TextDecoration.underline,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: Colors.white,
+                                        width: 1,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Sign In',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -963,12 +1126,14 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 }
+
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key});
 
   @override
   State<SignInPage> createState() => _SignInPageState();
 }
+
 class _SignInPageState extends State<SignInPage> {
   final _formKey = GlobalKey<FormState>();
   final _studentNumberController = TextEditingController();
@@ -979,22 +1144,19 @@ class _SignInPageState extends State<SignInPage> {
     prefs.setBool("loggedIn", true);
     prefs.setString("uid", uid);
     prefs.setString("role", role);
-
   }
 
+  Future<bool> getConfirm() async {
+    User? user = FirebaseAuth.instance.currentUser;
+    bool isConfirm = user?.emailVerified ?? false;
 
-  Future<bool> getConfirm()async{
-  User? user= FirebaseAuth.instance.currentUser;
-      bool isConfirm=user?.emailVerified ??false;
-
-   return isConfirm;
-
-}
-
+    return isConfirm;
+  }
 
   Future<void> _resend() async {
     try {
-      String email = "${_studentNumberController.text.trim()}@students.wits.ac.za";
+      String email =
+          "${_studentNumberController.text.trim()}@students.wits.ac.za";
       String password = _passwordController.text;
 
       if (email.isEmpty || password.isEmpty) {
@@ -1002,11 +1164,8 @@ class _SignInPageState extends State<SignInPage> {
         return;
       }
 
-      UserCredential userCredential =
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
 
       User? user = userCredential.user;
 
@@ -1043,8 +1202,10 @@ class _SignInPageState extends State<SignInPage> {
     _passwordController.dispose();
     super.dispose();
   }
+
   void _login() async {
-    String email = _studentNumberController.text.trim() + "@students.wits.ac.za";
+    String email =
+        _studentNumberController.text.trim() + "@students.wits.ac.za";
     String password = _passwordController.text.trim();
 
     try {
@@ -1087,9 +1248,6 @@ class _SignInPageState extends State<SignInPage> {
           MaterialPageRoute(builder: (_) => MentorHomePage()),
         );
       }
-
-
-
     } on FirebaseAuthException catch (e) {
       String message = "Login failed. Please try again.";
 
@@ -1111,7 +1269,8 @@ class _SignInPageState extends State<SignInPage> {
           break;
 
         case "too-many-requests":
-          message = "Too many attempts. Try again later or reset your password.";
+          message =
+              "Too many attempts. Try again later or reset your password.";
           break;
 
         case "network-request-failed":
@@ -1123,11 +1282,11 @@ class _SignInPageState extends State<SignInPage> {
       }
 
       _showToast(message, isError: true);
-
     } catch (e) {
       _showToast("Something went wrong. Please try again.:$e", isError: true);
     }
   }
+
   void _showToast(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
 
@@ -1146,24 +1305,22 @@ class _SignInPageState extends State<SignInPage> {
         ),
         backgroundColor: isError ? Colors.red : Colors.green,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 2),
       ),
     );
   }
-void _changePass()async{
-    String email=_studentNumberController.text+"@students.wits.ac.za";
-    if(!_studentNumberController.text.isEmpty){
-    await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-    _showToast(  "Recovery email sent."
-        );}
-    else{
-      _showToast(  "Student number is required!.",isError:true
-     );
+
+  void _changePass() async {
+    String email = _studentNumberController.text + "@students.wits.ac.za";
+    if (!_studentNumberController.text.isEmpty) {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      _showToast("Recovery email sent.");
+    } else {
+      _showToast("Student number is required!.", isError: true);
     }
-}
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1173,10 +1330,7 @@ void _changePass()async{
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF667eea),
-                Color(0xFF764ba2),
-              ],
+              colors: [Color(0xFF667eea), Color(0xFF764ba2)],
             ),
           ),
           child: Padding(
@@ -1194,7 +1348,7 @@ void _changePass()async{
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(
                         Icons.arrow_back,
@@ -1209,21 +1363,38 @@ void _changePass()async{
                   Text(
                     'Welcome Back',
                     style: TextStyle(
-                      fontSize: 32,
+                      fontSize: 36,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
-                      letterSpacing: 1.1,
+                      letterSpacing: 1.2,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black26,
+                          offset: Offset(2, 2),
+                          blurRadius: 4,
+                        ),
+                      ],
                     ),
                   ),
 
                   const SizedBox(height: 8),
 
-                  Text(
-                    'Sign in to your MentorMenteeConnect account',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.white.withOpacity(0.9),
-                      height: 1.4,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'Sign in to your account',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white.withOpacity(0.95),
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
 
@@ -1234,15 +1405,15 @@ void _changePass()async{
                       child: Column(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.95),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.08),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
                                 ),
                               ],
                             ),
@@ -1252,12 +1423,23 @@ void _changePass()async{
                                   controller: _studentNumberController,
                                   decoration: InputDecoration(
                                     labelText: 'Student Number',
-                                    prefixIcon: Icon(Icons.numbers_outlined, color: Colors.grey[600]),
+                                    labelStyle: TextStyle(
+                                      color: Colors.grey[600],
+                                    ),
+                                    prefixIcon: Icon(
+                                      Icons.numbers_outlined,
+                                      color: const Color(0xFF667eea),
+                                    ),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
                                     ),
                                     filled: true,
                                     fillColor: Colors.grey[50],
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
                                   ),
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
@@ -1274,12 +1456,23 @@ void _changePass()async{
                                   obscureText: true,
                                   decoration: InputDecoration(
                                     labelText: 'Password',
-                                    prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
+                                    labelStyle: TextStyle(
+                                      color: Colors.grey[600],
+                                    ),
+                                    prefixIcon: Icon(
+                                      Icons.lock_outline,
+                                      color: const Color(0xFF667eea),
+                                    ),
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide.none,
                                     ),
                                     filled: true,
                                     fillColor: Colors.grey[50],
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 14,
+                                    ),
                                   ),
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
@@ -1289,24 +1482,81 @@ void _changePass()async{
                                   },
                                 ),
 
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 20),
 
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      _changePass();
-
-                                    },
-                                    child: Text(
-                                      'Forgot Password?',
-                                      style: TextStyle(
-                                        color: const Color(0xFF667eea),
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    // Resend verification link
+                                    GestureDetector(
+                                      onTap: () {
+                                        _resend();
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(
+                                            0xFF667eea,
+                                          ).withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.email_outlined,
+                                              size: 14,
+                                              color: const Color(0xFF667eea),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              "Resend verification",
+                                              style: TextStyle(
+                                                color: const Color(0xFF667eea),
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
+
+                                    // Forgot Password link
+                                    GestureDetector(
+                                      onTap: () {
+                                        _changePass();
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          border: Border(
+                                            bottom: BorderSide(
+                                              color: const Color(0xFF667eea),
+                                              width: 1,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'Forgot Password?',
+                                          style: TextStyle(
+                                            color: const Color(0xFF667eea),
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -1319,28 +1569,56 @@ void _changePass()async{
                             child: ElevatedButton(
                               onPressed: () {
                                 if (_formKey.currentState!.validate()) {
-                                      _login();
+                                  _login();
                                 }
                               },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: const Color(0xFF667eea),
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                elevation: 2,
-                              ),
-                              child: const Text(
-                                'Sign In',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                              style:
+                                  ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: const Color(0xFF667eea),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    elevation: 4,
+                                    minimumSize: const Size(
+                                      double.infinity,
+                                      54,
+                                    ),
+                                  ).copyWith(
+                                    overlayColor:
+                                        MaterialStateProperty.resolveWith<
+                                          Color?
+                                        >((states) {
+                                          if (states.contains(
+                                            MaterialState.pressed,
+                                          )) {
+                                            return const Color(
+                                              0xFF667eea,
+                                            ).withOpacity(0.1);
+                                          }
+                                          return null;
+                                        }),
+                                  ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Text(
+                                    'Sign In',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Icon(Icons.login, size: 20),
+                                ],
                               ),
                             ),
                           ),
-
 
                           const SizedBox(height: 16),
 
@@ -1356,31 +1634,40 @@ void _changePass()async{
                               ),
                               GestureDetector(
                                 onTap: () {
-                                      Navigator.push(context, MaterialPageRoute(builder: (_)=>SignUpPage()));
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => SignUpPage(),
+                                    ),
+                                  );
                                 },
-                                child: Text(
-                                  'Sign Up',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    decoration: TextDecoration.underline,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: Colors.white,
+                                        width: 1,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Sign Up',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                          GestureDetector(
-                            onTap: (){
-                              _resend();
 
-                            },
-                            child:  Text("Resend verification email!",
-                                style:TextStyle(
-                                  color:Colors.white
-                                )),
-                          ),
-
+                          const SizedBox(height: 8),
                         ],
                       ),
                     ),
@@ -1394,21 +1681,28 @@ void _changePass()async{
     );
   }
 }
+
 class MentorHomePage extends StatefulWidget {
   const MentorHomePage({super.key});
 
   @override
   State<MentorHomePage> createState() => _MentorHomePageState();
 }
+
 class _MentorHomePageState extends State<MentorHomePage> {
   int _currentIndex = 0;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  DateTime today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+  DateTime today = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+    DateTime.now().day,
+  );
   late Timestamp todayTimestamp = Timestamp.fromDate(today);
   TextEditingController _announcementTitleController = TextEditingController();
-  TextEditingController _announcementDescriptionController = TextEditingController();
+  TextEditingController _announcementDescriptionController =
+      TextEditingController();
   DateTime _announcementSelectedDate = DateTime.now();
   TimeOfDay _announcementSelectedTime = TimeOfDay.now();
 
@@ -1417,15 +1711,20 @@ class _MentorHomePageState extends State<MentorHomePage> {
   DateTime _meetingSelectedDate = DateTime.now();
   TimeOfDay _meetingSelectedTime = TimeOfDay.now();
 
-  CollectionReference get announcementsRef => _firestore.collection('announcements');
+  CollectionReference get announcementsRef =>
+      _firestore.collection('announcements');
   CollectionReference get meetingsRef => _firestore.collection('meetings');
   CollectionReference get quizzesRef => _firestore.collection('quizzes');
 
   String get currentUserId => _auth.currentUser?.uid ?? '';
-Future <String> getKey(String uid)async {
-  DocumentSnapshot doc= await FirebaseFirestore.instance.collection('users').doc(uid).get();
-  return doc['signkey'];
-}
+  Future<String> getKey(String uid) async {
+    DocumentSnapshot doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    return doc['signkey'];
+  }
+
   Widget showDrawer() {
     return Drawer(
       child: ListView(
@@ -1437,10 +1736,7 @@ Future <String> getKey(String uid)async {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF667eea),
-                  Color(0xFF764ba2),
-                ],
+                colors: [Color(0xFF667eea), Color(0xFF764ba2)],
               ),
             ),
             child: Padding(
@@ -1466,7 +1762,10 @@ Future <String> getKey(String uid)async {
             icon: Icons.person_outline,
             title: "My Profile",
             onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ProfilePage()),
+              );
             },
           ),
           Divider(height: 20, thickness: 1, color: Colors.grey.shade300),
@@ -1475,7 +1774,10 @@ Future <String> getKey(String uid)async {
             icon: Icons.help_outline,
             title: "Help & Support",
             onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_)=>MentorHelpSupportPage()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => MentorHelpSupportPage()),
+              );
             },
           ),
 
@@ -1500,10 +1802,7 @@ Future <String> getKey(String uid)async {
             padding: const EdgeInsets.all(16.0),
             child: Text(
               "Version 1.0.0",
-              style: TextStyle(
-                color: Colors.grey.shade500,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
               textAlign: TextAlign.center,
             ),
           ),
@@ -1511,21 +1810,21 @@ Future <String> getKey(String uid)async {
       ),
     );
   }
+
   void _showAddContentDialog() {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF667eea),
-                  Color(0xFF764ba2),
-                ],
+                colors: [Color(0xFF667eea), Color(0xFF764ba2)],
               ),
               borderRadius: BorderRadius.circular(16),
             ),
@@ -1549,7 +1848,10 @@ Future <String> getKey(String uid)async {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       ListTile(
-                        leading: Icon(Icons.announcement, color: Color(0xFF667eea)),
+                        leading: Icon(
+                          Icons.announcement,
+                          color: Color(0xFF667eea),
+                        ),
                         title: Text('Add Announcement'),
                         onTap: () {
                           Navigator.pop(context);
@@ -1567,7 +1869,10 @@ Future <String> getKey(String uid)async {
                       ),
                       Divider(height: 1),
                       ListTile(
-                        leading: Icon(Icons.calendar_today, color: Color(0xFF667eea)),
+                        leading: Icon(
+                          Icons.calendar_today,
+                          color: Color(0xFF667eea),
+                        ),
                         title: Text('Schedule Meeting'),
                         onTap: () {
                           Navigator.pop(context);
@@ -1584,6 +1889,7 @@ Future <String> getKey(String uid)async {
       },
     );
   }
+
   void _showScheduleMeetingDialog() {
     _meetingTitleController.clear();
     _meetingVenueController.clear();
@@ -1597,16 +1903,15 @@ Future <String> getKey(String uid)async {
           builder: (context, setState) {
             return Dialog(
               insetPadding: EdgeInsets.all(16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF667eea),
-                      Color(0xFF764ba2),
-                    ],
+                    colors: [Color(0xFF667eea), Color(0xFF764ba2)],
                   ),
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -1671,32 +1976,46 @@ Future <String> getKey(String uid)async {
                               child: Column(
                                 children: [
                                   ListTile(
-                                    leading: Icon(Icons.calendar_today, color: Color(0xFF667eea)),
+                                    leading: Icon(
+                                      Icons.calendar_today,
+                                      color: Color(0xFF667eea),
+                                    ),
                                     title: Text(
-                                        '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year}'
+                                      '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year}',
                                     ),
                                     onTap: () async {
-                                      final DateTime? picked = await showDatePicker(
-                                        context: context,
-                                        initialDate: _meetingSelectedDate,
-                                        firstDate: DateTime.now(),
-                                        lastDate: DateTime(2100),
-                                      );
+                                      final DateTime? picked =
+                                          await showDatePicker(
+                                            context: context,
+                                            initialDate: _meetingSelectedDate,
+                                            firstDate: DateTime.now(),
+                                            lastDate: DateTime(2100),
+                                          );
                                       if (picked != null) {
-                                        setState(() => _meetingSelectedDate = picked);
+                                        setState(
+                                          () => _meetingSelectedDate = picked,
+                                        );
                                       }
                                     },
                                   ),
                                   ListTile(
-                                    leading: Icon(Icons.access_time, color: Color(0xFF667eea)),
-                                    title: Text(_meetingSelectedTime.format(context)),
+                                    leading: Icon(
+                                      Icons.access_time,
+                                      color: Color(0xFF667eea),
+                                    ),
+                                    title: Text(
+                                      _meetingSelectedTime.format(context),
+                                    ),
                                     onTap: () async {
-                                      final TimeOfDay? picked = await showTimePicker(
-                                        context: context,
-                                        initialTime: _meetingSelectedTime,
-                                      );
+                                      final TimeOfDay? picked =
+                                          await showTimePicker(
+                                            context: context,
+                                            initialTime: _meetingSelectedTime,
+                                          );
                                       if (picked != null) {
-                                        setState(() => _meetingSelectedTime = picked);
+                                        setState(
+                                          () => _meetingSelectedTime = picked,
+                                        );
                                       }
                                     },
                                   ),
@@ -1710,15 +2029,21 @@ Future <String> getKey(String uid)async {
                                   child: TextButton(
                                     onPressed: () => Navigator.pop(context),
                                     style: TextButton.styleFrom(
-                                      padding: EdgeInsets.symmetric(vertical: 12),
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(8),
-                                        side: BorderSide(color: Color(0xFF667eea)),
+                                        side: BorderSide(
+                                          color: Color(0xFF667eea),
+                                        ),
                                       ),
                                     ),
                                     child: Text(
                                       'Cancel',
-                                      style: TextStyle(color: Color(0xFF667eea)),
+                                      style: TextStyle(
+                                        color: Color(0xFF667eea),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1726,11 +2051,19 @@ Future <String> getKey(String uid)async {
                                 Expanded(
                                   child: ElevatedButton(
                                     onPressed: () async {
-                                      if (_meetingTitleController.text.isEmpty ||
-                                          _meetingVenueController.text.isEmpty) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                      if (_meetingTitleController
+                                              .text
+                                              .isEmpty ||
+                                          _meetingVenueController
+                                              .text
+                                              .isEmpty) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
                                           SnackBar(
-                                            content: Text('Please fill all fields'),
+                                            content: Text(
+                                              'Please fill all fields',
+                                            ),
                                             backgroundColor: Colors.red,
                                           ),
                                         );
@@ -1738,8 +2071,9 @@ Future <String> getKey(String uid)async {
                                       }
 
                                       try {
-
-                                        final signkey = await getKey(currentUserId);
+                                        final signkey = await getKey(
+                                          currentUserId,
+                                        );
                                         final meetingDateTime = DateTime(
                                           _meetingSelectedDate.year,
                                           _meetingSelectedDate.month,
@@ -1747,23 +2081,41 @@ Future <String> getKey(String uid)async {
                                           _meetingSelectedTime.hour,
                                           _meetingSelectedTime.minute,
                                         );
-                                        final displayDate = '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year} • ${_meetingSelectedTime.format(context)}';
-                                        final menteesSnapshot = await FirebaseFirestore.instance
-                                            .collection('users')
-                                            .where('role', isEqualTo: 'mentee')
-                                            .where('mentor_id', isEqualTo: currentUserId)
-                                            .get();
+                                        final displayDate =
+                                            '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year} • ${_meetingSelectedTime.format(context)}';
+                                        final menteesSnapshot =
+                                            await FirebaseFirestore.instance
+                                                .collection('users')
+                                                .where(
+                                                  'role',
+                                                  isEqualTo: 'mentee',
+                                                )
+                                                .where(
+                                                  'mentor_id',
+                                                  isEqualTo: currentUserId,
+                                                )
+                                                .get();
 
-                                        int totalMentees = menteesSnapshot.docs.length;
+                                        int totalMentees =
+                                            menteesSnapshot.docs.length;
                                         await meetingsRef.add({
                                           'title': _meetingTitleController.text,
                                           'venue': _meetingVenueController.text,
-                                          'date': '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year}',
-                                          'time': _meetingSelectedTime.format(context),
-                                          'dateTime': Timestamp.fromDate(meetingDateTime),
-                                          'isoDateTime': meetingDateTime.toIso8601String(),
-                                          'createdAt': FieldValue.serverTimestamp(),
-                                          'expiresAt': Timestamp.fromDate(meetingDateTime),
+                                          'date':
+                                              '${_meetingSelectedDate.day}/${_meetingSelectedDate.month}/${_meetingSelectedDate.year}',
+                                          'time': _meetingSelectedTime.format(
+                                            context,
+                                          ),
+                                          'dateTime': Timestamp.fromDate(
+                                            meetingDateTime,
+                                          ),
+                                          'isoDateTime': meetingDateTime
+                                              .toIso8601String(),
+                                          'createdAt':
+                                              FieldValue.serverTimestamp(),
+                                          'expiresAt': Timestamp.fromDate(
+                                            meetingDateTime,
+                                          ),
                                           'createdBy': currentUserId,
                                           'signkey': signkey,
                                           'mentorId': currentUserId,
@@ -1777,28 +2129,42 @@ Future <String> getKey(String uid)async {
                                           'date': displayDate,
                                           'type': 'meeting',
                                           'venue': _meetingVenueController.text,
-                                          'createdAt': FieldValue.serverTimestamp(),
-                                          'expiresAt': Timestamp.fromDate(meetingDateTime),
+                                          'createdAt':
+                                              FieldValue.serverTimestamp(),
+                                          'expiresAt': Timestamp.fromDate(
+                                            meetingDateTime,
+                                          ),
                                           'createdBy': currentUserId,
                                           'signkey': signkey,
-                                          'isoDate': meetingDateTime.toIso8601String(),
+                                          'isoDate': meetingDateTime
+                                              .toIso8601String(),
                                         });
 
                                         final event = {
                                           'title': _meetingTitleController.text,
-                                          'description': "Meeting: ${_meetingVenueController.text}",
+                                          'description':
+                                              "Meeting: ${_meetingVenueController.text}",
                                           'signkey': signkey,
                                           'dateTime': displayDate,
-                                          'timestamp': Timestamp.fromDate(meetingDateTime),
-                                          'isoDate': meetingDateTime.toIso8601String(),
-                                          'uid': FirebaseAuth.instance.currentUser!.uid,
+                                          'timestamp': Timestamp.fromDate(
+                                            meetingDateTime,
+                                          ),
+                                          'isoDate': meetingDateTime
+                                              .toIso8601String(),
+                                          'uid': FirebaseAuth
+                                              .instance
+                                              .currentUser!
+                                              .uid,
                                           'type': 'meeting',
                                           'reminderType': 'immediate',
                                           'expiresAt': Timestamp.fromDate(
-                                            meetingDateTime.add(const Duration(hours: 1)),
+                                            meetingDateTime.add(
+                                              const Duration(hours: 1),
+                                            ),
                                           ),
                                           'venue': _meetingVenueController.text,
-                                          'createdAt': FieldValue.serverTimestamp(),
+                                          'createdAt':
+                                              FieldValue.serverTimestamp(),
                                         };
 
                                         await FirebaseFirestore.instance
@@ -1806,17 +2172,24 @@ Future <String> getKey(String uid)async {
                                             .add(event);
 
                                         Navigator.pop(context);
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
                                           SnackBar(
-                                            content: Text('Meeting scheduled! Notification sent to all mentees.'),
+                                            content: Text(
+                                              'Meeting scheduled! Notification sent to all mentees.',
+                                            ),
                                             backgroundColor: Colors.green,
                                           ),
                                         );
-
                                       } catch (e) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
                                           SnackBar(
-                                            content: Text('Error scheduling meeting: $e'),
+                                            content: Text(
+                                              'Error scheduling meeting: $e',
+                                            ),
                                             backgroundColor: Colors.red,
                                           ),
                                         );
@@ -1824,7 +2197,9 @@ Future <String> getKey(String uid)async {
                                     },
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Color(0xFF667eea),
-                                      padding: EdgeInsets.symmetric(vertical: 12),
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(8),
                                       ),
@@ -1853,16 +2228,15 @@ Future <String> getKey(String uid)async {
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF667eea),
-                  Color(0xFF764ba2),
-                ],
+                colors: [Color(0xFF667eea), Color(0xFF764ba2)],
               ),
               borderRadius: BorderRadius.circular(16),
             ),
@@ -1915,10 +2289,14 @@ Future <String> getKey(String uid)async {
                             child: ElevatedButton(
                               onPressed: () async {
                                 try {
-                                  final meetingSnapshot = await FirebaseFirestore.instance
-                                      .collection('meetings')
-                                      .where('mentorId', isEqualTo: currentUserId)
-                                      .get();
+                                  final meetingSnapshot =
+                                      await FirebaseFirestore.instance
+                                          .collection('meetings')
+                                          .where(
+                                            'mentorId',
+                                            isEqualTo: currentUserId,
+                                          )
+                                          .get();
 
                                   if (meetingSnapshot.docs.isEmpty) {
                                     ScaffoldMessenger.of(context).showSnackBar(
@@ -1930,50 +2308,74 @@ Future <String> getKey(String uid)async {
                                     return;
                                   }
 
-                                  final docs = List<QueryDocumentSnapshot>.from(meetingSnapshot.docs);
+                                  final docs = List<QueryDocumentSnapshot>.from(
+                                    meetingSnapshot.docs,
+                                  );
                                   docs.sort((a, b) {
-                                    final aData = a.data() as Map<String, dynamic>;
-                                    final bData = b.data() as Map<String, dynamic>;
-                                    final aTs = aData['createdAt'] as Timestamp?;
-                                    final bTs = bData['createdAt'] as Timestamp?;
-                                    final aMillis = aTs?.millisecondsSinceEpoch ?? 0;
-                                    final bMillis = bTs?.millisecondsSinceEpoch ?? 0;
+                                    final aData =
+                                        a.data() as Map<String, dynamic>;
+                                    final bData =
+                                        b.data() as Map<String, dynamic>;
+                                    final aTs =
+                                        aData['createdAt'] as Timestamp?;
+                                    final bTs =
+                                        bData['createdAt'] as Timestamp?;
+                                    final aMillis =
+                                        aTs?.millisecondsSinceEpoch ?? 0;
+                                    final bMillis =
+                                        bTs?.millisecondsSinceEpoch ?? 0;
                                     return bMillis.compareTo(aMillis);
                                   });
 
                                   final chosenDoc = docs.first;
-                                  final meetingData = chosenDoc.data() as Map<String, dynamic>;
+                                  final meetingData =
+                                      chosenDoc.data() as Map<String, dynamic>;
                                   final meetingId = chosenDoc.id;
 
                                   final date = meetingData['date'] ?? '';
-                                  final title = meetingData['title'] ?? 'the meeting';
-                                  final isoDate = meetingData['isoDateTime'] ?? DateTime.now().toIso8601String();
+                                  final title =
+                                      meetingData['title'] ?? 'the meeting';
+                                  final isoDate =
+                                      meetingData['isoDateTime'] ??
+                                      DateTime.now().toIso8601String();
 
-                                  final expiresAt = DateTime.now().add(Duration(hours: 24));
+                                  final expiresAt = DateTime.now().add(
+                                    Duration(hours: 24),
+                                  );
                                   final signKey = await getKey(currentUserId);
 
-                                  await FirebaseFirestore.instance.collection('registers').add({
-                                    'question': 'Did you attend "$title" on $date?',
-                                    'options': ['Yes', 'No'],
-                                    'title': title,
-                                    'date': date,
-                                    'isoDate': isoDate,
-                                    'meetingId': meetingId,
-                                    'signkey':signKey,
-                                    'mentorId': currentUserId,
-                                    'createdAt': FieldValue.serverTimestamp(),
-                                    'expiresAt': Timestamp.fromDate(expiresAt),
-                                    'attendedStudents': [],
-                                    'attendancePercentage': 0,
-                                  });
+                                  await FirebaseFirestore.instance
+                                      .collection('registers')
+                                      .add({
+                                        'question':
+                                            'Did you attend "$title" on $date?',
+                                        'options': ['Yes', 'No'],
+                                        'title': title,
+                                        'date': date,
+                                        'isoDate': isoDate,
+                                        'meetingId': meetingId,
+                                        'signkey': signKey,
+                                        'mentorId': currentUserId,
+                                        'createdAt':
+                                            FieldValue.serverTimestamp(),
+                                        'expiresAt': Timestamp.fromDate(
+                                          expiresAt,
+                                        ),
+                                        'attendedStudents': [],
+                                        'attendancePercentage': 0,
+                                      });
                                   final event = {
                                     'title': 'Register for $title',
-                                    'description': 'Attendance register is available. Please mark your attendance within 24 hours.',
+                                    'description':
+                                        'Attendance register is available. Please mark your attendance within 24 hours.',
                                     'signkey': signKey,
                                     'dateTime': date,
-                                    'timestamp': Timestamp.fromDate(DateTime.now()),
+                                    'timestamp': Timestamp.fromDate(
+                                      DateTime.now(),
+                                    ),
                                     'isoDate': DateTime.now().toIso8601String(),
-                                    'uid': FirebaseAuth.instance.currentUser!.uid,
+                                    'uid':
+                                        FirebaseAuth.instance.currentUser!.uid,
                                     'type': 'register',
                                     'reminderType': 'immediate',
                                     'expiresAt': Timestamp.fromDate(expiresAt),
@@ -1987,14 +2389,18 @@ Future <String> getKey(String uid)async {
                                   Navigator.pop(context);
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text('Register generated! Notification sent to all mentees.'),
+                                      content: Text(
+                                        'Register generated! Notification sent to all mentees.',
+                                      ),
                                       backgroundColor: Colors.green,
                                     ),
                                   );
                                 } catch (e) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text('Error generating register: $e'),
+                                      content: Text(
+                                        'Error generating register: $e',
+                                      ),
                                       backgroundColor: Colors.red,
                                     ),
                                   );
@@ -2035,16 +2441,15 @@ Future <String> getKey(String uid)async {
         return StatefulBuilder(
           builder: (context, setState) {
             return Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF667eea),
-                      Color(0xFF764ba2),
-                    ],
+                    colors: [Color(0xFF667eea), Color(0xFF764ba2)],
                   ),
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -2109,18 +2514,24 @@ Future <String> getKey(String uid)async {
                             child: Column(
                               children: [
                                 ListTile(
-                                  leading: Icon(Icons.calendar_today, color: Color(0xFF667eea)),
+                                  leading: Icon(
+                                    Icons.calendar_today,
+                                    color: Color(0xFF667eea),
+                                  ),
                                   title: Text(
                                     '${_announcementSelectedDate.day}/${_announcementSelectedDate.month}/${_announcementSelectedDate.year}',
                                   ),
                                   onTap: () async {
-                                    final DateTime? picked = await showDatePicker(
-                                      context: context,
-                                      initialDate: _announcementSelectedDate,
-                                      firstDate: DateTime.now(),
-                                      lastDate: DateTime(2100),
-                                    );
-                                    if (picked != null && picked != _announcementSelectedDate) {
+                                    final DateTime? picked =
+                                        await showDatePicker(
+                                          context: context,
+                                          initialDate:
+                                              _announcementSelectedDate,
+                                          firstDate: DateTime.now(),
+                                          lastDate: DateTime(2100),
+                                        );
+                                    if (picked != null &&
+                                        picked != _announcementSelectedDate) {
                                       setState(() {
                                         _announcementSelectedDate = picked;
                                       });
@@ -2128,14 +2539,22 @@ Future <String> getKey(String uid)async {
                                   },
                                 ),
                                 ListTile(
-                                  leading: Icon(Icons.access_time, color: Color(0xFF667eea)),
-                                  title: Text('${_announcementSelectedTime.format(context)}'),
+                                  leading: Icon(
+                                    Icons.access_time,
+                                    color: Color(0xFF667eea),
+                                  ),
+                                  title: Text(
+                                    '${_announcementSelectedTime.format(context)}',
+                                  ),
                                   onTap: () async {
-                                    final TimeOfDay? picked = await showTimePicker(
-                                      context: context,
-                                      initialTime: _announcementSelectedTime,
-                                    );
-                                    if (picked != null && picked != _announcementSelectedTime) {
+                                    final TimeOfDay? picked =
+                                        await showTimePicker(
+                                          context: context,
+                                          initialTime:
+                                              _announcementSelectedTime,
+                                        );
+                                    if (picked != null &&
+                                        picked != _announcementSelectedTime) {
                                       setState(() {
                                         _announcementSelectedTime = picked;
                                       });
@@ -2155,7 +2574,9 @@ Future <String> getKey(String uid)async {
                                     padding: EdgeInsets.symmetric(vertical: 12),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(8),
-                                      side: BorderSide(color: Color(0xFF667eea)),
+                                      side: BorderSide(
+                                        color: Color(0xFF667eea),
+                                      ),
                                     ),
                                   ),
                                   child: Text(
@@ -2169,14 +2590,17 @@ Future <String> getKey(String uid)async {
                                 child: ElevatedButton(
                                   onPressed: () async {
                                     final signKey = await getKey(currentUserId);
-                                    if (_announcementTitleController.text.isNotEmpty) {
+                                    if (_announcementTitleController
+                                        .text
+                                        .isNotEmpty) {
                                       try {
-                                        final dt=DateTime(
+                                        final dt = DateTime(
                                           _announcementSelectedDate.year,
                                           _announcementSelectedDate.month,
                                           _announcementSelectedDate.day,
                                           _announcementSelectedTime.hour,
-                                          _announcementSelectedTime.minute);
+                                          _announcementSelectedTime.minute,
+                                        );
                                         final announcementDateTime = DateTime(
                                           _announcementSelectedDate.year,
                                           _announcementSelectedDate.month,
@@ -2184,33 +2608,53 @@ Future <String> getKey(String uid)async {
                                           _announcementSelectedTime.hour,
                                           _announcementSelectedTime.minute,
                                         );
-                                        final displayDate = '${_announcementSelectedDate.day}/${_announcementSelectedDate.month}/${_announcementSelectedDate.year} • ${_announcementSelectedTime.format(context)}';
+                                        final displayDate =
+                                            '${_announcementSelectedDate.day}/${_announcementSelectedDate.month}/${_announcementSelectedDate.year} • ${_announcementSelectedTime.format(context)}';
                                         final newAnnouncement = {
-                                          'title': _announcementTitleController.text,
-                                          'description': _announcementDescriptionController.text,
+                                          'title':
+                                              _announcementTitleController.text,
+                                          'description':
+                                              _announcementDescriptionController
+                                                  .text,
                                           'date': displayDate,
-                                          'isoDate': announcementDateTime.toIso8601String(),
+                                          'isoDate': announcementDateTime
+                                              .toIso8601String(),
                                           'type': 'announcement',
-                                          'createdAt': FieldValue.serverTimestamp(),
+                                          'createdAt':
+                                              FieldValue.serverTimestamp(),
                                           'expiresAt': Timestamp.fromDate(dt),
                                           'signkey': signKey,
                                           'createdBy': currentUserId,
                                         };
-                                        await announcementsRef.add(newAnnouncement);
+                                        await announcementsRef.add(
+                                          newAnnouncement,
+                                        );
                                         final event = {
-                                          'title': _announcementTitleController.text,
-                                          'description': _announcementDescriptionController.text.isNotEmpty
-                                              ? _announcementDescriptionController.text
+                                          'title':
+                                              _announcementTitleController.text,
+                                          'description':
+                                              _announcementDescriptionController
+                                                  .text
+                                                  .isNotEmpty
+                                              ? _announcementDescriptionController
+                                                    .text
                                               : 'New announcement',
                                           'signkey': signKey,
                                           'dateTime': displayDate,
-                                          'timestamp': Timestamp.fromDate(announcementDateTime),
-                                          'isoDate': announcementDateTime.toIso8601String(),
-                                          'uid': FirebaseAuth.instance.currentUser!.uid,
+                                          'timestamp': Timestamp.fromDate(
+                                            announcementDateTime,
+                                          ),
+                                          'isoDate': announcementDateTime
+                                              .toIso8601String(),
+                                          'uid': FirebaseAuth
+                                              .instance
+                                              .currentUser!
+                                              .uid,
                                           'expiresAt': Timestamp.fromDate(dt),
                                           'type': 'announcement',
                                           'reminderType': 'immediate',
-                                          'createdAt': FieldValue.serverTimestamp(),
+                                          'createdAt':
+                                              FieldValue.serverTimestamp(),
                                         };
 
                                         await FirebaseFirestore.instance
@@ -2218,22 +2662,32 @@ Future <String> getKey(String uid)async {
                                             .add(event);
 
                                         Navigator.pop(context);
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
                                           SnackBar(
-                                            content: Text('Announcement created! Notification sent to all mentees.'),
+                                            content: Text(
+                                              'Announcement created! Notification sent to all mentees.',
+                                            ),
                                             backgroundColor: Colors.green,
                                           ),
                                         );
                                       } catch (e) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
                                           SnackBar(
-                                            content: Text('Error creating announcement: $e'),
+                                            content: Text(
+                                              'Error creating announcement: $e',
+                                            ),
                                             backgroundColor: Colors.red,
                                           ),
                                         );
                                       }
                                     } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
                                         SnackBar(
                                           content: Text('Please enter a title'),
                                           backgroundColor: Colors.red,
@@ -2265,6 +2719,7 @@ Future <String> getKey(String uid)async {
       },
     );
   }
+
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -2275,14 +2730,19 @@ Future <String> getKey(String uid)async {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text("Cancel", style: TextStyle(color: Colors.grey.shade600)),
+              child: Text(
+                "Cancel",
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
             ),
             TextButton(
               onPressed: () {
                 _logout();
-                Navigator.push(context, MaterialPageRoute(builder: (_)=>SignInPage()));
-
-      },
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => SignInPage()),
+                );
+              },
               child: Text("Log Out", style: TextStyle(color: Colors.red)),
             ),
           ],
@@ -2290,6 +2750,7 @@ Future <String> getKey(String uid)async {
       },
     );
   }
+
   Widget _buildMenuItem({
     required IconData icon,
     required String title,
@@ -2330,28 +2791,37 @@ Future <String> getKey(String uid)async {
             ],
           ],
         ),
-        trailing: Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20),
+        trailing: Icon(
+          Icons.chevron_right,
+          color: Colors.grey.shade400,
+          size: 20,
+        ),
         onTap: onTap,
         contentPadding: EdgeInsets.symmetric(horizontal: 12),
         visualDensity: VisualDensity.compact,
       ),
     );
   }
-void _logout()async{
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  prefs.clear();
-  await FirebaseAuth.instance.signOut();
-  Navigator.pushReplacement(
-    context,
-    MaterialPageRoute(builder: (_) => const WelcomePage()),
-  );
-}
 
-Future <String>getUsername()async{
-  final uid=FirebaseAuth.instance.currentUser?.uid;
-  DocumentSnapshot doc=await FirebaseFirestore.instance.collection('users').doc(uid).get();
-  return doc['fName']+" " +doc['lName'];
-}
+  void _logout() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    prefs.clear();
+    await FirebaseAuth.instance.signOut();
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const WelcomePage()),
+    );
+  }
+
+  Future<String> getUsername() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    DocumentSnapshot doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    return doc['fName'] + " " + doc['lName'];
+  }
+
   void _showAttendanceReport() {
     showModalBottomSheet(
       context: context,
@@ -2364,10 +2834,7 @@ Future <String>getUsername()async{
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF667eea),
-                Color(0xFF764ba2),
-              ],
+              colors: [Color(0xFF667eea), Color(0xFF764ba2)],
             ),
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(20),
@@ -2424,12 +2891,15 @@ Future <String>getUsername()async{
                       return FutureBuilder<int>(
                         future: _getTotalMenteesCount(),
                         builder: (context, menteeCountSnapshot) {
-                          if (menteeCountSnapshot.connectionState == ConnectionState.waiting) {
+                          if (menteeCountSnapshot.connectionState ==
+                              ConnectionState.waiting) {
                             return Center(child: CircularProgressIndicator());
                           }
 
                           if (menteeCountSnapshot.hasError) {
-                            return Center(child: Text('Error loading mentee count'));
+                            return Center(
+                              child: Text('Error loading mentee count'),
+                            );
                           }
 
                           final totalMentees = menteeCountSnapshot.data ?? 0;
@@ -2439,9 +2909,12 @@ Future <String>getUsername()async{
                             itemCount: meetings.length,
                             itemBuilder: (context, index) {
                               final meeting = meetings[index];
-                              final data = meeting.data() as Map<String, dynamic>;
+                              final data =
+                                  meeting.data() as Map<String, dynamic>;
 
-                              final attendedCount = (data['attendedStudents'] as List?)?.length ?? 0;
+                              final attendedCount =
+                                  (data['attendedStudents'] as List?)?.length ??
+                                  0;
                               final percentage = totalMentees > 0
                                   ? (attendedCount / totalMentees * 100)
                                   : 0.0;
@@ -2450,9 +2923,14 @@ Future <String>getUsername()async{
                                 elevation: 2,
                                 margin: EdgeInsets.only(bottom: 12),
                                 child: ListTile(
-                                  leading: Icon(Icons.groups, color: Color(0xFF667eea)),
+                                  leading: Icon(
+                                    Icons.groups,
+                                    color: Color(0xFF667eea),
+                                  ),
                                   title: Text(data['title'] ?? 'Meeting'),
-                                  subtitle: Text('${data['date']} • ${data['time']}'),
+                                  subtitle: Text(
+                                    '${data['date']} • ${data['time']}',
+                                  ),
                                   trailing: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
@@ -2508,27 +2986,22 @@ Future <String>getUsername()async{
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer:showDrawer(),
+      drawer: showDrawer(),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF667eea),
-              Color(0xFF764ba2),
-            ],
+            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
           ),
         ),
         child: SafeArea(
           child: Column(
             children: [
               AppBar(
-          iconTheme: IconThemeData(
-          color: Colors.white),
+                iconTheme: IconThemeData(color: Colors.white),
                 title: Row(
                   children: [
-
                     SizedBox(width: 2),
                     FutureBuilder<String>(
                       future: getUsername(),
@@ -2551,7 +3024,6 @@ Future <String>getUsername()async{
                         );
                       },
                     ),
-
                   ],
                 ),
                 backgroundColor: Colors.transparent,
@@ -2559,8 +3031,13 @@ Future <String>getUsername()async{
                 actions: [
                   IconButton(
                     icon: Icon(Icons.auto_mode, color: Colors.white),
-                    onPressed: (){
-                      Navigator.push(context, MaterialPageRoute(builder: (_)=>SmartMeetingSchedulerPage()));
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SmartMeetingSchedulerPage(),
+                        ),
+                      );
                     },
                   ),
                   IconButton(
@@ -2568,7 +3045,9 @@ Future <String>getUsername()async{
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => SuggestionsView()),
+                        MaterialPageRoute(
+                          builder: (context) => SuggestionsView(),
+                        ),
                       );
                     },
                   ),
@@ -2576,7 +3055,6 @@ Future <String>getUsername()async{
                     icon: Icon(Icons.add, color: Colors.white),
                     onPressed: _showAddContentDialog,
                   ),
-
                 ],
               ),
               Expanded(
@@ -2600,10 +3078,7 @@ Future <String>getUsername()async{
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF667eea),
-              Color(0xFF764ba2),
-            ],
+            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
           ),
         ),
         child: BottomNavigationBar(
@@ -2618,14 +3093,8 @@ Future <String>getUsername()async{
           unselectedItemColor: Colors.white.withOpacity(0.7),
           type: BottomNavigationBarType.fixed,
           items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home),
-              label: 'Home',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.people),
-              label: 'Mentees',
-            ),
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+            BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Mentees'),
             BottomNavigationBarItem(
               icon: Icon(Icons.calendar_today),
               label: 'Schedule',
@@ -2633,7 +3102,7 @@ Future <String>getUsername()async{
             BottomNavigationBarItem(
               icon: Icon(Icons.smart_toy),
               label: 'Topic Aid',
-            )
+            ),
           ],
         ),
       ),
@@ -2724,7 +3193,8 @@ Future <String>getUsername()async{
                 );
               }
               final data = meetingData['meetingData'];
-              final attendedCount = (data['attendedStudents'] as List?)?.length ?? 0;
+              final attendedCount =
+                  (data['attendedStudents'] as List?)?.length ?? 0;
               final totalMentees = meetingData['totalMentees'] ?? 0;
               final percentage = totalMentees > 0
                   ? (attendedCount / totalMentees * 100)
@@ -2910,8 +3380,12 @@ Future <String>getUsername()async{
                     }
 
                     filteredItems.sort((a, b) {
-                      final aExpiresAt = (a.data() as Map<String, dynamic>)['expiresAt'] as Timestamp;
-                      final bExpiresAt = (b.data() as Map<String, dynamic>)['expiresAt'] as Timestamp;
+                      final aExpiresAt =
+                          (a.data() as Map<String, dynamic>)['expiresAt']
+                              as Timestamp;
+                      final bExpiresAt =
+                          (b.data() as Map<String, dynamic>)['expiresAt']
+                              as Timestamp;
                       return aExpiresAt.compareTo(bExpiresAt);
                     });
 
@@ -2957,15 +3431,20 @@ Future <String>getUsername()async{
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Icon(
-                                    isMeeting ? Icons.groups : Icons.announcement,
-                                    color: isMeeting ? Color(0xFF667eea) : Color(0xFF48bb78),
+                                    isMeeting
+                                        ? Icons.groups
+                                        : Icons.announcement,
+                                    color: isMeeting
+                                        ? Color(0xFF667eea)
+                                        : Color(0xFF48bb78),
                                     size: 20,
                                   ),
                                 ),
                                 SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         item['title'],
@@ -2987,7 +3466,9 @@ Future <String>getUsername()async{
                                         timeRemaining,
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: isMeeting ? Color(0xFF667eea) : Color(0xFF48bb78),
+                                          color: isMeeting
+                                              ? Color(0xFF667eea)
+                                              : Color(0xFF48bb78),
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -3002,7 +3483,8 @@ Future <String>getUsername()async{
                                         ),
                                       ],
                                       // Show time for meetings
-                                      if (isMeeting && item['time'] != null) ...[
+                                      if (isMeeting &&
+                                          item['time'] != null) ...[
                                         SizedBox(height: 2),
                                         Text(
                                           'Time: ${item['time']}',
@@ -3030,6 +3512,7 @@ Future <String>getUsername()async{
       ),
     );
   }
+
   Future<Map<String, dynamic>> _getLatestMeetingWithAttendance() async {
     try {
       final meetingsSnapshot = await meetingsRef
@@ -3062,20 +3545,20 @@ Future <String>getUsername()async{
         'meetingData': data,
         'totalMentees': totalMentees,
       };
-
     } catch (e) {
       print(e);
       return {'hasMeetings': false};
-
     }
   }
 }
+
 class SuggestionsPage extends StatefulWidget {
   const SuggestionsPage({super.key});
 
   @override
   State<SuggestionsPage> createState() => _SuggestionsPageState();
 }
+
 class _SuggestionsPageState extends State<SuggestionsPage> {
   final List<String> campusResources = [
     "SRC (Student Representative Council)",
@@ -3142,7 +3625,7 @@ class _SuggestionsPageState extends State<SuggestionsPage> {
 
     "Campus Protection Services",
     "Student Support Desk",
-    "IT Helpdesk & eLearning Support"
+    "IT Helpdesk & eLearning Support",
   ];
   final List<String> suggestions = [];
   bool _isLoading = false;
@@ -3151,7 +3634,6 @@ class _SuggestionsPageState extends State<SuggestionsPage> {
   List<dynamic> _aiSuggestions = [];
   final ScrollController _scrollController = ScrollController();
   bool _isInitialized = false;
-
 
   String buildGeminiPrompt() {
     return """
@@ -3212,7 +3694,9 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
 
   Future<void> loadSuggestions() async {
     try {
-      QuerySnapshot querySnapshot = await FirebaseFirestore.instance.collection('suggestions').get();
+      QuerySnapshot querySnapshot = await FirebaseFirestore.instance
+          .collection('suggestions')
+          .get();
       suggestions.clear();
       for (var doc in querySnapshot.docs) {
         if (doc['suggestion'] != null) {
@@ -3220,10 +3704,9 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
         }
       }
     } catch (e) {
-     print("Error loading suggestions: $e");
+      print("Error loading suggestions: $e");
     }
   }
-
 
   @override
   void initState() {
@@ -3232,18 +3715,30 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
   }
 
   Future<void> _initialize() async {
-
     await loadSuggestions();
     setState(() {
       _isInitialized = true;
     });
   }
+
   Future<void> _generateAISuggestions() async {
     if (_mentorPromptController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Please describe the mentee\'s situation first'),
+          content: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('Please describe the mentee\'s situation first'),
+              ),
+            ],
+          ),
           backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
       return;
@@ -3256,8 +3751,9 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
 
     try {
       final String prompt = buildGeminiPrompt();
-      final HttpsCallable callable = FirebaseFunctions.instance
-          .httpsCallable('generateTopicSuggestions');
+      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable(
+        'generateTopicSuggestions',
+      );
 
       final result = await callable.call({
         'prompt': prompt,
@@ -3268,7 +3764,6 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
 
       if (data['success'] == true) {
         List<dynamic> suggestions = data['suggestions'] ?? [];
-
 
         setState(() {
           _aiSuggestions = suggestions;
@@ -3308,8 +3803,18 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(errorMessage),
+          content: Row(
+            children: [
+              Icon(Icons.error, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Expanded(child: Text(errorMessage)),
+            ],
+          ),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           duration: Duration(seconds: 5),
         ),
       );
@@ -3324,18 +3829,19 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
   Map<String, dynamic> _createDefaultTopic(int number) {
     return {
       "topic": "Academic Success Strategy $number",
-      "description": "This comprehensive topic helps students develop effective strategies for academic achievement in university. We explore various study techniques, time management approaches, and resource utilization methods that can significantly improve academic performance. Students will learn how to create personalized study plans, manage their coursework effectively, and leverage campus resources to enhance their learning experience. The discussion focuses on practical, actionable strategies that can be implemented immediately to improve grades and reduce academic stress.",
+      "description":
+          "This comprehensive topic helps students develop effective strategies for academic achievement in university. We explore various study techniques, time management approaches, and resource utilization methods that can significantly improve academic performance. Students will learn how to create personalized study plans, manage their coursework effectively, and leverage campus resources to enhance their learning experience. The discussion focuses on practical, actionable strategies that can be implemented immediately to improve grades and reduce academic stress.",
       "keyDiscussionPoints": [
         "Effective study habits and learning techniques",
         "Time management and prioritization strategies",
         "Utilizing academic support services effectively",
         "Balancing academic workload with personal life",
-        "Exam preparation and stress management techniques"
+        "Exam preparation and stress management techniques",
       ],
       "iceBreakers": [
         "What study methods have worked best for you so far?",
         "How do you currently organize your study schedule?",
-        "What academic achievement are you most proud of?"
+        "What academic achievement are you most proud of?",
       ],
       "questionsForMentees": [
         "What specific academic goals do you have for this semester?",
@@ -3343,22 +3849,24 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
         "What times of day are you most productive for studying?",
         "How do you handle difficult or challenging course material?",
         "What academic support resources have you used before?",
-        "How do you balance your academic work with other responsibilities?"
+        "How do you balance your academic work with other responsibilities?",
       ],
       "takeawaysForMentees": [
         "A personalized study plan for current courses",
         "Practical time management strategies for academic success",
         "Knowledge of available campus academic support resources",
-        "Tools for tracking and improving academic performance"
+        "Tools for tracking and improving academic performance",
       ],
       "campusResources": [
         "Centre for Student Development (CSD)",
-        "CCDU (Counselling and Careers Development Unit)"
+        "CCDU (Counselling and Careers Development Unit)",
       ],
-      "externalResources": ["Khan Academy for supplementary learning", "Pomodoro Technique timer apps"]
+      "externalResources": [
+        "Khan Academy for supplementary learning",
+        "Pomodoro Technique timer apps",
+      ],
     };
   }
-
 
   void _retryWithNewContext() {
     setState(() {
@@ -3375,19 +3883,26 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF667eea),
-              Color(0xFF764ba2),
-            ],
+            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
           ),
         ),
         child: SafeArea(
           child: Column(
             children: [
               _buildHeader(),
-              if (!_showResults) _buildInputSection(),
               Expanded(
-                child: _buildContentSection(),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(30),
+                      topRight: Radius.circular(30),
+                    ),
+                  ),
+                  child: _showResults || _isLoading
+                      ? _buildResultsContent()
+                      : _buildInputSection(),
+                ),
               ),
             ],
           ),
@@ -3398,127 +3913,80 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
 
   Widget _buildHeader() {
     return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Topic Suggestions',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Topic Suggestions',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 1.2,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black26,
+                            offset: Offset(2, 2),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                    SizedBox(height: 4),
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _showResults
+                            ? '${_aiSuggestions.length} complete topic ideas'
+                            : 'Generate topic ideas',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withOpacity(0.95),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                if (_showResults && !_isLoading)
-                  IconButton(
+              ),
+              if (_showResults && !_isLoading)
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: IconButton(
                     onPressed: _retryWithNewContext,
                     icon: Icon(Icons.refresh, color: Colors.white),
                     tooltip: 'New Search',
                   ),
-              ],
-            ),
-            SizedBox(height: 4),
-            Text(
-              _showResults
-                  ? '${_aiSuggestions.length} complete topic ideas for your mentorship sessions'
-                  : 'Generate topic ideas for your mentees',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.white.withOpacity(0.8),
-              ),
-            ),
-          ],
-        )
-        );
-    }
-
-  Widget _buildInputSection() {
-    return Container(
-      margin: EdgeInsets.all(16),
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Icon(Icons.description, color: Color(0xFF667eea), size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Mentee Context & Situation',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[800],
                 ),
-              ),
             ],
           ),
-          SizedBox(height: 12),
-          TextField(
-            controller: _mentorPromptController,
-            maxLines: 3,
-            decoration: InputDecoration(
-              hintText: 'Describe your mentee\'s current challenges ,interests and goals ...',
-              hintStyle: TextStyle(
-              fontSize: 12,
-              color:Colors.grey),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.grey[300]!),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Color(0xFF667eea)),
-              ),
-              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              helperText: 'What specific areas would benefit your mentee right now?',
-              helperStyle: TextStyle(
-                color: Colors.grey[500],
-                fontSize: 11,
-              ),
-            ),
-          ),
-          SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _isLoading ? null : _generateAISuggestions,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Color(0xFF667eea),
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 2,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.auto_awesome, size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    'Generate Topic Ideas',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
+          SizedBox(height: 8),
+          Text(
+            _showResults
+                ? 'Personalized topics based on your mentee\'s needs'
+                : 'Enter your mentee\'s situation to get tailored topic ideas',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.white.withOpacity(0.8),
+              height: 1.4,
             ),
           ),
         ],
@@ -3526,171 +3994,266 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
     );
   }
 
-  Widget _buildContentSection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
-      ),
+  Widget _buildInputSection() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(16),
       child: Column(
         children: [
-          if (_showResults || _isLoading)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-              child: Row(
-                children: [
-                  Icon(Icons.lightbulb_outline, color: Color(0xFF667eea), size: 24),
-                  SizedBox(width: 8),
-                  Text(
-                    _isLoading ? 'Creating Topic Ideas...' : 'Your Topic Ideas',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  Spacer(),
-                  if (_showResults && !_isLoading)
-                    Text(
-                      '${_aiSuggestions.length} topics',
-                      style: TextStyle(
-                        color: Colors.grey[500],
+          Container(
+            padding: EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 20,
+                  offset: Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.description,
+                        color: Colors.white,
+                        size: 18,
                       ),
                     ),
-                ],
-              ),
+                    SizedBox(width: 12),
+                    Text(
+                      'Mentee Context',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 16),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[200]!),
+                  ),
+                  child: TextField(
+                    controller: _mentorPromptController,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      hintText:
+                          'Describe your mentee\'s current challenges, interests, and goals...',
+                      hintStyle: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[400],
+                      ),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.all(16),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 14, color: Colors.grey[400]),
+                    SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'What specific areas would benefit your mentee right now?',
+                        style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _generateAISuggestions,
+                    style:
+                        ElevatedButton.styleFrom(
+                          backgroundColor: Color(0xFF667eea),
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 4,
+                          minimumSize: Size(double.infinity, 56),
+                        ).copyWith(
+                          overlayColor:
+                              MaterialStateProperty.resolveWith<Color?>((
+                                states,
+                              ) {
+                                if (states.contains(MaterialState.pressed)) {
+                                  return Colors.white.withOpacity(0.2);
+                                }
+                                return null;
+                              }),
+                        ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.auto_awesome, size: 22),
+                        SizedBox(width: 8),
+                        Text(
+                          'Generate Topic Ideas',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          Expanded(
-            child: _buildContent(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildResultsContent() {
     if (_isLoading) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF667eea)),
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0xFF667eea).withOpacity(0.2),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  ),
+                ],
+              ),
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF667eea)),
+                strokeWidth: 3,
+              ),
             ),
-            SizedBox(height: 16),
+            SizedBox(height: 24),
             Text(
               'Creating topic ideas...',
               style: TextStyle(
                 fontSize: 16,
+                fontWeight: FontWeight.w500,
                 color: Colors.grey[600],
               ),
             ),
+            SizedBox(height: 8),
+            Text(
+              'This may take a few seconds',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+            ),
           ],
-        ),
-      );
-    }
-
-    if (!_showResults) {
-      return SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.auto_awesome, size: 80, color: Colors.grey[300]),
-              SizedBox(height: 20),
-              Text(
-                'Ready to Generate Topic Ideas',
-                style: TextStyle(
-                  fontSize: 20,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text(
-                  'Describe your mentee\'s situation to get complete topic ideas with discussion points, questions, and resources',
-                  style: TextStyle(
-                    color: Colors.grey[500],
-                    fontSize: 14,
-                    height: 1.4,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ],
-          ),
         ),
       );
     }
 
     return SingleChildScrollView(
       controller: _scrollController,
-      physics: AlwaysScrollableScrollPhysics(),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Column(
-          children: [
-            Container(
-              width: double.infinity,
-              margin: EdgeInsets.only(bottom: 16),
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Color(0xFF667eea).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Color(0xFF667eea).withOpacity(0.2)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, size: 16, color: Color(0xFF667eea)),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Based on: ${_mentorPromptController.text}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
+      padding: EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            margin: EdgeInsets.only(bottom: 16),
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 10,
+                  offset: Offset(0, 2),
+                ),
+              ],
             ),
-            ..._aiSuggestions.asMap().entries.map((entry) {
-              final index = entry.key;
-              final suggestion = entry.value;
-              return _buildTopicCard(suggestion, index);
-            }).toList(),
-
-            SizedBox(height: 20),
-            if (_showResults)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: OutlinedButton.icon(
-                  onPressed: _retryWithNewContext,
-                  icon: Icon(Icons.refresh, size: 18),
-                  label: Text('Generate New Topics'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Color(0xFF667eea),
-                    side: BorderSide(color: Color(0xFF667eea)),
-                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+            child: Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Color(0xFF667eea).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: Color(0xFF667eea),
                   ),
                 ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Based on your input',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        _mentorPromptController.text,
+                        style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ..._aiSuggestions.asMap().entries.map((entry) {
+            final index = entry.key;
+            final suggestion = entry.value;
+            return _buildTopicCard(suggestion, index);
+          }).toList(),
+          SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: OutlinedButton.icon(
+              onPressed: _retryWithNewContext,
+              icon: Icon(Icons.refresh, size: 18),
+              label: Text('Generate New Topics'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Color(0xFF667eea),
+                side: BorderSide(color: Color(0xFF667eea), width: 1.5),
+                padding: EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
-
-            SizedBox(height: 20),
-          ],
-        ),
+            ),
+          ),
+          SizedBox(height: 20),
+        ],
       ),
     );
   }
@@ -3698,24 +4261,45 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
   Widget _buildTopicCard(Map<String, dynamic> suggestion, int index) {
     Map<String, dynamic> safeSuggestion = Map<String, dynamic>.from(suggestion);
     safeSuggestion['topic'] ??= 'Topic ${index + 1}';
-    safeSuggestion['description'] ??= 'A comprehensive discussion topic for mentorship sessions that helps students navigate university challenges and develop essential skills for academic and personal success.';
-    safeSuggestion['keyDiscussionPoints'] ??= ['Discussion area 1', 'Discussion area 2', 'Discussion area 3'];
-    safeSuggestion['iceBreakers'] ??= ['Ice breaker 1', 'Ice breaker 2', 'Ice breaker 3'];
-    safeSuggestion['questionsForMentees'] ??= ['Question 1', 'Question 2', 'Question 3', 'Question 4'];
-    safeSuggestion['takeawaysForMentees'] ??= ['Takeaway 1', 'Takeaway 2', 'Takeaway 3'];
-    safeSuggestion['campusResources'] ??= ['Campus resource 1', 'Campus resource 2'];
+    safeSuggestion['description'] ??=
+        'A comprehensive discussion topic for mentorship sessions that helps students navigate university challenges and develop essential skills for academic and personal success.';
+    safeSuggestion['keyDiscussionPoints'] ??= [
+      'Discussion area 1',
+      'Discussion area 2',
+      'Discussion area 3',
+    ];
+    safeSuggestion['iceBreakers'] ??= [
+      'Ice breaker 1',
+      'Ice breaker 2',
+      'Ice breaker 3',
+    ];
+    safeSuggestion['questionsForMentees'] ??= [
+      'Question 1',
+      'Question 2',
+      'Question 3',
+      'Question 4',
+    ];
+    safeSuggestion['takeawaysForMentees'] ??= [
+      'Takeaway 1',
+      'Takeaway 2',
+      'Takeaway 3',
+    ];
+    safeSuggestion['campusResources'] ??= [
+      'Campus resource 1',
+      'Campus resource 2',
+    ];
     safeSuggestion['externalResources'] ??= ['External resource'];
 
     return Container(
       margin: EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.08),
-            blurRadius: 10,
-            offset: Offset(0, 4),
+            blurRadius: 15,
+            offset: Offset(0, 5),
           ),
         ],
       ),
@@ -3729,35 +4313,60 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
               gradient: LinearGradient(
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
-                colors: [
-                  Color(0xFF667eea),
-                  Color(0xFF764ba2),
-                ],
+                colors: [Color(0xFF667eea), Color(0xFF764ba2)],
               ),
               borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
               ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'TOPIC ${index + 1}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withOpacity(0.9),
-                    letterSpacing: 1,
-                  ),
+                Row(
+                  children: [
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'TOPIC ${index + 1}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                    Spacer(),
+                    Container(
+                      padding: EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.lightbulb,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(height: 8),
+                SizedBox(height: 12),
                 Text(
                   safeSuggestion['topic']!,
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
+                    height: 1.3,
                   ),
                 ),
               ],
@@ -3769,19 +4378,40 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Description
                 Container(
                   padding: EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Color(0xFF667eea).withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Color(0xFF667eea).withOpacity(0.2)),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFF667eea).withOpacity(0.05),
+                        Color(0xFF764ba2).withOpacity(0.05),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Color(0xFF667eea).withOpacity(0.2),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.description, size: 18, color: Color(0xFF667eea)),
+                          Container(
+                            padding: EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Color(0xFF667eea).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Icon(
+                              Icons.description,
+                              size: 16,
+                              color: Color(0xFF667eea),
+                            ),
+                          ),
                           SizedBox(width: 8),
                           Text(
                             'Topic Overview',
@@ -3793,7 +4423,7 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
                           ),
                         ],
                       ),
-                      SizedBox(height: 8),
+                      SizedBox(height: 12),
                       Text(
                         safeSuggestion['description']!,
                         style: TextStyle(
@@ -3807,9 +4437,13 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
                 ),
 
                 SizedBox(height: 16),
-                _buildSection(
+
+                // Key Discussion Points
+                _buildEnhancedSection(
                   title: 'Key Discussion Points',
-                  items: List<String>.from(safeSuggestion['keyDiscussionPoints']!),
+                  items: List<String>.from(
+                    safeSuggestion['keyDiscussionPoints']!,
+                  ),
                   icon: Icons.list,
                   color: Color(0xFF764ba2),
                   isNumbered: true,
@@ -3818,7 +4452,7 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
                 SizedBox(height: 16),
 
                 // Ice Breakers
-                _buildSection(
+                _buildEnhancedSection(
                   title: 'Ice Breakers',
                   items: List<String>.from(safeSuggestion['iceBreakers']!),
                   icon: Icons.chat_bubble_outline,
@@ -3832,7 +4466,7 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
                   padding: EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.green.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: Colors.green.withOpacity(0.2)),
                   ),
                   child: Column(
@@ -3840,7 +4474,18 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.question_answer, size: 18, color: Colors.green[700]),
+                          Container(
+                            padding: EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Icon(
+                              Icons.question_answer,
+                              size: 16,
+                              color: Colors.green[700],
+                            ),
+                          ),
                           SizedBox(width: 8),
                           Text(
                             'Questions for Your Mentee',
@@ -3852,43 +4497,51 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
                           ),
                         ],
                       ),
-                      SizedBox(height: 8),
-                      ...List<String>.from(safeSuggestion['questionsForMentees']!).asMap().entries.map((entry) => Padding(
-                        padding: EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 24,
-                              height: 24,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                '${entry.key + 1}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green[700],
-                                ),
+                      SizedBox(height: 12),
+                      ...List<String>.from(
+                            safeSuggestion['questionsForMentees']!,
+                          )
+                          .asMap()
+                          .entries
+                          .map(
+                            (entry) => Padding(
+                              padding: EdgeInsets.only(bottom: 12),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 24,
+                                    height: 24,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      '${entry.key + 1}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green[700],
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      entry.value,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey[700],
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                entry.value,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[700],
-                                  height: 1.4,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      )).toList(),
+                          )
+                          .toList(),
                     ],
                   ),
                 ),
@@ -3900,7 +4553,7 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
                   padding: EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.orange.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: Colors.orange.withOpacity(0.2)),
                   ),
                   child: Column(
@@ -3908,10 +4561,21 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.lightbulb_outline, size: 18, color: Colors.orange[700]),
+                          Container(
+                            padding: EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Icon(
+                              Icons.lightbulb_outline,
+                              size: 16,
+                              color: Colors.orange[700],
+                            ),
+                          ),
                           SizedBox(width: 8),
                           Text(
-                            'Key Takeaways for Mentee',
+                            'Key Takeaways',
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
@@ -3920,27 +4584,37 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
                           ),
                         ],
                       ),
-                      SizedBox(height: 8),
-                      ...List<String>.from(safeSuggestion['takeawaysForMentees']!).map((takeaway) => Padding(
-                        padding: EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Icons.check_circle, size: 16, color: Colors.orange),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                takeaway,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[700],
-                                  height: 1.4,
-                                ),
+                      SizedBox(height: 12),
+                      ...List<String>.from(
+                            safeSuggestion['takeawaysForMentees']!,
+                          )
+                          .map(
+                            (takeaway) => Padding(
+                              padding: EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.check_circle,
+                                    size: 18,
+                                    color: Colors.orange,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      takeaway,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey[700],
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
-                      )).toList(),
+                          )
+                          .toList(),
                     ],
                   ),
                 ),
@@ -3948,8 +4622,8 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
                 SizedBox(height: 16),
 
                 // Campus Resources
-                _buildSection(
-                  title: 'Campus Resources to Explore',
+                _buildEnhancedSection(
+                  title: 'Campus Resources',
                   items: List<String>.from(safeSuggestion['campusResources']!),
                   icon: Icons.school,
                   color: Colors.purple,
@@ -3959,9 +4633,11 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
                 SizedBox(height: 16),
 
                 // External Resources
-                _buildSection(
-                  title: 'External Resources & Tools',
-                  items: List<String>.from(safeSuggestion['externalResources']!),
+                _buildEnhancedSection(
+                  title: 'External Resources',
+                  items: List<String>.from(
+                    safeSuggestion['externalResources']!,
+                  ),
                   icon: Icons.public,
                   color: Colors.blue,
                   showIcon: Icons.link,
@@ -3974,7 +4650,7 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
     );
   }
 
-  Widget _buildSection({
+  Widget _buildEnhancedSection({
     required String title,
     required List<String> items,
     required IconData icon,
@@ -3986,7 +4662,7 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: color.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Column(
@@ -3994,7 +4670,14 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
         children: [
           Row(
             children: [
-              Icon(icon, size: 18, color: color),
+              Container(
+                padding: EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(icon, size: 16, color: color),
+              ),
               SizedBox(width: 8),
               Text(
                 title,
@@ -4006,49 +4689,55 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
               ),
             ],
           ),
-          SizedBox(height: 8),
-          ...items.asMap().entries.map((entry) => Padding(
-            padding: EdgeInsets.only(bottom: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (isNumbered)
-                  Container(
-                    width: 24,
-                    height: 24,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${entry.key + 1}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: color,
-                      ),
-                    ),
-                  )
-                else if (showIcon != null)
-                  Icon(showIcon, size: 16, color: color)
-                else
-                  Icon(Icons.chevron_right, size: 16, color: color),
+          SizedBox(height: 12),
+          ...items
+              .asMap()
+              .entries
+              .map(
+                (entry) => Padding(
+                  padding: EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isNumbered)
+                        Container(
+                          width: 24,
+                          height: 24,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: color.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${entry.key + 1}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: color,
+                            ),
+                          ),
+                        )
+                      else if (showIcon != null)
+                        Icon(showIcon, size: 18, color: color)
+                      else
+                        Icon(Icons.chevron_right, size: 18, color: color),
 
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    entry.value,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[700],
-                      height: 1.4,
-                    ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          entry.value,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[700],
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          )).toList(),
+              )
+              .toList(),
         ],
       ),
     );
@@ -4061,12 +4750,14 @@ IMPORTANT: Generate EXACTLY 1 topic suggestion. Return a JSON array with exactly
     super.dispose();
   }
 }
+
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
 
   @override
   State<CalendarPage> createState() => _CalendarPageState();
 }
+
 class _CalendarPageState extends State<CalendarPage> {
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
@@ -4079,11 +4770,7 @@ class _CalendarPageState extends State<CalendarPage> {
     _selectedDay = DateTime.now();
     _loadEventsFromFirebase();
     _loadEventsFromFirebase2();
-
   }
-
-
-
 
   void _showAddEventDialog() {
     TextEditingController titleController = TextEditingController();
@@ -4097,16 +4784,15 @@ class _CalendarPageState extends State<CalendarPage> {
         return StatefulBuilder(
           builder: (context, setState) {
             return Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF667eea),
-                      Color(0xFF764ba2),
-                    ],
+                    colors: [Color(0xFF667eea), Color(0xFF764ba2)],
                   ),
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -4171,16 +4857,23 @@ class _CalendarPageState extends State<CalendarPage> {
                             child: Column(
                               children: [
                                 ListTile(
-                                  leading: Icon(Icons.calendar_today, color: Color(0xFF667eea)),
-                                  title: Text('${selectedDate.day}/${selectedDate.month}/${selectedDate.year}'),
+                                  leading: Icon(
+                                    Icons.calendar_today,
+                                    color: Color(0xFF667eea),
+                                  ),
+                                  title: Text(
+                                    '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                                  ),
                                   onTap: () async {
-                                    final DateTime? picked = await showDatePicker(
-                                      context: context,
-                                      initialDate: selectedDate,
-                                      firstDate: DateTime.now(),
-                                      lastDate: DateTime(2025),
-                                    );
-                                    if (picked != null && picked != selectedDate) {
+                                    final DateTime? picked =
+                                        await showDatePicker(
+                                          context: context,
+                                          initialDate: selectedDate,
+                                          firstDate: DateTime.now(),
+                                          lastDate: DateTime(2025),
+                                        );
+                                    if (picked != null &&
+                                        picked != selectedDate) {
                                       setState(() {
                                         selectedDate = picked;
                                       });
@@ -4188,13 +4881,21 @@ class _CalendarPageState extends State<CalendarPage> {
                                   },
                                 ),
                                 ListTile(
-                                  leading: Icon(Icons.access_time, color: Color(0xFF667eea)),
-                                  title: Text(selectedTime != null ? selectedTime!.format(context) : 'Add Time (Optional)'),
+                                  leading: Icon(
+                                    Icons.access_time,
+                                    color: Color(0xFF667eea),
+                                  ),
+                                  title: Text(
+                                    selectedTime != null
+                                        ? selectedTime!.format(context)
+                                        : 'Add Time (Optional)',
+                                  ),
                                   onTap: () async {
-                                    final TimeOfDay? picked = await showTimePicker(
-                                      context: context,
-                                      initialTime: TimeOfDay.now(),
-                                    );
+                                    final TimeOfDay? picked =
+                                        await showTimePicker(
+                                          context: context,
+                                          initialTime: TimeOfDay.now(),
+                                        );
                                     if (picked != null) {
                                       setState(() {
                                         selectedTime = picked;
@@ -4215,7 +4916,9 @@ class _CalendarPageState extends State<CalendarPage> {
                                     padding: EdgeInsets.symmetric(vertical: 12),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(8),
-                                      side: BorderSide(color: Color(0xFF667eea)),
+                                      side: BorderSide(
+                                        color: Color(0xFF667eea),
+                                      ),
                                     ),
                                   ),
                                   child: Text(
@@ -4264,9 +4967,13 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   Future<String> getKey(String uid) async {
-    DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    DocumentSnapshot doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
     return doc['signkey'];
   }
+
   void _showToast(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
 
@@ -4285,22 +4992,27 @@ class _CalendarPageState extends State<CalendarPage> {
         ),
         backgroundColor: isError ? Colors.red : Colors.green,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 2),
       ),
     );
   }
-Future<String>getEmail ()async{
 
-      final id = await FirebaseAuth.instance.currentUser!.uid;
-      DocumentSnapshot doc = await FirebaseFirestore.instance.collection(
-          'users').doc(id).get();
-      return doc['email'];
+  Future<String> getEmail() async {
+    final id = await FirebaseAuth.instance.currentUser!.uid;
+    DocumentSnapshot doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(id)
+        .get();
+    return doc['email'];
+  }
 
-}
-  void _addEvent(DateTime date, String title, String description, TimeOfDay? time) async {
+  void _addEvent(
+    DateTime date,
+    String title,
+    String description,
+    TimeOfDay? time,
+  ) async {
     DateTime finalDateTime = DateTime(
       date.year,
       date.month,
@@ -4309,11 +5021,11 @@ Future<String>getEmail ()async{
       time?.minute ?? 0,
     );
 
-
     String? uid = await FirebaseAuth.instance.currentUser?.uid;
     final signKey = await getKey(uid!);
-    final email=await getEmail();
-    String formattedDateTime = '${date.day}/${date.month}/${date.year} • ${time != null ? time.format(context) : 'All Day'}';
+    final email = await getEmail();
+    String formattedDateTime =
+        '${date.day}/${date.month}/${date.year} • ${time != null ? time.format(context) : 'All Day'}';
     final event = {
       'title': title,
       'description': description,
@@ -4331,25 +5043,20 @@ Future<String>getEmail ()async{
       // await FirebaseFirestore.instance
       //     .collection('Events')
       //     .add(event);
-      await FirebaseFirestore.instance
-          .collection('events')
-          .add({
+      await FirebaseFirestore.instance.collection('events').add({
         'title': title,
         'description': description,
         'signkey': signKey,
-        'studentEmail':email,
+        'studentEmail': email,
         'dateTime': Timestamp.fromDate(finalDateTime),
         'isoDate': finalDateTime.toIso8601String(),
         'uid': uid,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      _showToast( "Event added successfully"
-      );
-
+      _showToast("Event added successfully");
     } catch (e) {
-      _showToast( "Failed to add event: $e",isError:true
-      );
+      _showToast("Failed to add event: $e", isError: true);
     }
   }
 
@@ -4358,16 +5065,15 @@ Future<String>getEmail ()async{
       context: context,
       builder: (BuildContext context) {
         return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF667eea),
-                  Color(0xFF764ba2),
-                ],
+                colors: [Color(0xFF667eea), Color(0xFF764ba2)],
               ),
               borderRadius: BorderRadius.circular(16),
             ),
@@ -4412,7 +5118,11 @@ Future<String>getEmail ()async{
                           padding: EdgeInsets.only(bottom: 8),
                           child: Row(
                             children: [
-                              Icon(Icons.calendar_today, size: 16, color: Color(0xFF667eea)),
+                              Icon(
+                                Icons.calendar_today,
+                                size: 16,
+                                color: Color(0xFF667eea),
+                              ),
                               SizedBox(width: 8),
                               Expanded(
                                 child: Text(
@@ -4428,7 +5138,8 @@ Future<String>getEmail ()async{
                             ],
                           ),
                         ),
-                      if (event['description'] != null && event['description'].isNotEmpty)
+                      if (event['description'] != null &&
+                          event['description'].isNotEmpty)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -4505,8 +5216,8 @@ Future<String>getEmail ()async{
         .where('signkey', isEqualTo: signKey)
         .snapshots()
         .listen((snapshot) {
-      _updateEvents(snapshot.docs);
-    });
+          _updateEvents(snapshot.docs);
+        });
   }
 
   void _loadEventsFromFirebase2() async {
@@ -4518,8 +5229,8 @@ Future<String>getEmail ()async{
         .where('signkey', isEqualTo: signKey)
         .snapshots()
         .listen((snapshot) {
-      _updateEvents(snapshot.docs);
-    });
+          _updateEvents(snapshot.docs);
+        });
   }
 
   void _updateEvents(List<QueryDocumentSnapshot> docs) {
@@ -4531,9 +5242,7 @@ Future<String>getEmail ()async{
       if (data['isoDate'] != null) {
         try {
           eventDate = DateTime.parse(data['isoDate']);
-        } catch (e) {
-
-        }
+        } catch (e) {}
       }
       if (eventDate == null && data['timestamp'] is Timestamp) {
         eventDate = (data['timestamp'] as Timestamp).toDate();
@@ -4546,13 +5255,18 @@ Future<String>getEmail ()async{
       }
 
       if (eventDate != null) {
-        DateTime dayOnly = DateTime(eventDate.year, eventDate.month, eventDate.day);
+        DateTime dayOnly = DateTime(
+          eventDate.year,
+          eventDate.month,
+          eventDate.day,
+        );
 
         if (newEvents[dayOnly] == null) {
           newEvents[dayOnly] = [data];
         } else {
           final existingEvent = newEvents[dayOnly]!.firstWhere(
-                (e) => e['title'] == data['title'] &&
+            (e) =>
+                e['title'] == data['title'] &&
                 _getEventDate(e) == _getEventDate(data),
             orElse: () => {},
           );
@@ -4573,9 +5287,7 @@ Future<String>getEmail ()async{
     if (event['isoDate'] != null) {
       try {
         return DateTime.parse(event['isoDate']);
-      } catch (e) {
-
-      }
+      } catch (e) {}
     }
 
     if (event['timestamp'] is Timestamp) {
@@ -4609,16 +5321,13 @@ Future<String>getEmail ()async{
         }
 
         return DateTime(year, month, day);
-      }
-
-      else if (dateString.contains('/')) {
+      } else if (dateString.contains('/')) {
         final dateParts = dateString.split('/');
         final day = int.parse(dateParts[0]);
         final month = int.parse(dateParts[1]);
         final year = int.parse(dateParts[2]);
         return DateTime(year, month, day);
-      }
-      else {
+      } else {
         return DateTime.parse(dateString);
       }
     } catch (e) {
@@ -4659,10 +5368,7 @@ Future<String>getEmail ()async{
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF667eea),
-            Color(0xFF764ba2),
-          ],
+          colors: [Color(0xFF667eea), Color(0xFF764ba2)],
         ),
       ),
       child: SafeArea(
@@ -4708,7 +5414,9 @@ Future<String>getEmail ()async{
                           ],
                         ),
                         child: TableCalendar(
-                          firstDay: DateTime.now().subtract(Duration(days: 365)),
+                          firstDay: DateTime.now().subtract(
+                            Duration(days: 365),
+                          ),
                           lastDay: DateTime.now().add(Duration(days: 365)),
                           focusedDay: _focusedDay,
                           calendarFormat: _calendarFormat,
@@ -4754,7 +5462,9 @@ Future<String>getEmail ()async{
                               color: Color(0xFF667eea),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            formatButtonTextStyle: TextStyle(color: Colors.white),
+                            formatButtonTextStyle: TextStyle(
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
@@ -4777,7 +5487,8 @@ Future<String>getEmail ()async{
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     'Events for ${_selectedDay!.day}/${_selectedDay!.month}/${_selectedDay!.year}',
@@ -4794,7 +5505,10 @@ Future<String>getEmail ()async{
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Color(0xFF667eea),
                                       foregroundColor: Colors.white,
-                                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 12,
+                                      ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
                                       ),
@@ -4805,40 +5519,58 @@ Future<String>getEmail ()async{
                               SizedBox(height: 16),
                               _getEventsForDay(_selectedDay!).isEmpty
                                   ? Container(
-                                padding: EdgeInsets.symmetric(vertical: 40),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.event_note, size: 48, color: Colors.grey[400]),
-                                    SizedBox(height: 8),
-                                    Text(
-                                      'No events for this day',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        color: Colors.grey[500],
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 40,
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              )
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.event_note,
+                                            size: 48,
+                                            color: Colors.grey[400],
+                                          ),
+                                          SizedBox(height: 8),
+                                          Text(
+                                            'No events for this day',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              color: Colors.grey[500],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
                                   : Column(
-                                children: _getEventsForDay(_selectedDay!).map((event) {
-                                  final dateTime = event['dateTime'];
-                                  final displayTime = dateTime is String
-                                      ? dateTime
-                                      : _formatTimestamp(dateTime);
+                                      children: _getEventsForDay(_selectedDay!)
+                                          .map((event) {
+                                            final dateTime = event['dateTime'];
+                                            final displayTime =
+                                                dateTime is String
+                                                ? dateTime
+                                                : _formatTimestamp(dateTime);
 
-                                  return Card(
-                                    margin: EdgeInsets.only(bottom: 8),
-                                    child: ListTile(
-                                      leading: Icon(Icons.event, color: Color(0xFF667eea)),
-                                      title: Text(event['title']),
-                                      subtitle: Text(displayTime),
-                                      onTap: () => _showEventDetails(_selectedDay!, event),
+                                            return Card(
+                                              margin: EdgeInsets.only(
+                                                bottom: 8,
+                                              ),
+                                              child: ListTile(
+                                                leading: Icon(
+                                                  Icons.event,
+                                                  color: Color(0xFF667eea),
+                                                ),
+                                                title: Text(event['title']),
+                                                subtitle: Text(displayTime),
+                                                onTap: () => _showEventDetails(
+                                                  _selectedDay!,
+                                                  event,
+                                                ),
+                                              ),
+                                            );
+                                          })
+                                          .toList(),
                                     ),
-                                  );
-                                }).toList(),
-                              ),
                             ],
                           ),
                         ),
@@ -4854,12 +5586,14 @@ Future<String>getEmail ()async{
     );
   }
 }
+
 class MenteesPage extends StatefulWidget {
   const MenteesPage({super.key});
 
   @override
   State<MenteesPage> createState() => _MenteesPageState();
 }
+
 class _MenteesPageState extends State<MenteesPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -4878,29 +5612,29 @@ class _MenteesPageState extends State<MenteesPage> {
     super.initState();
     _loadMenteesWithAttendance();
   }
+
   Future<String> getUsername() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid!).get();
+    DocumentSnapshot doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid!)
+        .get();
     return doc['fName'] + " " + doc['lName'];
   }
+
   Widget _buildProfileAvatar(String menteeId, {double radius = 25}) {
     final profileUrl = _menteeProfileImages[menteeId] ?? '';
     if (profileUrl.isNotEmpty) {
       return CircleAvatar(
         radius: radius,
         backgroundImage: NetworkImage(profileUrl),
-        onBackgroundImageError: (exception, stackTrace) {
-        },
+        onBackgroundImageError: (exception, stackTrace) {},
       );
     } else {
       return CircleAvatar(
         radius: radius,
         backgroundColor: Color(0xFF667eea).withOpacity(0.1),
-        child: Icon(
-          Icons.person,
-          color: Color(0xFF667eea),
-          size: radius,
-        ),
+        child: Icon(Icons.person, color: Color(0xFF667eea), size: radius),
       );
     }
   }
@@ -4930,8 +5664,8 @@ class _MenteesPageState extends State<MenteesPage> {
             .get();
 
         final attendanceData = await _calculateMenteeAttendance(
-            menteeId,
-            meetingsSnapshot.docs
+          menteeId,
+          meetingsSnapshot.docs,
         );
 
         menteesData.add({
@@ -4950,7 +5684,6 @@ class _MenteesPageState extends State<MenteesPage> {
         _menteeProfileImages = profileImages;
         _isLoading = false;
       });
-
     } catch (e) {
       setState(() {
         _errorMessage = 'Error loading mentees: ${e.toString()}';
@@ -4960,8 +5693,9 @@ class _MenteesPageState extends State<MenteesPage> {
   }
 
   Future<Map<String, dynamic>> _calculateMenteeAttendance(
-      String menteeId, List<QueryDocumentSnapshot> meetings) async {
-
+    String menteeId,
+    List<QueryDocumentSnapshot> meetings,
+  ) async {
     List<Map<String, dynamic>> meetingHistory = [];
     int attendedCount = 0;
     int totalMeetings = meetings.length;
@@ -5007,10 +5741,7 @@ class _MenteesPageState extends State<MenteesPage> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF667eea),
-                Color(0xFF764ba2),
-              ],
+              colors: [Color(0xFF667eea), Color(0xFF764ba2)],
             ),
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(20),
@@ -5058,9 +5789,7 @@ class _MenteesPageState extends State<MenteesPage> {
                         TabBar(
                           labelColor: Color(0xFF667eea),
                           unselectedLabelColor: Colors.grey,
-                          tabs: [
-                            Tab(text: 'Overview'),
-                          ],
+                          tabs: [Tab(text: 'Overview')],
                         ),
                         Expanded(
                           child: TabBarView(
@@ -5074,15 +5803,21 @@ class _MenteesPageState extends State<MenteesPage> {
                                       decoration: BoxDecoration(
                                         color: Colors.grey[50],
                                         borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(color: Colors.grey[300]!),
+                                        border: Border.all(
+                                          color: Colors.grey[300]!,
+                                        ),
                                       ),
                                       child: Row(
                                         children: [
-                                          _buildProfileAvatar(mentee['id'], radius: 30),
+                                          _buildProfileAvatar(
+                                            mentee['id'],
+                                            radius: 30,
+                                          ),
                                           SizedBox(width: 16),
                                           Expanded(
                                             child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
                                               children: [
                                                 Text(
                                                   '${mentee['name']} ${mentee['surname']}',
@@ -5100,7 +5835,8 @@ class _MenteesPageState extends State<MenteesPage> {
                                                     color: Colors.grey[600],
                                                   ),
                                                 ),
-                                                if (mentee['email'] != null && mentee['email'].isNotEmpty)
+                                                if (mentee['email'] != null &&
+                                                    mentee['email'].isNotEmpty)
                                                   Text(
                                                     'Email: ${mentee['email']}',
                                                     style: TextStyle(
@@ -5120,10 +5856,13 @@ class _MenteesPageState extends State<MenteesPage> {
                                       decoration: BoxDecoration(
                                         color: Colors.grey[50],
                                         borderRadius: BorderRadius.circular(16),
-                                        border: Border.all(color: Colors.grey[200]!),
+                                        border: Border.all(
+                                          color: Colors.grey[200]!,
+                                        ),
                                       ),
                                       child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceAround,
                                         children: [
                                           Column(
                                             children: [
@@ -5187,41 +5926,67 @@ class _MenteesPageState extends State<MenteesPage> {
                                         ),
                                       )
                                     else
-                                      ...mentee['meetings'].map((meeting) => Card(
-                                        margin: EdgeInsets.only(bottom: 8),
-                                        child: ListTile(
-                                          leading: Container(
-                                            padding: EdgeInsets.all(8),
-                                            decoration: BoxDecoration(
-                                              color: meeting['attended']
-                                                  ? Colors.green.withOpacity(0.2)
-                                                  : Colors.red.withOpacity(0.2),
-                                              shape: BoxShape.circle,
+                                      ...mentee['meetings']
+                                          .map(
+                                            (meeting) => Card(
+                                              margin: EdgeInsets.only(
+                                                bottom: 8,
+                                              ),
+                                              child: ListTile(
+                                                leading: Container(
+                                                  padding: EdgeInsets.all(8),
+                                                  decoration: BoxDecoration(
+                                                    color: meeting['attended']
+                                                        ? Colors.green
+                                                              .withOpacity(0.2)
+                                                        : Colors.red
+                                                              .withOpacity(0.2),
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                  child: Icon(
+                                                    meeting['attended']
+                                                        ? Icons.check
+                                                        : Icons.close,
+                                                    color: meeting['attended']
+                                                        ? Colors.green
+                                                        : Colors.red,
+                                                    size: 20,
+                                                  ),
+                                                ),
+                                                title: Text(
+                                                  meeting['meetingTitle'],
+                                                ),
+                                                subtitle: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      '${meeting['date']} • ${meeting['time']}',
+                                                    ),
+                                                    if (meeting['venue'] !=
+                                                            null &&
+                                                        meeting['venue']
+                                                            .isNotEmpty)
+                                                      Text(
+                                                        'Venue: ${meeting['venue']}',
+                                                      ),
+                                                  ],
+                                                ),
+                                                trailing: Text(
+                                                  meeting['attended']
+                                                      ? 'Present'
+                                                      : 'Absent',
+                                                  style: TextStyle(
+                                                    color: meeting['attended']
+                                                        ? Colors.green
+                                                        : Colors.red,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ),
                                             ),
-                                            child: Icon(
-                                              meeting['attended'] ? Icons.check : Icons.close,
-                                              color: meeting['attended'] ? Colors.green : Colors.red,
-                                              size: 20,
-                                            ),
-                                          ),
-                                          title: Text(meeting['meetingTitle']),
-                                          subtitle: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text('${meeting['date']} • ${meeting['time']}'),
-                                              if (meeting['venue'] != null && meeting['venue'].isNotEmpty)
-                                                Text('Venue: ${meeting['venue']}'),
-                                            ],
-                                          ),
-                                          trailing: Text(
-                                            meeting['attended'] ? 'Present' : 'Absent',
-                                            style: TextStyle(
-                                              color: meeting['attended'] ? Colors.green : Colors.red,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                      )).toList(),
+                                          )
+                                          .toList(),
                                   ],
                                 ),
                               ),
@@ -5247,10 +6012,7 @@ class _MenteesPageState extends State<MenteesPage> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF667eea),
-            Color(0xFF764ba2),
-          ],
+          colors: [Color(0xFF667eea), Color(0xFF764ba2)],
         ),
       ),
       child: SafeArea(
@@ -5280,159 +6042,189 @@ class _MenteesPageState extends State<MenteesPage> {
                 ),
                 child: _isLoading
                     ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
-                      Text(
-                        'Loading mentees...',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 16,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 16),
+                            Text(
+                              'Loading mentees...',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
-                )
+                      )
                     : _errorMessage.isNotEmpty
                     ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
-                      SizedBox(height: 16),
-                      Text(
-                        _errorMessage,
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 16,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: 64,
+                              color: Colors.grey[400],
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              _errorMessage,
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 16,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: _loadMenteesWithAttendance,
+                              child: Text('Retry'),
+                            ),
+                          ],
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _loadMenteesWithAttendance,
-                        child: Text('Retry'),
-                      ),
-                    ],
-                  ),
-                )
+                      )
                     : _menteesWithAttendance.isEmpty
                     ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
-                      SizedBox(height: 16),
-                      Text(
-                        'No mentees assigned yet',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Mentees will appear here once they sign up\nusing your sign key',
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 14,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                )
-                    : SingleChildScrollView(
-                  padding: EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 8,
-                              offset: Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.info, color: Color(0xFF667eea), size: 20),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Tap on any mentee to view their attendance report and mark attendance',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[600],
-                                ),
+                            Icon(
+                              Icons.people_outline,
+                              size: 64,
+                              color: Colors.grey[400],
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              'No mentees assigned yet',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
                               ),
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Mentees will appear here once they sign up\nusing your sign key',
+                              style: TextStyle(
+                                color: Colors.grey[500],
+                                fontSize: 14,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
                           ],
                         ),
-                      ),
-                      SizedBox(height: 20),
-                      ..._menteesWithAttendance.map((mentee) => Card(
-                        margin: EdgeInsets.only(bottom: 16),
-                        elevation: 2,
-                        child: ListTile(
-                          contentPadding: EdgeInsets.all(16),
-                          leading: _buildProfileAvatar(mentee['id'], radius: 25),
-                          title: Text(
-                            '${mentee['name']} ${mentee['surname']}',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey[800],
-                            ),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Student No: ${mentee['studentNumber']}',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[600],
-                                ),
+                      )
+                    : SingleChildScrollView(
+                        padding: EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 8,
+                                    offset: Offset(0, 4),
+                                  ),
+                                ],
                               ),
-                              SizedBox(height: 4),
-                              Row(
+                              child: Row(
                                 children: [
-                                  Container(
-                                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: _getAttendanceColor(mentee['attendance']),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
+                                  Icon(
+                                    Icons.info,
+                                    color: Color(0xFF667eea),
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Expanded(
                                     child: Text(
-                                      '${mentee['attendance']}% Attendance',
+                                      'Tap on any mentee to view their attendance report and mark attendance',
                                       style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w500,
+                                        fontSize: 14,
+                                        color: Colors.grey[600],
                                       ),
                                     ),
                                   ),
                                 ],
                               ),
-                            ],
-                          ),
-                          trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
-                          onTap: () => _showMenteeReport(mentee),
+                            ),
+                            SizedBox(height: 20),
+                            ..._menteesWithAttendance
+                                .map(
+                                  (mentee) => Card(
+                                    margin: EdgeInsets.only(bottom: 16),
+                                    elevation: 2,
+                                    child: ListTile(
+                                      contentPadding: EdgeInsets.all(16),
+                                      leading: _buildProfileAvatar(
+                                        mentee['id'],
+                                        radius: 25,
+                                      ),
+                                      title: Text(
+                                        '${mentee['name']} ${mentee['surname']}',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.grey[800],
+                                        ),
+                                      ),
+                                      subtitle: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Student No: ${mentee['studentNumber']}',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                          SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              Container(
+                                                padding: EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 2,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: _getAttendanceColor(
+                                                    mentee['attendance'],
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  '${mentee['attendance']}% Attendance',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                      trailing: Icon(
+                                        Icons.arrow_forward_ios,
+                                        size: 16,
+                                        color: Colors.grey[400],
+                                      ),
+                                      onTap: () => _showMenteeReport(mentee),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            SizedBox(height: 20),
+                          ],
                         ),
-                      )).toList(),
-                      SizedBox(height: 20),
-                    ],
-                  ),
-                ),
+                      ),
               ),
             ),
           ],
@@ -5447,12 +6239,14 @@ class _MenteesPageState extends State<MenteesPage> {
     return Colors.red;
   }
 }
+
 class MenteeHomePage extends StatefulWidget {
   const MenteeHomePage({super.key});
 
   @override
   State<MenteeHomePage> createState() => _MenteeHomePageState();
 }
+
 class _MenteeHomePageState extends State<MenteeHomePage> {
   int _currentIndex = 0;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -5469,7 +6263,10 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
 
   Future<void> _loadMenteeData() async {
     try {
-      final userDoc = await _firestore.collection('users').doc(_auth.currentUser!.uid).get();
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(_auth.currentUser!.uid)
+          .get();
       if (userDoc.exists) {
         final userData = userDoc.data() as Map<String, dynamic>;
         setState(() {
@@ -5477,17 +6274,20 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
           _mentorId = userData['mentor_id'] ?? '';
         });
       }
-    } catch (e) {
-
-    }
+    } catch (e) {}
   }
-  CollectionReference get announcementsRef => _firestore.collection('announcements');
+
+  CollectionReference get announcementsRef =>
+      _firestore.collection('announcements');
   CollectionReference get meetingsRef => _firestore.collection('meetings');
   CollectionReference get registersRef => _firestore.collection('registers');
 
   Future<String> getUsername() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    DocumentSnapshot doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
     return doc['fName'] + " " + doc['lName'];
   }
 
@@ -5503,20 +6303,15 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF667eea),
-                Color(0xFF764ba2),
-              ],
+              colors: [Color(0xFF667eea), Color(0xFF764ba2)],
             ),
           ),
           child: AppBar(
-            iconTheme: IconThemeData(
-                color: Colors.white),
+            iconTheme: IconThemeData(color: Colors.white),
             backgroundColor: Colors.transparent,
             elevation: 0,
             title: Row(
               children: [
-
                 SizedBox(width: 2),
                 FutureBuilder<String>(
                   future: getUsername(),
@@ -5548,10 +6343,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF667eea),
-              Color(0xFF764ba2),
-            ],
+            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
           ),
         ),
         child: SafeArea(
@@ -5578,10 +6370,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF667eea),
-              Color(0xFF764ba2),
-            ],
+            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
           ),
         ),
         child: BottomNavigationBar(
@@ -5596,10 +6385,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
           unselectedItemColor: Colors.white.withOpacity(0.7),
           type: BottomNavigationBarType.fixed,
           items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home),
-              label: 'Home',
-            ),
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
             BottomNavigationBarItem(
               icon: Icon(Icons.assignment),
               label: 'Register',
@@ -5617,6 +6403,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
       ),
     );
   }
+
   Widget _getCurrentPage() {
     switch (_currentIndex) {
       case 0:
@@ -5643,10 +6430,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF667eea),
-                  Color(0xFF764ba2),
-                ],
+                colors: [Color(0xFF667eea), Color(0xFF764ba2)],
               ),
             ),
             child: Padding(
@@ -5673,7 +6457,6 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
               padding: const EdgeInsets.all(16.0),
               child: Row(
                 children: [
-
                   SizedBox(width: 2),
                   Expanded(
                     child: Column(
@@ -5699,13 +6482,17 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                     ),
                   ),
                   GestureDetector(
-                   child: Icon(Icons.chevron_right, color: Colors.grey.shade500),
-                    onTap: (){
-                     Navigator.push(context, MaterialPageRoute(builder: (_)=>ViewMentorPage()));
+                    child: Icon(
+                      Icons.chevron_right,
+                      color: Colors.grey.shade500,
+                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => ViewMentorPage()),
+                      );
                     },
-
                   ),
-
                 ],
               ),
             ),
@@ -5715,7 +6502,10 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
             icon: Icons.person_outline,
             title: "My Profile",
             onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => ProfilePage()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ProfilePage()),
+              );
             },
           ),
           Divider(height: 20, thickness: 1, color: Colors.grey.shade300),
@@ -5724,7 +6514,10 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
             icon: Icons.help_outline,
             title: "Help & Support",
             onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_)=>MenteeHelpSupportPage()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => MenteeHelpSupportPage()),
+              );
             },
           ),
           Divider(height: 20, thickness: 1, color: Colors.grey.shade300),
@@ -5748,10 +6541,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
             padding: const EdgeInsets.all(16.0),
             child: Text(
               "Version 1.0.0",
-              style: TextStyle(
-                color: Colors.grey.shade500,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
               textAlign: TextAlign.center,
             ),
           ),
@@ -5759,6 +6549,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
       ),
     );
   }
+
   Widget _buildMenuItem({
     required IconData icon,
     required String title,
@@ -5799,22 +6590,28 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
             ],
           ],
         ),
-        trailing: Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20),
+        trailing: Icon(
+          Icons.chevron_right,
+          color: Colors.grey.shade400,
+          size: 20,
+        ),
         onTap: onTap,
         contentPadding: EdgeInsets.symmetric(horizontal: 12),
         visualDensity: VisualDensity.compact,
       ),
     );
   }
-  void _logout()async{
+
+  void _logout() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     prefs.clear();
     await FirebaseAuth.instance.signOut();
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => const WelcomePage() ),
+      MaterialPageRoute(builder: (_) => const WelcomePage()),
     );
   }
+
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -5825,12 +6622,18 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text("Cancel", style: TextStyle(color: Colors.grey.shade600)),
+              child: Text(
+                "Cancel",
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
             ),
             TextButton(
               onPressed: () {
                 _logout();
-                Navigator.push(context, MaterialPageRoute(builder: (_)=>SignInPage()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => SignInPage()),
+                );
               },
               child: Text("Log Out", style: TextStyle(color: Colors.red)),
             ),
@@ -5839,6 +6642,7 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
       },
     );
   }
+
   Widget _buildHomeContent() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -5878,7 +6682,11 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildStatCard('Active\nRegisters', 'Check', Icons.assignment),
+                    _buildStatCard(
+                      'Active\nRegisters',
+                      'Check',
+                      Icons.assignment,
+                    ),
                     _buildStatCard('Upcoming\nMeetings', 'View', Icons.event),
                     _buildStatCard('Latest\nNews', 'See', Icons.announcement),
                   ],
@@ -5977,8 +6785,12 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                     }
 
                     filteredItems.sort((a, b) {
-                      final aExpiresAt = (a.data() as Map<String, dynamic>)['expiresAt'] as Timestamp;
-                      final bExpiresAt = (b.data() as Map<String, dynamic>)['expiresAt'] as Timestamp;
+                      final aExpiresAt =
+                          (a.data() as Map<String, dynamic>)['expiresAt']
+                              as Timestamp;
+                      final bExpiresAt =
+                          (b.data() as Map<String, dynamic>)['expiresAt']
+                              as Timestamp;
                       return aExpiresAt.compareTo(bExpiresAt);
                     });
 
@@ -5995,9 +6807,11 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                         final difference = expiresDateTime.difference(now);
 
                         if (difference.inDays > 0) {
-                          timeRemaining = '${difference.inDays}d ${difference.inHours % 24}h remaining';
+                          timeRemaining =
+                              '${difference.inDays}d ${difference.inHours % 24}h remaining';
                         } else if (difference.inHours > 0) {
-                          timeRemaining = '${difference.inHours}h ${difference.inMinutes % 60}m remaining';
+                          timeRemaining =
+                              '${difference.inHours}h ${difference.inMinutes % 60}m remaining';
                         } else if (difference.inMinutes > 0) {
                           timeRemaining = '${difference.inMinutes}m remaining';
                         } else {
@@ -6023,19 +6837,26 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                                       decoration: BoxDecoration(
                                         color: isMeeting
                                             ? Color(0xFF667eea).withOpacity(0.1)
-                                            : Color(0xFF48bb78).withOpacity(0.1),
+                                            : Color(
+                                                0xFF48bb78,
+                                              ).withOpacity(0.1),
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: Icon(
-                                        isMeeting ? Icons.groups : Icons.announcement,
-                                        color: isMeeting ? Color(0xFF667eea) : Color(0xFF48bb78),
+                                        isMeeting
+                                            ? Icons.groups
+                                            : Icons.announcement,
+                                        color: isMeeting
+                                            ? Color(0xFF667eea)
+                                            : Color(0xFF48bb78),
                                         size: 20,
                                       ),
                                     ),
                                     SizedBox(width: 12),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             item['title'] ?? 'No Title',
@@ -6058,7 +6879,9 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                                             timeRemaining,
                                             style: TextStyle(
                                               fontSize: 11,
-                                              color: isMeeting ? Color(0xFF667eea) : Color(0xFF48bb78),
+                                              color: isMeeting
+                                                  ? Color(0xFF667eea)
+                                                  : Color(0xFF48bb78),
                                               fontWeight: FontWeight.w500,
                                             ),
                                           ),
@@ -6067,7 +6890,10 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                                     ),
                                   ],
                                 ),
-                                if (item['description'] != null && item['description'].toString().isNotEmpty) ...[
+                                if (item['description'] != null &&
+                                    item['description']
+                                        .toString()
+                                        .isNotEmpty) ...[
                                   SizedBox(height: 8),
                                   Text(
                                     item['description'].toString(),
@@ -6077,7 +6903,8 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                                     ),
                                   ),
                                 ],
-                                if (item['venue'] != null && item['venue'].toString().isNotEmpty) ...[
+                                if (item['venue'] != null &&
+                                    item['venue'].toString().isNotEmpty) ...[
                                   SizedBox(height: 4),
                                   Text(
                                     'Venue: ${item['venue']}',
@@ -6087,7 +6914,9 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                                     ),
                                   ),
                                 ],
-                                if (isMeeting && item['time'] != null && item['time'].toString().isNotEmpty) ...[
+                                if (isMeeting &&
+                                    item['time'] != null &&
+                                    item['time'].toString().isNotEmpty) ...[
                                   SizedBox(height: 4),
                                   Text(
                                     'Time: ${item['time']}',
@@ -6098,7 +6927,9 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                                   ),
                                 ],
                                 // Show attendance info for past meetings that have attendance data
-                                if (!expiresDateTime.isAfter(now) && isMeeting && item['attendedStudents'] != null) ...[
+                                if (!expiresDateTime.isAfter(now) &&
+                                    isMeeting &&
+                                    item['attendedStudents'] != null) ...[
                                   SizedBox(height: 4),
                                   Text(
                                     'Attendance: ${(item['attendedStudents'] as List).length} attended',
@@ -6142,8 +6973,8 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
           final register = doc.data() as Map<String, dynamic>;
           final isMyMentor = register['signkey'] == _menteeSignKey;
           final expiresAt = register['expiresAt'] as Timestamp?;
-          final isActive = expiresAt != null &&
-              expiresAt.toDate().isAfter(DateTime.now());
+          final isActive =
+              expiresAt != null && expiresAt.toDate().isAfter(DateTime.now());
           return isMyMentor && isActive;
         }).toList();
         if (registers.isEmpty) {
@@ -6192,7 +7023,10 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
                     ),
                   ],
                 ),
-                trailing: Icon(Icons.radio_button_checked, color: Color(0xFF667eea)),
+                trailing: Icon(
+                  Icons.radio_button_checked,
+                  color: Color(0xFF667eea),
+                ),
                 onTap: () {
                   _showRegisterResponseDialog(context, register.id, data);
                 },
@@ -6204,7 +7038,11 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
     );
   }
 
-  void _showRegisterResponseDialog(BuildContext context, String registerId, Map<String, dynamic> data) {
+  void _showRegisterResponseDialog(
+    BuildContext context,
+    String registerId,
+    Map<String, dynamic> data,
+  ) {
     String? selectedOption;
 
     showDialog(
@@ -6242,13 +7080,22 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
                 ),
                 ElevatedButton(
-                  onPressed: selectedOption == null ? null : () {
-                    Navigator.pop(context);
-                    _submitRegisterResponse(registerId, selectedOption!, data);
-                  },
+                  onPressed: selectedOption == null
+                      ? null
+                      : () {
+                          Navigator.pop(context);
+                          _submitRegisterResponse(
+                            registerId,
+                            selectedOption!,
+                            data,
+                          );
+                        },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Color(0xFF667eea),
                   ),
@@ -6262,23 +7109,30 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
     );
   }
 
-  void _submitRegisterResponse(String registerId, String response, Map<String, dynamic> registerData) async {
+  void _submitRegisterResponse(
+    String registerId,
+    String response,
+    Map<String, dynamic> registerData,
+  ) async {
     final userId = _auth.currentUser!.uid;
 
     try {
       await registersRef.doc(registerId).update({
-        'attendedStudents': FieldValue.arrayUnion([userId])
+        'attendedStudents': FieldValue.arrayUnion([userId]),
       });
       final meetingId = registerData['meetingId'];
       if (meetingId != null) {
         final meetingDoc = await meetingsRef.doc(meetingId).get();
         if (meetingDoc.exists) {
           final meetingData = meetingDoc.data() as Map<String, dynamic>;
-          final currentAttendedStudents = List<String>.from(meetingData['attendedStudents'] ?? []);
+          final currentAttendedStudents = List<String>.from(
+            meetingData['attendedStudents'] ?? [],
+          );
           final totalMentees = meetingData['totalMentees'] ?? 1;
           if (!currentAttendedStudents.contains(userId)) {
             currentAttendedStudents.add(userId);
-            final newAttendancePercentage = (currentAttendedStudents.length / totalMentees) * 100;
+            final newAttendancePercentage =
+                (currentAttendedStudents.length / totalMentees) * 100;
             await meetingsRef.doc(meetingId).update({
               'attendedStudents': currentAttendedStudents,
               'attendancePercentage': newAttendancePercentage,
@@ -6325,73 +7179,139 @@ class _MenteeHomePageState extends State<MenteeHomePage> {
         Text(
           title,
           textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-          ),
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
         ),
       ],
     );
   }
 }
+
 class SuggestionsView extends StatefulWidget {
   @override
   _SuggestionsViewState createState() => _SuggestionsViewState();
 }
+
 class _SuggestionsViewState extends State<SuggestionsView> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   TextEditingController _searchController = TextEditingController();
-  Future<String>getKey(String uid)async{
-    DocumentSnapshot doc=await FirebaseFirestore.instance.collection('users').doc(uid).get();
+  Future<String> getKey(String uid) async {
+    DocumentSnapshot doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
     return doc['signkey'];
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: Text(
-          'Suggestions & Feedback',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.feedback_outlined,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Suggestions & Feedback',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
         ),
-        backgroundColor: Color(0xFF667eea),
-        elevation: 0,
-        iconTheme: IconThemeData(color: Colors.white),
+        backgroundColor: const Color(0xFF667eea),
+        elevation: 2,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            child: CircleAvatar(
+              backgroundColor: Colors.white.withOpacity(0.2),
+              child: const Icon(
+                Icons.lightbulb_outline,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+          ),
+        ],
       ),
       body: Column(
         children: [
           _buildSearchSection(),
-          Expanded(
-            child: _buildSuggestionsList(),
-          ),
+          Expanded(child: _buildSuggestionsList()),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddSuggestionDialog,
-        backgroundColor: Color(0xFF667eea),
-        child: Icon(Icons.add_comment, color: Colors.white),
+        backgroundColor: const Color(0xFF667eea),
+        icon: const Icon(Icons.add_comment, color: Colors.white),
+        label: const Text(
+          'Add Suggestion',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
+
   Widget _buildSearchSection() {
     return Container(
-      padding: EdgeInsets.all(16),
-      color: Colors.white,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(25),
+          color: Colors.grey[50],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[200]!),
         ),
         child: TextField(
           controller: _searchController,
           decoration: InputDecoration(
             hintText: 'Search suggestions...',
-            prefixIcon: Icon(Icons.search, color: Color(0xFF667eea)),
+            hintStyle: TextStyle(color: Colors.grey[400]),
+            prefixIcon: Icon(
+              Icons.search,
+              color: const Color(0xFF667eea),
+              size: 22,
+            ),
+            suffixIcon: _searchController.text.isNotEmpty
+                ? IconButton(
+                    icon: Icon(Icons.clear, color: Colors.grey[400], size: 18),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {});
+                    },
+                  )
+                : null,
             border: InputBorder.none,
-            contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 16,
+            ),
           ),
           onChanged: (value) => setState(() {}),
         ),
@@ -6404,31 +7324,117 @@ class _SuggestionsViewState extends State<SuggestionsView> {
       future: getKey(FirebaseAuth.instance.currentUser!.uid),
       builder: (context, keySnapshot) {
         if (keySnapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    const Color(0xFF667eea),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Loading suggestions...',
+                  style: TextStyle(color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          );
         }
 
         if (keySnapshot.hasError) {
-          return Center(child: Text('Error loading sign key'));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red[50],
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: Colors.red[300],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Error loading sign key',
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          );
         }
 
         if (!keySnapshot.hasData || keySnapshot.data == null) {
-          return Center(child: Text('No sign key found'));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[50],
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.vpn_key_off,
+                    size: 48,
+                    color: Colors.orange[300],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No sign key found',
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          );
         }
+
         final signKey = keySnapshot.data!;
         return StreamBuilder<QuerySnapshot>(
-          stream: _firestore.collection('suggestions')
+          stream: _firestore
+              .collection('suggestions')
               .where('signkey', isEqualTo: signKey)
               .orderBy('timestamp', descending: true)
               .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return Center(child: CircularProgressIndicator());
+              return const Center(child: CircularProgressIndicator());
             }
 
             if (snapshot.hasError) {
               print('Firestore Error: ${snapshot.error}');
-
-              return Center(child: Text('Error loading suggestions'));
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.red[50],
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.warning_amber,
+                        size: 48,
+                        color: Colors.red[300],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Error loading suggestions',
+                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              );
             }
 
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -6438,12 +7444,20 @@ class _SuggestionsViewState extends State<SuggestionsView> {
             var suggestions = snapshot.data!.docs;
             if (_searchController.text.isNotEmpty) {
               suggestions = suggestions.where((doc) {
-                final suggestion = doc['suggestion']?.toString().toLowerCase() ?? '';
-                return suggestion.contains(_searchController.text.toLowerCase());
+                final suggestion =
+                    doc['suggestion']?.toString().toLowerCase() ?? '';
+                return suggestion.contains(
+                  _searchController.text.toLowerCase(),
+                );
               }).toList();
             }
+
+            if (suggestions.isEmpty && _searchController.text.isNotEmpty) {
+              return _buildNoSearchResults();
+            }
+
             return ListView.builder(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               itemCount: suggestions.length,
               itemBuilder: (context, index) {
                 final doc = suggestions[index];
@@ -6463,48 +7477,110 @@ class _SuggestionsViewState extends State<SuggestionsView> {
 
   Widget _buildSuggestionCard(String docId, String suggestion, DateTime date) {
     return Container(
-      margin: EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 12),
       child: Card(
         elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                suggestion,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[800],
-                  height: 1.4,
-                ),
-              ),
-              SizedBox(height: 12),
-              Row(
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
-                      SizedBox(width: 4),
-                      Text(
-                        DateFormat('MMM dd, yyyy • hh:mm a').format(date),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[500],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey[100]!),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF667eea), Color(0xFF764ba2)],
                         ),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                    ],
-                  ),
-                  Spacer(),
-                  IconButton(
-                    icon: Icon(Icons.delete_outline, size: 20),
-                    onPressed: () => _deleteSuggestion(docId),
-                    color: Colors.grey[500],
-                  ),
-                ],
-              ),
-            ],
+                      child: const Icon(
+                        Icons.lightbulb_outline,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            suggestion,
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Colors.grey[800],
+                              height: 1.5,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[100],
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.access_time,
+                                      size: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      DateFormat(
+                                        'MMM dd, yyyy • hh:mm a',
+                                      ).format(date),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey[600],
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: IconButton(
+                        icon: Icon(
+                          Icons.delete_outline,
+                          size: 18,
+                          color: Colors.grey[600],
+                        ),
+                        onPressed: () => _deleteSuggestion(docId),
+                        padding: const EdgeInsets.all(8),
+                        constraints: const BoxConstraints(),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -6516,26 +7592,72 @@ class _SuggestionsViewState extends State<SuggestionsView> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.inbox,
-            size: 80,
-            color: Colors.grey[300],
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF667eea).withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.inbox,
+              size: 80,
+              color: const Color(0xFF667eea).withOpacity(0.5),
+            ),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 24),
           Text(
             'No Suggestions Yet',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
-              color: Colors.grey[500],
+              color: Colors.grey[700],
+              letterSpacing: 0.5,
             ),
           ),
-          SizedBox(height: 8),
-          Text(
-            'Be the first to share your feedback!',
-            style: TextStyle(
-              color: Colors.grey[400],
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              'Be the first to share your feedback! Tap the + button to add a suggestion.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[500],
+                height: 1.5,
+              ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoSearchResults() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.search_off, size: 48, color: Colors.grey[400]),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No matching suggestions',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Try a different search term',
+            style: TextStyle(color: Colors.grey[400]),
           ),
         ],
       ),
@@ -6546,60 +7668,158 @@ class _SuggestionsViewState extends State<SuggestionsView> {
     TextEditingController controller = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Add Suggestion'),
-        content: TextField(
-          controller: controller,
-          maxLines: 4,
-          decoration: InputDecoration(
-            hintText: 'Share your thoughts, ideas, or feedback...',
-            border: OutlineInputBorder(),
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.add_comment,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Add Suggestion',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: TextField(
+                  controller: controller,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    hintText: 'Share your thoughts, ideas, or feedback...',
+                    hintStyle: TextStyle(color: Colors.grey[400]),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.all(16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: BorderSide(
+                            color: Colors.white.withOpacity(0.3),
+                          ),
+                        ),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        if (controller.text.trim().isNotEmpty) {
+                          _addSuggestion(controller.text.trim());
+                          Navigator.pop(context);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF667eea),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        elevation: 2,
+                      ),
+                      child: const Text(
+                        'Submit',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (controller.text.trim().isNotEmpty) {
-                _addSuggestion(controller.text.trim());
-                Navigator.pop(context);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Color(0xFF667eea),
-            ),
-            child: Text('Submit'),
-          ),
-        ],
       ),
     );
   }
 
-
   Future<void> _addSuggestion(String suggestion) async {
-    String? signkey=await getKey( FirebaseAuth.instance.currentUser!.uid);
+    String? signkey = await getKey(FirebaseAuth.instance.currentUser!.uid);
     try {
       await _firestore.collection('suggestions').add({
         'suggestion': suggestion,
-        'signkey':signkey,
+        'signkey': signkey,
         'timestamp': FieldValue.serverTimestamp(),
         'userId': FirebaseAuth.instance.currentUser?.uid,
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Suggestion added successfully!'),
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Suggestion added successfully!')),
+            ],
+          ),
           backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          duration: const Duration(seconds: 2),
         ),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to add suggestion'),
+          content: Row(
+            children: [
+              const Icon(Icons.error, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Failed to add suggestion')),
+            ],
+          ),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
     }
@@ -6608,20 +7828,72 @@ class _SuggestionsViewState extends State<SuggestionsView> {
   Future<void> _deleteSuggestion(String docId) async {
     final confirmed = await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete Suggestion'),
-        content: Text('Are you sure you want to delete this suggestion?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel'),
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.delete_outline,
+                  size: 32,
+                  color: Colors.red[400],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Delete Suggestion',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Are you sure you want to delete this suggestion?',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        elevation: 2,
+                      ),
+                      child: const Text('Delete'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: Text('Delete'),
-          ),
-        ],
+        ),
       ),
     );
 
@@ -6630,15 +7902,35 @@ class _SuggestionsViewState extends State<SuggestionsView> {
         await _firestore.collection('suggestions').doc(docId).delete();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Suggestion deleted'),
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(child: Text('Suggestion deleted')),
+              ],
+            ),
             backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to delete suggestion'),
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(child: Text('Failed to delete suggestion')),
+              ],
+            ),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }
@@ -6651,16 +7943,17 @@ class _SuggestionsViewState extends State<SuggestionsView> {
     super.dispose();
   }
 }
+
 class SuggestTopicsPage extends StatefulWidget {
   const SuggestTopicsPage({super.key});
 
   @override
   State<SuggestTopicsPage> createState() => _SuggestTopicsPageState();
 }
+
 class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
   final TextEditingController _topicController = TextEditingController();
   bool _isSubmitting = false;
-
 
   final List<String> _recentSuggestions = [
     'How to study for finals without stress',
@@ -6668,12 +7961,16 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
     'Time management for multiple projects',
     'Best ways to take notes in class',
     'How to prepare for job interviews',
-    'Balancing social life and studies'
+    'Balancing social life and studies',
   ];
-  Future<String>getKey(String uid)async{
-    DocumentSnapshot doc=await FirebaseFirestore.instance.collection('users').doc(uid).get();
+  Future<String> getKey(String uid) async {
+    DocumentSnapshot doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
     return doc['signkey'];
   }
+
   void _showToast(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
 
@@ -6692,28 +7989,26 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
         ),
         backgroundColor: isError ? Colors.red : Colors.green,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 2),
       ),
     );
   }
-  void submit()async{
-    final uid=await FirebaseAuth.instance.currentUser?.uid;
-    final signkey=await getKey(uid!);
+
+  void submit() async {
+    final uid = await FirebaseAuth.instance.currentUser?.uid;
+    final signkey = await getKey(uid!);
     await FirebaseFirestore.instance.collection('suggestions').add({
       'suggestion': _topicController.text,
-      'signkey':signkey,
+      'signkey': signkey,
       'timestamp': FieldValue.serverTimestamp(),
       'userId': FirebaseAuth.instance.currentUser?.uid,
     });
-    _showToast( "Suggestion added successfully.");
+    _showToast("Suggestion added successfully.");
     _topicController.clear();
-
   }
 
-  void _submitSuggestion() async{
+  void _submitSuggestion() async {
     if (_topicController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -6749,16 +8044,15 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
         context: context,
         builder: (BuildContext context) {
           return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF667eea),
-                    Color(0xFF764ba2),
-                  ],
+                  colors: [Color(0xFF667eea), Color(0xFF764ba2)],
                 ),
                 borderRadius: BorderRadius.circular(16),
               ),
@@ -6787,7 +8081,11 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
                     ),
                     child: Column(
                       children: [
-                        Icon(Icons.thumb_up, color: Color(0xFF667eea), size: 50),
+                        Icon(
+                          Icons.thumb_up,
+                          color: Color(0xFF667eea),
+                          size: 50,
+                        ),
                         SizedBox(height: 16),
                         Text(
                           'Suggestion sent!',
@@ -6838,10 +8136,7 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF667eea),
-            Color(0xFF764ba2),
-          ],
+          colors: [Color(0xFF667eea), Color(0xFF764ba2)],
         ),
       ),
       child: SafeArea(
@@ -6903,7 +8198,11 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
                           children: [
                             Row(
                               children: [
-                                Icon(Icons.lightbulb_outline, color: Color(0xFF667eea), size: 20),
+                                Icon(
+                                  Icons.lightbulb_outline,
+                                  color: Color(0xFF667eea),
+                                  size: 20,
+                                ),
                                 SizedBox(width: 8),
                                 Text(
                                   'Need ideas? Tap below:',
@@ -6919,24 +8218,42 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
-                              children: _recentSuggestions.take(6).map((example) => GestureDetector(
-                                onTap: () => _useExample(example),
-                                child: Container(
-                                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: Color(0xFF667eea).withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Color(0xFF667eea).withOpacity(0.3)),
-                                  ),
-                                  child: Text(
-                                    example.length > 30 ? '${example.substring(0, 30)}...' : example,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Color(0xFF667eea),
+                              children: _recentSuggestions
+                                  .take(6)
+                                  .map(
+                                    (example) => GestureDetector(
+                                      onTap: () => _useExample(example),
+                                      child: Container(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Color(
+                                            0xFF667eea,
+                                          ).withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                          border: Border.all(
+                                            color: Color(
+                                              0xFF667eea,
+                                            ).withOpacity(0.3),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          example.length > 30
+                                              ? '${example.substring(0, 30)}...'
+                                              : example,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Color(0xFF667eea),
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
-                              )).toList(),
+                                  )
+                                  .toList(),
                             ),
                           ],
                         ),
@@ -6977,43 +8294,53 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
                               height: 50,
                               child: _isSubmitting
                                   ? ElevatedButton(
-                                onPressed: null,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Color(0xFF667eea),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      onPressed: null,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Color(0xFF667eea),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                    Colors.white,
+                                                  ),
+                                            ),
+                                          ),
+                                          SizedBox(width: 8),
+                                          Text('Sending...'),
+                                        ],
+                                      ),
+                                    )
+                                  : ElevatedButton(
+                                      onPressed: _submitSuggestion,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Color(0xFF667eea),
+                                        padding: EdgeInsets.symmetric(
+                                          vertical: 12,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        'Submit Suggestion',
+                                        style: TextStyle(fontSize: 16),
                                       ),
                                     ),
-                                    SizedBox(width: 8),
-                                    Text('Sending...'),
-                                  ],
-                                ),
-                              )
-                                  : ElevatedButton(
-                                onPressed: _submitSuggestion,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Color(0xFF667eea),
-                                  padding: EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: Text(
-                                  'Submit Suggestion',
-                                  style: TextStyle(fontSize: 16),
-                                ),
-                              ),
                             ),
                           ],
                         ),
@@ -7030,6 +8357,7 @@ class _SuggestTopicsPageState extends State<SuggestTopicsPage> {
     );
   }
 }
+
 class TimetableEvent {
   final String id;
   final String userId;
@@ -7064,8 +8392,10 @@ class TimetableEvent {
       'description': description,
       'date': DateFormat('yyyy-MM-dd').format(date),
       'day': day,
-      'startTime': '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
-      'endTime': '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
+      'startTime':
+          '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
+      'endTime':
+          '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
       'color': color,
       'createdAt': FieldValue.serverTimestamp(),
     };
@@ -7121,12 +8451,14 @@ class TimetableEvent {
     );
   }
 }
+
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
 }
+
 class _ProfilePageState extends State<ProfilePage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -7139,17 +8471,45 @@ class _ProfilePageState extends State<ProfilePage> {
 
   bool _isEditingTimetable = false;
   List<String> _timeSlots = [
-    '6:00', '7:00', '8:00', '9:00', '10:00', '11:00',
-    '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'
+    '6:00',
+    '7:00',
+    '8:00',
+    '9:00',
+    '10:00',
+    '11:00',
+    '12:00',
+    '13:00',
+    '14:00',
+    '15:00',
+    '16:00',
+    '17:00',
+    '18:00',
   ];
 
-  final List<String> _days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  final List<String> _shortDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  final List<String> _days = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+  final List<String> _shortDays = [
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
+  ];
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final Uuid _uuid = const Uuid();
-  final TextEditingController _deleteConfirmationController = TextEditingController();
+  final TextEditingController _deleteConfirmationController =
+      TextEditingController();
   bool _isDeleting = false;
   OverlayEntry? _addButtonOverlay;
 
@@ -7181,9 +8541,7 @@ class _ProfilePageState extends State<ProfilePage> {
           _profileImageUrl = userDoc['profile'];
         });
       }
-    } catch (e) {
-
-    }
+    } catch (e) {}
   }
 
   Future<String> getRole() async {
@@ -7243,7 +8601,10 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _uploadImageToFirebase(List<int> imageBytes, String fileName) async {
+  Future<void> _uploadImageToFirebase(
+    List<int> imageBytes,
+    String fileName,
+  ) async {
     try {
       final userId = _auth.currentUser!.uid;
       final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -7262,12 +8623,13 @@ class _ProfilePageState extends State<ProfilePage> {
       );
 
       final uploadTask = storageRef.putData(
-          Uint8List.fromList(imageBytes),
-          metadata
+        Uint8List.fromList(imageBytes),
+        metadata,
       );
 
       uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-        final progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        final progress =
+            (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
         print('Upload progress: $progress%');
       });
 
@@ -7293,12 +8655,9 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _saveImageUrlToFirestore(String imageUrl) async {
     try {
       final userId = _auth.currentUser!.uid;
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .update({
+      await FirebaseFirestore.instance.collection('users').doc(userId).update({
         'profile': imageUrl,
-        'profileUpdatedAt': FieldValue.serverTimestamp()
+        'profileUpdatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
       print('Firestore error: $e');
@@ -7314,7 +8673,9 @@ class _ProfilePageState extends State<ProfilePage> {
         builder: (BuildContext context) {
           return AlertDialog(
             title: const Text("Remove Profile Picture"),
-            content: const Text("Are you sure you want to remove your profile picture?"),
+            content: const Text(
+              "Are you sure you want to remove your profile picture?",
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
@@ -7322,7 +8683,10 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text("Remove", style: TextStyle(color: Colors.red)),
+                child: const Text(
+                  "Remove",
+                  style: TextStyle(color: Colors.red),
+                ),
               ),
             ],
           );
@@ -7363,7 +8727,10 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: const Text("Remove Photo", style: TextStyle(color: Colors.red)),
+                title: const Text(
+                  "Remove Photo",
+                  style: TextStyle(color: Colors.red),
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   _removeProfilePicture();
@@ -7380,24 +8747,31 @@ class _ProfilePageState extends State<ProfilePage> {
     _showToast('Profile updated successfully!');
   }
 
-
   Stream<List<TimetableEvent>> _getTimetableEvents() {
     final uid = _auth.currentUser!.uid;
     return _firestore
         .collection('timetable_events')
         .where('userId', isEqualTo: uid)
         .snapshots()
-        .map((s) => s.docs.map((d) => TimetableEvent.fromMap(d.data())).toList());
+        .map(
+          (s) => s.docs.map((d) => TimetableEvent.fromMap(d.data())).toList(),
+        );
   }
 
   Future<void> _saveEvent(TimetableEvent event) async {
     try {
       if (event.id.isEmpty) {
         final newEvent = event.copyWith(id: _uuid.v4());
-        await _firestore.collection('timetable_events').doc(newEvent.id).set(newEvent.toMap());
+        await _firestore
+            .collection('timetable_events')
+            .doc(newEvent.id)
+            .set(newEvent.toMap());
         _showToast('Event added successfully!');
       } else {
-        await _firestore.collection('timetable_events').doc(event.id).update(event.toMap());
+        await _firestore
+            .collection('timetable_events')
+            .doc(event.id)
+            .update(event.toMap());
         _showToast('Event updated successfully!');
       }
     } catch (e) {
@@ -7434,6 +8808,7 @@ class _ProfilePageState extends State<ProfilePage> {
     });
     _showToast('Time slot removed');
   }
+
   void _showAddEventButton(String day, int hour) {
     _removeAddButtonOverlay();
 
@@ -7475,7 +8850,10 @@ class _ProfilePageState extends State<ProfilePage> {
                             spreadRadius: 2,
                           ),
                         ],
-                        border: Border.all(color: Colors.blue.shade100, width: 1.5),
+                        border: Border.all(
+                          color: Colors.blue.shade100,
+                          width: 1.5,
+                        ),
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -7507,7 +8885,8 @@ class _ProfilePageState extends State<ProfilePage> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         'Add Event on $day',
@@ -7545,7 +8924,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                   Icons.add,
                                   'Add Event at ${hour.toString().padLeft(2, '0')}:00',
                                   'Create a new event at this time',
-                                      () {
+                                  () {
                                     _openAddDialog(day, hour);
                                     _removeAddButtonOverlay();
                                   },
@@ -7555,7 +8934,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                   Icons.schedule,
                                   'Custom Time Slot',
                                   'Choose a different start time',
-                                      () {
+                                  () {
                                     _openCustomTimeDialog(day);
                                     _removeAddButtonOverlay();
                                   },
@@ -7583,7 +8962,9 @@ class _ProfilePageState extends State<ProfilePage> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text("Delete Account"),
-        content: Text("Are you sure you want to delete your account? This action cannot be undone."),
+        content: Text(
+          "Are you sure you want to delete your account? This action cannot be undone.",
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -7619,7 +9000,7 @@ class _ProfilePageState extends State<ProfilePage> {
         await _auth.currentUser!.delete();
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => WelcomePage()),
-              (route) => false,
+          (route) => false,
         );
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -7628,24 +9009,24 @@ class _ProfilePageState extends State<ProfilePage> {
             backgroundColor: Colors.green,
           ),
         );
-
       } on FirebaseAuthException catch (e) {
         if (e.code == 'requires-recent-login') {
           await _auth.signOut();
 
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (context) => WelcomePage()),
-                (route) => false,
+            (route) => false,
           );
 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text("Account data deleted. Please login again if you want to delete authentication."),
+              content: Text(
+                "Account data deleted. Please login again if you want to delete authentication.",
+              ),
               backgroundColor: Colors.orange,
             ),
           );
         } else {
-
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text("Auth deletion failed: ${e.message}"),
@@ -7654,7 +9035,6 @@ class _ProfilePageState extends State<ProfilePage> {
           );
         }
       }
-
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -7669,9 +9049,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildDeleteAccountSection() {
     return Card(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 3,
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -7689,10 +9067,7 @@ class _ProfilePageState extends State<ProfilePage> {
             SizedBox(height: 16),
             Text(
               "This action cannot be undone. All your data will be permanently deleted.",
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 14,
-              ),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
             ),
             SizedBox(height: 20),
             SizedBox(
@@ -7701,10 +9076,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 icon: Icon(Icons.delete_outline, size: 20),
                 label: Text(
                   "Delete My Account",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
@@ -7722,7 +9094,13 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
-  Widget _buildAddEventOption(IconData icon, String title, String description, VoidCallback onTap) {
+
+  Widget _buildAddEventOption(
+    IconData icon,
+    String title,
+    String description,
+    VoidCallback onTap,
+  ) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -7744,11 +9122,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   color: Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
-                  icon,
-                  color: Colors.blue,
-                  size: 24,
-                ),
+                child: Icon(icon, color: Colors.blue, size: 24),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -7812,10 +9186,7 @@ class _ProfilePageState extends State<ProfilePage> {
   void _openCustomTimeDialog(String day) {
     showDialog(
       context: context,
-      builder: (_) => CustomTimeEventDialog(
-        day: day,
-        onSave: _saveEvent,
-      ),
+      builder: (_) => CustomTimeEventDialog(day: day, onSave: _saveEvent),
     );
   }
 
@@ -7833,7 +9204,6 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
-
 
   void _showToast(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
@@ -7853,9 +9223,7 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
         backgroundColor: isError ? Colors.red : Colors.green,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -7876,10 +9244,7 @@ class _ProfilePageState extends State<ProfilePage> {
         iconTheme: const IconThemeData(color: Colors.white),
         title: const Text(
           "My Profile",
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -7888,10 +9253,7 @@ class _ProfilePageState extends State<ProfilePage> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF667eea),
-                Color(0xFF764ba2),
-              ],
+              colors: [Color(0xFF667eea), Color(0xFF764ba2)],
             ),
           ),
         ),
@@ -7910,27 +9272,23 @@ class _ProfilePageState extends State<ProfilePage> {
         ],
       ),
       body: _isLoading
-          ? Center(
-        child: CircularProgressIndicator(
-          color: Color(0xFF667eea),
-        ),
-      )
+          ? Center(child: CircularProgressIndicator(color: Color(0xFF667eea)))
           : SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            _buildProfileHeader(),
-            const SizedBox(height: 32),
-            _buildSectionHeader("Personal Information"),
-            _buildInfoCard(),
-            const SizedBox(height: 32),
-            _buildWeeklyTimetable(),
-            const SizedBox(height: 32),
-            _buildDeleteAccountSection(),
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _buildProfileHeader(),
+                  const SizedBox(height: 32),
+                  _buildSectionHeader("Personal Information"),
+                  _buildInfoCard(),
+                  const SizedBox(height: 32),
+                  _buildWeeklyTimetable(),
+                  const SizedBox(height: 32),
+                  _buildDeleteAccountSection(),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
     );
   }
 
@@ -7945,36 +9303,29 @@ class _ProfilePageState extends State<ProfilePage> {
               height: 120,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.blue.shade300,
-                  width: 3,
-                ),
+                border: Border.all(color: Colors.blue.shade300, width: 3),
                 gradient: _profileImageUrl.isEmpty
                     ? LinearGradient(
-                  colors: [Colors.blue.shade100, Colors.blue.shade300],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                )
+                        colors: [Colors.blue.shade100, Colors.blue.shade300],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      )
                     : null,
               ),
               child: ClipOval(
                 child: _profileImageUrl.isEmpty
-                    ? Icon(
-                  Icons.person,
-                  size: 50,
-                  color: Colors.blue.shade700,
-                )
+                    ? Icon(Icons.person, size: 50, color: Colors.blue.shade700)
                     : Image.network(
-                  _profileImageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Icon(
-                      Icons.person,
-                      size: 50,
-                      color: Colors.blue.shade700,
-                    );
-                  },
-                ),
+                        _profileImageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Icon(
+                            Icons.person,
+                            size: 50,
+                            color: Colors.blue.shade700,
+                          );
+                        },
+                      ),
               ),
             ),
             if (_isEditing)
@@ -7994,7 +9345,11 @@ class _ProfilePageState extends State<ProfilePage> {
                   ],
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.camera_alt, size: 18, color: Colors.white),
+                  icon: const Icon(
+                    Icons.camera_alt,
+                    size: 18,
+                    color: Colors.white,
+                  ),
                   onPressed: _changeProfilePicture,
                   padding: EdgeInsets.zero,
                 ),
@@ -8016,18 +9371,20 @@ class _ProfilePageState extends State<ProfilePage> {
           decoration: BoxDecoration(
             gradient: _role == "mentor"
                 ? LinearGradient(
-              colors: [Colors.blue.shade50, Colors.blue.shade100],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            )
+                    colors: [Colors.blue.shade50, Colors.blue.shade100],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
                 : LinearGradient(
-              colors: [Colors.green.shade50, Colors.green.shade100],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+                    colors: [Colors.green.shade50, Colors.green.shade100],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: _role == "mentor" ? Colors.blue.shade300 : Colors.green.shade300,
+              color: _role == "mentor"
+                  ? Colors.blue.shade300
+                  : Colors.green.shade300,
             ),
             boxShadow: [
               BoxShadow(
@@ -8040,7 +9397,9 @@ class _ProfilePageState extends State<ProfilePage> {
           child: Text(
             _role,
             style: TextStyle(
-              color: _role == "mentor" ? Colors.blue.shade800 : Colors.green.shade800,
+              color: _role == "mentor"
+                  ? Colors.blue.shade800
+                  : Colors.green.shade800,
               fontWeight: FontWeight.w600,
               fontSize: 12,
             ),
@@ -8168,7 +9527,6 @@ class _ProfilePageState extends State<ProfilePage> {
           setState(() {
             _signkey = loadedSignkey;
           });
-
         } else {
           print('No signkey found in user document or signkey is empty');
         }
@@ -8358,12 +9716,20 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.add, size: 18, color: Colors.blue),
+                            icon: const Icon(
+                              Icons.add,
+                              size: 18,
+                              color: Colors.blue,
+                            ),
                             onPressed: _addNewTimeSlot,
                             tooltip: 'Add time slot',
                           ),
                           IconButton(
-                            icon: const Icon(Icons.remove, size: 18, color: Colors.red),
+                            icon: const Icon(
+                              Icons.remove,
+                              size: 18,
+                              color: Colors.red,
+                            ),
                             onPressed: _removeLastTimeSlot,
                             tooltip: 'Remove time slot',
                           ),
@@ -8374,26 +9740,32 @@ class _ProfilePageState extends State<ProfilePage> {
                     // Edit Toggle Button
                     Container(
                       decoration: BoxDecoration(
-                        color: _isEditingTimetable ? Colors.blue : Colors.grey.shade200,
+                        color: _isEditingTimetable
+                            ? Colors.blue
+                            : Colors.grey.shade200,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: IconButton(
                         icon: Icon(
                           _isEditingTimetable ? Icons.check : Icons.edit,
                           size: 20,
-                          color: _isEditingTimetable ? Colors.white : Colors.grey.shade700,
+                          color: _isEditingTimetable
+                              ? Colors.white
+                              : Colors.grey.shade700,
                         ),
                         onPressed: () {
                           setState(() {
                             _isEditingTimetable = !_isEditingTimetable;
                           });
                           _showToast(
-                              _isEditingTimetable
-                                  ? 'Edit mode enabled'
-                                  : 'Edit mode disabled'
+                            _isEditingTimetable
+                                ? 'Edit mode enabled'
+                                : 'Edit mode disabled',
                           );
                         },
-                        tooltip: _isEditingTimetable ? 'Save changes' : 'Edit timetable',
+                        tooltip: _isEditingTimetable
+                            ? 'Save changes'
+                            : 'Edit timetable',
                       ),
                     ),
                   ],
@@ -8403,10 +9775,7 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 4),
             Text(
               'Tap cells to ${_isEditingTimetable ? 'add/edit events' : 'view details'}',
-              style: const TextStyle(
-                fontSize: 12,
-                color: Colors.grey,
-              ),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
             const SizedBox(height: 20),
 
@@ -8457,7 +9826,9 @@ class _ProfilePageState extends State<ProfilePage> {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: const BoxDecoration(
                       color: Colors.blue,
-                      borderRadius: BorderRadius.only(topLeft: Radius.circular(8)),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(8),
+                      ),
                     ),
                     child: const Center(
                       child: Text(
@@ -8481,9 +9852,16 @@ class _ProfilePageState extends State<ProfilePage> {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
                         border: index < _shortDays.length - 1
-                            ? Border(right: BorderSide(color: Colors.blue.shade100, width: 1))
+                            ? Border(
+                                right: BorderSide(
+                                  color: Colors.blue.shade100,
+                                  width: 1,
+                                ),
+                              )
                             : null,
-                        color: isWeekend ? Colors.red.shade50 : Colors.blue.shade50,
+                        color: isWeekend
+                            ? Colors.red.shade50
+                            : Colors.blue.shade50,
                       ),
                       child: Column(
                         children: [
@@ -8491,7 +9869,9 @@ class _ProfilePageState extends State<ProfilePage> {
                             day,
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: isWeekend ? Colors.red.shade700 : Colors.blue.shade700,
+                              color: isWeekend
+                                  ? Colors.red.shade700
+                                  : Colors.blue.shade700,
                               fontSize: 14,
                             ),
                           ),
@@ -8500,7 +9880,9 @@ class _ProfilePageState extends State<ProfilePage> {
                             _days[index],
                             style: TextStyle(
                               fontSize: 10,
-                              color: isWeekend ? Colors.red.shade500 : Colors.blue.shade500,
+                              color: isWeekend
+                                  ? Colors.red.shade500
+                                  : Colors.blue.shade500,
                             ),
                           ),
                         ],
@@ -8521,7 +9903,9 @@ class _ProfilePageState extends State<ProfilePage> {
               return Container(
                 decoration: BoxDecoration(
                   border: Border(
-                    bottom: isLast ? BorderSide.none : BorderSide(color: Colors.grey.shade200),
+                    bottom: isLast
+                        ? BorderSide.none
+                        : BorderSide(color: Colors.grey.shade200),
                   ),
                 ),
                 child: Row(
@@ -8533,7 +9917,10 @@ class _ProfilePageState extends State<ProfilePage> {
                       decoration: BoxDecoration(
                         color: Colors.grey.shade50,
                         border: Border(
-                          right: BorderSide(color: Colors.grey.shade300, width: 1),
+                          right: BorderSide(
+                            color: Colors.grey.shade300,
+                            width: 1,
+                          ),
                         ),
                       ),
                       padding: const EdgeInsets.all(8),
@@ -8594,7 +9981,9 @@ class _ProfilePageState extends State<ProfilePage> {
                           width: 100,
                           height: 70,
                           decoration: BoxDecoration(
-                            color: isWeekend ? Colors.grey.shade50 : Colors.white,
+                            color: isWeekend
+                                ? Colors.grey.shade50
+                                : Colors.white,
                             border: Border(
                               right: BorderSide(color: Colors.grey.shade200),
                             ),
@@ -8602,8 +9991,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           padding: const EdgeInsets.all(4),
                           child: cellEvents.isEmpty
                               ? _isEditingTimetable
-                              ? _buildEmptyCell(day, hour)
-                              : null
+                                    ? _buildEmptyCell(day, hour)
+                                    : null
                               : _buildEventCell(cellEvents.first),
                         ),
                       );
@@ -8625,13 +10014,7 @@ class _ProfilePageState extends State<ProfilePage> {
         border: Border.all(color: Colors.blue.shade100, width: 1),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: const Center(
-        child: Icon(
-          Icons.add,
-          size: 20,
-          color: Colors.blue,
-        ),
-      ),
+      child: const Center(child: Icon(Icons.add, size: 20, color: Colors.blue)),
     );
   }
 
@@ -8639,7 +10022,10 @@ class _ProfilePageState extends State<ProfilePage> {
     return Container(
       decoration: BoxDecoration(
         color: HexColor(event.color).withOpacity(0.15),
-        border: Border.all(color: HexColor(event.color).withOpacity(0.5), width: 1.5),
+        border: Border.all(
+          color: HexColor(event.color).withOpacity(0.5),
+          width: 1.5,
+        ),
         borderRadius: BorderRadius.circular(6),
         boxShadow: [
           BoxShadow(
@@ -8667,20 +10053,14 @@ class _ProfilePageState extends State<ProfilePage> {
           const SizedBox(height: 2),
           Text(
             '${event.startTime.format(context)}-${event.endTime.format(context)}',
-            style: TextStyle(
-              fontSize: 8,
-              color: HexColor(event.color),
-            ),
+            style: TextStyle(fontSize: 8, color: HexColor(event.color)),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
           if (event.description.isNotEmpty)
             Text(
               event.description,
-              style: TextStyle(
-                fontSize: 7,
-                color: HexColor(event.color),
-              ),
+              style: TextStyle(fontSize: 7, color: HexColor(event.color)),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -8689,6 +10069,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 }
+
 class AddTimetableEventDialog extends StatefulWidget {
   final String day;
   final int presetHour;
@@ -8702,8 +10083,10 @@ class AddTimetableEventDialog extends StatefulWidget {
   });
 
   @override
-  State<AddTimetableEventDialog> createState() => _AddTimetableEventDialogState();
+  State<AddTimetableEventDialog> createState() =>
+      _AddTimetableEventDialogState();
 }
+
 class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -8735,9 +10118,7 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
       builder: (BuildContext context, Widget? child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF667eea),
-            ),
+            colorScheme: const ColorScheme.light(primary: Color(0xFF667eea)),
           ),
           child: child!,
         );
@@ -8748,7 +10129,8 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
       setState(() {
         _startTime = picked;
         if (_endTime.hour < _startTime.hour ||
-            (_endTime.hour == _startTime.hour && _endTime.minute <= _startTime.minute)) {
+            (_endTime.hour == _startTime.hour &&
+                _endTime.minute <= _startTime.minute)) {
           _endTime = TimeOfDay(
             hour: _startTime.hour + 1,
             minute: _startTime.minute,
@@ -8765,9 +10147,7 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
       builder: (BuildContext context, Widget? child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF667eea),
-            ),
+            colorScheme: const ColorScheme.light(primary: Color(0xFF667eea)),
           ),
           child: child!,
         );
@@ -8783,14 +10163,24 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
 
   Future<String> _getUserKey() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
     return doc['signkey'] ?? uid;
   }
 
   DateTime _getDateForDay(String day) {
     final now = DateTime.now();
-    final dayIndex = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        .indexOf(day);
+    final dayIndex = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ].indexOf(day);
     final currentDayIndex = now.weekday - 1;
     return now.add(Duration(days: dayIndex - currentDayIndex));
   }
@@ -8823,10 +10213,7 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
           ),
           Text(
             widget.day,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 24),
 
@@ -8846,7 +10233,10 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
               ),
               filled: true,
               fillColor: Colors.grey.shade50,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
               prefixIcon: const Icon(Icons.title, color: Colors.grey),
             ),
             style: const TextStyle(fontSize: 15),
@@ -8868,7 +10258,10 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
               ),
               filled: true,
               fillColor: Colors.grey.shade50,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
               prefixIcon: const Icon(Icons.description, color: Colors.grey),
             ),
             maxLines: 3,
@@ -8895,7 +10288,10 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
                     GestureDetector(
                       onTap: _selectStartTime,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(12),
@@ -8936,7 +10332,10 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
                     GestureDetector(
                       onTap: _selectEndTime,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(12),
@@ -8982,7 +10381,8 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: _colors.length,
-                  separatorBuilder: (context, index) => const SizedBox(width: 12),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(width: 12),
                   itemBuilder: (context, index) {
                     final colorData = _colors[index];
                     final color = colorData['color'] as String;
@@ -9022,8 +10422,12 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
                             name,
                             style: TextStyle(
                               fontSize: 10,
-                              color: _selectedColor == color ? Colors.black : Colors.grey,
-                              fontWeight: _selectedColor == color ? FontWeight.bold : FontWeight.normal,
+                              color: _selectedColor == color
+                                  ? Colors.black
+                                  : Colors.grey,
+                              fontWeight: _selectedColor == color
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                           ),
                         ],
@@ -9135,6 +10539,7 @@ class _AddTimetableEventDialogState extends State<AddTimetableEventDialog> {
     super.dispose();
   }
 }
+
 class CustomTimeEventDialog extends StatefulWidget {
   final String day;
   final Function(TimetableEvent) onSave;
@@ -9148,6 +10553,7 @@ class CustomTimeEventDialog extends StatefulWidget {
   @override
   State<CustomTimeEventDialog> createState() => _CustomTimeEventDialogState();
 }
+
 class _CustomTimeEventDialogState extends State<CustomTimeEventDialog> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -9157,7 +10563,12 @@ class _CustomTimeEventDialogState extends State<CustomTimeEventDialog> {
   String _selectedColor = '#2196F3';
 
   final List<String> _colors = [
-    '#4CAF50', '#2196F3', '#FF9800', '#F44336', '#9C27B0', '#00BCD4'
+    '#4CAF50',
+    '#2196F3',
+    '#FF9800',
+    '#F44336',
+    '#9C27B0',
+    '#00BCD4',
   ];
 
   Future<void> _selectStartTime() async {
@@ -9178,7 +10589,8 @@ class _CustomTimeEventDialogState extends State<CustomTimeEventDialog> {
       setState(() {
         _startTime = picked;
         if (_endTime.hour < _startTime.hour ||
-            (_endTime.hour == _startTime.hour && _endTime.minute <= _startTime.minute)) {
+            (_endTime.hour == _startTime.hour &&
+                _endTime.minute <= _startTime.minute)) {
           _endTime = TimeOfDay(
             hour: _startTime.hour + 1,
             minute: _startTime.minute,
@@ -9211,14 +10623,24 @@ class _CustomTimeEventDialogState extends State<CustomTimeEventDialog> {
 
   Future<String> _getUserKey() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
-    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
     return doc['signkey'] ?? uid;
   }
 
   DateTime _getDateForDay(String day) {
     final now = DateTime.now();
-    final dayIndex = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        .indexOf(day);
+    final dayIndex = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ].indexOf(day);
     final currentDayIndex = now.weekday - 1;
     return now.add(Duration(days: dayIndex - currentDayIndex));
   }
@@ -9235,16 +10657,10 @@ class _CustomTimeEventDialogState extends State<CustomTimeEventDialog> {
           children: [
             const Text(
               'Add Event with Custom Time',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
-            Text(
-              widget.day,
-              style: const TextStyle(color: Colors.grey),
-            ),
+            Text(widget.day, style: const TextStyle(color: Colors.grey)),
             const SizedBox(height: 20),
 
             TextField(
@@ -9303,7 +10719,9 @@ class _CustomTimeEventDialogState extends State<CustomTimeEventDialog> {
                       color: HexColor(color),
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: _selectedColor == color ? Colors.black : Colors.transparent,
+                        color: _selectedColor == color
+                            ? Colors.black
+                            : Colors.transparent,
                         width: 2,
                       ),
                     ),
@@ -9363,6 +10781,7 @@ class _CustomTimeEventDialogState extends State<CustomTimeEventDialog> {
     super.dispose();
   }
 }
+
 class EditTimetableEventDialog extends StatefulWidget {
   final TimetableEvent event;
   final Function(TimetableEvent) onSave;
@@ -9376,8 +10795,10 @@ class EditTimetableEventDialog extends StatefulWidget {
   });
 
   @override
-  State<EditTimetableEventDialog> createState() => _EditTimetableEventDialogState();
+  State<EditTimetableEventDialog> createState() =>
+      _EditTimetableEventDialogState();
 }
+
 class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -9412,9 +10833,7 @@ class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
       builder: (BuildContext context, Widget? child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF667eea),
-            ),
+            colorScheme: const ColorScheme.light(primary: Color(0xFF667eea)),
           ),
           child: child!,
         );
@@ -9435,9 +10854,7 @@ class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
       builder: (BuildContext context, Widget? child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF667eea),
-            ),
+            colorScheme: const ColorScheme.light(primary: Color(0xFF667eea)),
           ),
           child: child!,
         );
@@ -9479,10 +10896,7 @@ class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
           ),
           Text(
             '${widget.event.day} • ${_startTime.format(context)}-${_endTime.format(context)}',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 24),
 
@@ -9502,7 +10916,10 @@ class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
               ),
               filled: true,
               fillColor: Colors.grey.shade50,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
               prefixIcon: const Icon(Icons.title, color: Colors.grey),
             ),
             style: const TextStyle(fontSize: 15),
@@ -9524,7 +10941,10 @@ class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
               ),
               filled: true,
               fillColor: Colors.grey.shade50,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
               prefixIcon: const Icon(Icons.description, color: Colors.grey),
             ),
             maxLines: 3,
@@ -9551,7 +10971,10 @@ class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
                     GestureDetector(
                       onTap: _selectStartTime,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(12),
@@ -9592,7 +11015,10 @@ class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
                     GestureDetector(
                       onTap: _selectEndTime,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(12),
@@ -9638,7 +11064,8 @@ class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: _colors.length,
-                  separatorBuilder: (context, index) => const SizedBox(width: 12),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(width: 12),
                   itemBuilder: (context, index) {
                     final colorData = _colors[index];
                     final color = colorData['color'] as String;
@@ -9678,8 +11105,12 @@ class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
                             name,
                             style: TextStyle(
                               fontSize: 10,
-                              color: _selectedColor == color ? Colors.black : Colors.grey,
-                              fontWeight: _selectedColor == color ? FontWeight.bold : FontWeight.normal,
+                              color: _selectedColor == color
+                                  ? Colors.black
+                                  : Colors.grey,
+                              fontWeight: _selectedColor == color
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                           ),
                         ],
@@ -9710,10 +11141,7 @@ class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
                     children: [
                       Icon(Icons.delete, size: 18, color: Colors.red),
                       SizedBox(width: 8),
-                      Text(
-                        'Delete',
-                        style: TextStyle(color: Colors.red),
-                      ),
+                      Text('Delete', style: TextStyle(color: Colors.red)),
                     ],
                   ),
                 ),
@@ -9807,14 +11235,17 @@ class _EditTimetableEventDialogState extends State<EditTimetableEventDialog> {
     super.dispose();
   }
 }
+
 class HexColor extends Color {
   HexColor(final String hex) : super(int.parse(hex.replaceFirst('#', '0xff')));
 }
+
 class ViewMentorPage extends StatefulWidget {
   const ViewMentorPage({super.key});
   @override
   State<ViewMentorPage> createState() => _ViewMentorPageState();
 }
+
 class _ViewMentorPageState extends State<ViewMentorPage> {
   String mentorName = 'Loading...';
   String mentorEmail = 'Loading...';
@@ -9832,7 +11263,9 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
             .doc(mentor['id'])
             .get();
 
-        if (mentorDoc.exists && mentorDoc['profile'] != null && mentorDoc['profile'].isNotEmpty) {
+        if (mentorDoc.exists &&
+            mentorDoc['profile'] != null &&
+            mentorDoc['profile'].isNotEmpty) {
           setState(() {
             _profileImageUrl = mentorDoc['profile'];
           });
@@ -9920,10 +11353,7 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
   }
 
   Future<void> _sendEmail() async {
-    final Uri emailLaunchUri = Uri(
-      scheme: 'mailto',
-      path: mentorEmail,
-    );
+    final Uri emailLaunchUri = Uri(scheme: 'mailto', path: mentorEmail);
 
     if (!await launchUrl(emailLaunchUri)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -9942,17 +11372,12 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
         iconTheme: IconThemeData(color: Colors.white),
         title: Text(
           'My Mentor',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         backgroundColor: Color(0xFF667eea),
         elevation: 0,
       ),
-      body: isLoading
-          ? _buildLoadingState()
-          : _buildProfileContent(),
+      body: isLoading ? _buildLoadingState() : _buildProfileContent(),
     );
   }
 
@@ -9961,16 +11386,11 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(
-            color: Color(0xFF667eea),
-          ),
+          CircularProgressIndicator(color: Color(0xFF667eea)),
           SizedBox(height: 16),
           Text(
             'Loading mentor profile...',
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 16,
-            ),
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
           ),
         ],
       ),
@@ -9997,43 +11417,56 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: Color(0xFF667eea).withOpacity(0.1),
-                      border: Border.all(
-                        color: Color(0xFF667eea),
-                        width: 3,
-                      ),
+                      border: Border.all(color: Color(0xFF667eea), width: 3),
                     ),
                     child: _profileImageUrl.isNotEmpty
                         ? ClipOval(
-                      child: Image.network(
-                        _profileImageUrl,
-                        width: 120,
-                        height: 120,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Center(
-                            child: CircularProgressIndicator(
-                              value: loadingProgress.expectedTotalBytes != null
-                                  ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
-                                  : null,
-                              color: Color(0xFF667eea),
+                            child: Image.network(
+                              _profileImageUrl,
+                              width: 120,
+                              height: 120,
+                              fit: BoxFit.cover,
+                              loadingBuilder:
+                                  (
+                                    BuildContext context,
+                                    Widget child,
+                                    ImageChunkEvent? loadingProgress,
+                                  ) {
+                                    if (loadingProgress == null) return child;
+                                    return Center(
+                                      child: CircularProgressIndicator(
+                                        value:
+                                            loadingProgress
+                                                    .expectedTotalBytes !=
+                                                null
+                                            ? loadingProgress
+                                                      .cumulativeBytesLoaded /
+                                                  loadingProgress
+                                                      .expectedTotalBytes!
+                                            : null,
+                                        color: Color(0xFF667eea),
+                                      ),
+                                    );
+                                  },
+                              errorBuilder:
+                                  (
+                                    BuildContext context,
+                                    Object error,
+                                    StackTrace? stackTrace,
+                                  ) {
+                                    return Icon(
+                                      Icons.person,
+                                      size: 50,
+                                      color: Color(0xFF667eea),
+                                    );
+                                  },
                             ),
-                          );
-                        },
-                        errorBuilder: (BuildContext context, Object error, StackTrace? stackTrace) {
-                          return Icon(
+                          )
+                        : Icon(
                             Icons.person,
                             size: 50,
                             color: Color(0xFF667eea),
-                          );
-                        },
-                      ),
-                    )
-                        : Icon(
-                      Icons.person,
-                      size: 50,
-                      color: Color(0xFF667eea),
-                    ),
+                          ),
                   ),
                   SizedBox(height: 20),
                   Text(
@@ -10102,8 +11535,8 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
                   SizedBox(height: 12),
                   Text(
                     'Your mentor is here to guide you through your learning journey. '
-                        'Feel free to reach out for assistance, guidance, or any questions '
-                        'you may have about your progress.',
+                    'Feel free to reach out for assistance, guidance, or any questions '
+                    'you may have about your progress.',
                     style: TextStyle(
                       color: Colors.grey.shade600,
                       fontSize: 14,
@@ -10133,11 +11566,7 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
         children: [
           Row(
             children: [
-              Icon(
-                Icons.contact_mail,
-                color: Color(0xFF667eea),
-                size: 20,
-              ),
+              Icon(Icons.contact_mail, color: Color(0xFF667eea), size: 20),
               SizedBox(width: 8),
               Text(
                 'Contact Details',
@@ -10220,6 +11649,7 @@ class _ViewMentorPageState extends State<ViewMentorPage> {
     );
   }
 }
+
 class MentorHelpSupportPage extends StatelessWidget {
   const MentorHelpSupportPage({super.key});
 
@@ -10227,14 +11657,10 @@ class MentorHelpSupportPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        iconTheme: IconThemeData(
-            color: Colors.white),
+        iconTheme: IconThemeData(color: Colors.white),
         title: Text(
           'Help & Support',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         backgroundColor: Color(0xFF667eea),
         elevation: 0,
@@ -10247,40 +11673,46 @@ class MentorHelpSupportPage extends StatelessWidget {
             _buildSectionHeader('Mentor Dashboard Guide'),
             _buildInfoCard(
               'Welcome to your MentorMenteeConnect dashboard! This comprehensive guide will help you '
-                  'understand all the tools and features available to manage your mentees effectively '
-                  'and create an engaging learning environment.',
+              'understand all the tools and features available to manage your mentees effectively '
+              'and create an engaging learning environment.',
             ),
             SizedBox(height: 24),
             _buildSectionHeader('Navigation Guide'),
             _buildFeatureItem(
               icon: Icons.dashboard,
               title: 'Dashboard Tab',
-              description: 'Overview of your mentorship activities, quick stats, and recent mentee interactions.',
+              description:
+                  'Overview of your mentorship activities, quick stats, and recent mentee interactions.',
             ),
             _buildFeatureItem(
               icon: Icons.people,
               title: 'Mentees Tab',
-              description: 'View and manage all your assigned mentees, their progress, and contact information.',
+              description:
+                  'View and manage all your assigned mentees, their progress, and contact information.',
             ),
             _buildFeatureItem(
               icon: Icons.announcement,
               title: 'Announcements Tab',
-              description: 'Create and manage announcements, meeting notifications, and important updates for your mentees.',
+              description:
+                  'Create and manage announcements, meeting notifications, and important updates for your mentees.',
             ),
             _buildFeatureItem(
               icon: Icons.assignment,
               title: 'Registers Tab',
-              description: 'Create attendance registers, track mentee participation, and manage session attendance.',
+              description:
+                  'Create attendance registers, track mentee participation, and manage session attendance.',
             ),
             _buildFeatureItem(
               icon: Icons.calendar_today,
               title: 'Schedule Tab',
-              description: 'Create and manage meetings, set up sessions, and organize your mentorship calendar.',
+              description:
+                  'Create and manage meetings, set up sessions, and organize your mentorship calendar.',
             ),
             _buildFeatureItem(
               icon: Icons.auto_awesome,
               title: 'AI Suggestions Tab',
-              description: 'Generate intelligent topic suggestions using Gemini AI based on your mentees\' interests and learning patterns.',
+              description:
+                  'Generate intelligent topic suggestions using Gemini AI based on your mentees\' interests and learning patterns.',
             ),
             SizedBox(height: 24),
             _buildSectionHeader('Mentor Features Explained'),
@@ -10342,7 +11774,11 @@ class MentorHelpSupportPage extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.auto_awesome_motion, color: Colors.purple.shade600, size: 24),
+                        Icon(
+                          Icons.auto_awesome_motion,
+                          color: Colors.purple.shade600,
+                          size: 24,
+                        ),
                         SizedBox(width: 8),
                         Text(
                           'Powered by Gemini AI',
@@ -10394,7 +11830,9 @@ class MentorHelpSupportPage extends StatelessWidget {
                           _buildAIStep('2. Click "Generate Topics" button'),
                           _buildAIStep('3. Review AI-generated suggestions'),
                           _buildAIStep('4. Save topics you want to use'),
-                          _buildAIStep('5. Schedule meetings around selected topics'),
+                          _buildAIStep(
+                            '5. Schedule meetings around selected topics',
+                          ),
                         ],
                       ),
                     ),
@@ -10404,14 +11842,30 @@ class MentorHelpSupportPage extends StatelessWidget {
             ),
             SizedBox(height: 24),
             _buildSectionHeader('Best Practices for Mentors'),
-            _buildTipItem('✓ Create announcements regularly to keep mentees engaged'),
-            _buildTipItem('✓ Set up attendance registers at least 15 minutes before sessions'),
-            _buildTipItem('✓ Schedule meetings well in advance and send reminders'),
-            _buildTipItem('✓ Use AI suggestions to discover new relevant topics'),
-            _buildTipItem('✓ Monitor attendance patterns to identify mentees needing support'),
-            _buildTipItem('✓ Use different announcement types for better organization'),
-            _buildTipItem('✓ Combine AI suggestions with mentee feedback for optimal topics'),
-            _buildTipItem('✓ Set realistic expiration times for attendance registers'),
+            _buildTipItem(
+              '✓ Create announcements regularly to keep mentees engaged',
+            ),
+            _buildTipItem(
+              '✓ Set up attendance registers at least 15 minutes before sessions',
+            ),
+            _buildTipItem(
+              '✓ Schedule meetings well in advance and send reminders',
+            ),
+            _buildTipItem(
+              '✓ Use AI suggestions to discover new relevant topics',
+            ),
+            _buildTipItem(
+              '✓ Monitor attendance patterns to identify mentees needing support',
+            ),
+            _buildTipItem(
+              '✓ Use different announcement types for better organization',
+            ),
+            _buildTipItem(
+              '✓ Combine AI suggestions with mentee feedback for optimal topics',
+            ),
+            _buildTipItem(
+              '✓ Set realistic expiration times for attendance registers',
+            ),
             SizedBox(height: 24),
             _buildSectionHeader('Troubleshooting'),
             _buildTroubleshootingItem(
@@ -10469,7 +11923,11 @@ class MentorHelpSupportPage extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.psychology, color: Colors.deepPurple.shade600, size: 24),
+                        Icon(
+                          Icons.psychology,
+                          color: Colors.deepPurple.shade600,
+                          size: 24,
+                        ),
                         SizedBox(width: 8),
                         Text(
                           'AI Suggestions Best Practices',
@@ -10502,12 +11960,24 @@ class MentorHelpSupportPage extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildAITip('Use AI suggestions as starting points for discussion'),
-                          _buildAITip('Combine multiple AI topics into comprehensive sessions'),
-                          _buildAITip('Modify AI suggestions based on your expertise'),
-                          _buildAITip('Use trending topics to keep content current'),
-                          _buildAITip('Balance AI suggestions with mentee-requested topics'),
-                          _buildAITip('Track which AI-generated topics resonate most with mentees'),
+                          _buildAITip(
+                            'Use AI suggestions as starting points for discussion',
+                          ),
+                          _buildAITip(
+                            'Combine multiple AI topics into comprehensive sessions',
+                          ),
+                          _buildAITip(
+                            'Modify AI suggestions based on your expertise',
+                          ),
+                          _buildAITip(
+                            'Use trending topics to keep content current',
+                          ),
+                          _buildAITip(
+                            'Balance AI suggestions with mentee-requested topics',
+                          ),
+                          _buildAITip(
+                            'Track which AI-generated topics resonate most with mentees',
+                          ),
                         ],
                       ),
                     ),
@@ -10543,7 +12013,7 @@ class MentorHelpSupportPage extends StatelessWidget {
                     SizedBox(height: 12),
                     Text(
                       'Maximize your impact as a mentor with these additional resources and tips '
-                          'for effective mentorship and engagement.',
+                      'for effective mentorship and engagement.',
                       style: TextStyle(
                         color: Colors.grey.shade600,
                         fontSize: 14,
@@ -10570,12 +12040,24 @@ class MentorHelpSupportPage extends StatelessWidget {
                             ),
                           ),
                           SizedBox(height: 8),
-                          _buildResourceTip('Set clear expectations with your mentees'),
-                          _buildResourceTip('Provide regular, constructive feedback'),
-                          _buildResourceTip('Encourage mentee participation and questions'),
-                          _buildResourceTip('Use a variety of teaching methods'),
-                          _buildResourceTip('Track progress and celebrate achievements'),
-                          _buildResourceTip('Leverage AI to discover new teaching angles'),
+                          _buildResourceTip(
+                            'Set clear expectations with your mentees',
+                          ),
+                          _buildResourceTip(
+                            'Provide regular, constructive feedback',
+                          ),
+                          _buildResourceTip(
+                            'Encourage mentee participation and questions',
+                          ),
+                          _buildResourceTip(
+                            'Use a variety of teaching methods',
+                          ),
+                          _buildResourceTip(
+                            'Track progress and celebrate achievements',
+                          ),
+                          _buildResourceTip(
+                            'Leverage AI to discover new teaching angles',
+                          ),
                         ],
                       ),
                     ),
@@ -10596,7 +12078,11 @@ class MentorHelpSupportPage extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.support_agent, color: Colors.orange.shade600, size: 24),
+                        Icon(
+                          Icons.support_agent,
+                          color: Colors.orange.shade600,
+                          size: 24,
+                        ),
                         SizedBox(width: 8),
                         Text(
                           'Technical Support',
@@ -10611,7 +12097,7 @@ class MentorHelpSupportPage extends StatelessWidget {
                     SizedBox(height: 12),
                     Text(
                       'For technical issues, system errors, AI feature problems, or feature requests, please contact the development team. '
-                          'Include detailed information about the issue for faster resolution.',
+                      'Include detailed information about the issue for faster resolution.',
                       style: TextStyle(
                         color: Colors.grey.shade600,
                         fontSize: 14,
@@ -10628,7 +12114,10 @@ class MentorHelpSupportPage extends StatelessWidget {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.warning_amber, color: Colors.orange.shade600),
+                          Icon(
+                            Icons.warning_amber,
+                            color: Colors.orange.shade600,
+                          ),
                           SizedBox(width: 12),
                           Expanded(
                             child: Text(
@@ -10654,6 +12143,7 @@ class MentorHelpSupportPage extends StatelessWidget {
       ),
     );
   }
+
   Widget _buildSectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -10667,12 +12157,11 @@ class MentorHelpSupportPage extends StatelessWidget {
       ),
     );
   }
+
   Widget _buildInfoCard(String text) {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Text(
@@ -10727,10 +12216,7 @@ class MentorHelpSupportPage extends StatelessWidget {
                 SizedBox(height: 4),
                 Text(
                   description,
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                 ),
               ],
             ),
@@ -10739,13 +12225,12 @@ class MentorHelpSupportPage extends StatelessWidget {
       ),
     );
   }
+
   Widget _buildFeatureCard(String title, IconData icon, String description) {
     return Card(
       elevation: 2,
       margin: EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Row(
@@ -10789,6 +12274,7 @@ class MentorHelpSupportPage extends StatelessWidget {
       ),
     );
   }
+
   Widget _buildAIFeatureItem(String feature, String description) {
     return Container(
       margin: EdgeInsets.only(bottom: 8),
@@ -10811,10 +12297,7 @@ class MentorHelpSupportPage extends StatelessWidget {
                 ),
                 Text(
                   description,
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                 ),
               ],
             ),
@@ -10829,10 +12312,7 @@ class MentorHelpSupportPage extends StatelessWidget {
       padding: EdgeInsets.only(bottom: 4),
       child: Text(
         step,
-        style: TextStyle(
-          color: Colors.purple.shade700,
-          fontSize: 13,
-        ),
+        style: TextStyle(color: Colors.purple.shade700, fontSize: 13),
       ),
     );
   }
@@ -10843,15 +12323,16 @@ class MentorHelpSupportPage extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.psychology_outlined, color: Colors.deepPurple.shade600, size: 16),
+          Icon(
+            Icons.psychology_outlined,
+            color: Colors.deepPurple.shade600,
+            size: 16,
+          ),
           SizedBox(width: 8),
           Expanded(
             child: Text(
               tip,
-              style: TextStyle(
-                color: Colors.deepPurple.shade700,
-                fontSize: 13,
-              ),
+              style: TextStyle(color: Colors.deepPurple.shade700, fontSize: 13),
             ),
           ),
         ],
@@ -10873,7 +12354,11 @@ class MentorHelpSupportPage extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber, color: Colors.orange.shade600, size: 18),
+              Icon(
+                Icons.warning_amber,
+                color: Colors.orange.shade600,
+                size: 18,
+              ),
               SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -10890,10 +12375,7 @@ class MentorHelpSupportPage extends StatelessWidget {
           SizedBox(height: 8),
           Text(
             solution,
-            style: TextStyle(
-              color: Colors.orange.shade700,
-              fontSize: 13,
-            ),
+            style: TextStyle(color: Colors.orange.shade700, fontSize: 13),
           ),
         ],
       ),
@@ -10911,10 +12393,7 @@ class MentorHelpSupportPage extends StatelessWidget {
           Expanded(
             child: Text(
               tip,
-              style: TextStyle(
-                color: Colors.grey.shade700,
-                fontSize: 14,
-              ),
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
             ),
           ),
         ],
@@ -10933,10 +12412,7 @@ class MentorHelpSupportPage extends StatelessWidget {
           Expanded(
             child: Text(
               tip,
-              style: TextStyle(
-                color: Colors.green.shade700,
-                fontSize: 13,
-              ),
+              style: TextStyle(color: Colors.green.shade700, fontSize: 13),
             ),
           ),
         ],
@@ -10967,18 +12443,14 @@ class MentorHelpSupportPage extends StatelessWidget {
           SizedBox(height: 6),
           Text(
             steps,
-            style: TextStyle(
-              color: Colors.blue.shade700,
-              fontSize: 13,
-            ),
+            style: TextStyle(color: Colors.blue.shade700, fontSize: 13),
           ),
         ],
       ),
     );
   }
-
-
 }
+
 class MenteeHelpSupportPage extends StatelessWidget {
   const MenteeHelpSupportPage({super.key});
 
@@ -10986,14 +12458,10 @@ class MenteeHelpSupportPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        iconTheme: IconThemeData(
-            color: Colors.white),
+        iconTheme: IconThemeData(color: Colors.white),
         title: Text(
           'Help & Support',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         backgroundColor: Color(0xFF667eea),
         elevation: 0,
@@ -11006,30 +12474,34 @@ class MenteeHelpSupportPage extends StatelessWidget {
             _buildSectionHeader('Welcome to MentorMenteeConnect'),
             _buildInfoCard(
               'MentorMenteeConnect is your dedicated platform for connecting with mentors, '
-                  'managing your learning journey, and accessing educational resources. '
-                  'This guide will help you understand all the features available to you.',
+              'managing your learning journey, and accessing educational resources. '
+              'This guide will help you understand all the features available to you.',
             ),
             SizedBox(height: 24),
             _buildSectionHeader('Navigation Guide'),
             _buildFeatureItem(
               icon: Icons.home,
               title: 'Home Tab',
-              description: 'View your dashboard with announcements, upcoming meetings, and quick overview of your activities.',
+              description:
+                  'View your dashboard with announcements, upcoming meetings, and quick overview of your activities.',
             ),
             _buildFeatureItem(
               icon: Icons.assignment,
               title: 'Register Tab',
-              description: 'Submit attendance for mentor sessions and respond to attendance registers.',
+              description:
+                  'Submit attendance for mentor sessions and respond to attendance registers.',
             ),
             _buildFeatureItem(
               icon: Icons.calendar_today,
               title: 'Schedule Tab',
-              description: 'View your meeting calendar, see upcoming sessions, and manage your schedule.',
+              description:
+                  'View your meeting calendar, see upcoming sessions, and manage your schedule.',
             ),
             _buildFeatureItem(
               icon: Icons.lightbulb_outline,
               title: 'Suggest Tab',
-              description: 'Share topic suggestions with your mentor for future sessions or discussions.',
+              description:
+                  'Share topic suggestions with your mentor for future sessions or discussions.',
             ),
             SizedBox(height: 24),
             _buildSectionHeader('Key Features Explained'),
@@ -11085,8 +12557,12 @@ class MenteeHelpSupportPage extends StatelessWidget {
             SizedBox(height: 24),
             _buildSectionHeader('Quick Tips'),
             _buildTipItem('✓ Check the app regularly for new announcements'),
-            _buildTipItem('✓ Submit attendance promptly when registers are available'),
-            _buildTipItem('✓ Use the suggestion feature to guide your learning'),
+            _buildTipItem(
+              '✓ Submit attendance promptly when registers are available',
+            ),
+            _buildTipItem(
+              '✓ Use the suggestion feature to guide your learning',
+            ),
             _buildTipItem('✓ Keep your profile information up to date'),
             _buildTipItem('✓ Contact your mentor directly for urgent matters'),
             SizedBox(height: 32),
@@ -11102,7 +12578,11 @@ class MenteeHelpSupportPage extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.support_agent, color: Color(0xFF667eea), size: 24),
+                        Icon(
+                          Icons.support_agent,
+                          color: Color(0xFF667eea),
+                          size: 24,
+                        ),
                         SizedBox(width: 8),
                         Text(
                           'Need More Help?',
@@ -11117,7 +12597,7 @@ class MenteeHelpSupportPage extends StatelessWidget {
                     SizedBox(height: 12),
                     Text(
                       'If you\'re experiencing technical issues or need additional assistance, '
-                          'please contact your mentor directly or reach out to our support team.',
+                      'please contact your mentor directly or reach out to our support team.',
                       style: TextStyle(
                         color: Colors.grey.shade600,
                         fontSize: 14,
@@ -11184,9 +12664,7 @@ class MenteeHelpSupportPage extends StatelessWidget {
   Widget _buildInfoCard(String text) {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Text(
@@ -11241,10 +12719,7 @@ class MenteeHelpSupportPage extends StatelessWidget {
                 SizedBox(height: 4),
                 Text(
                   description,
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                 ),
               ],
             ),
@@ -11258,9 +12733,7 @@ class MenteeHelpSupportPage extends StatelessWidget {
     return Card(
       elevation: 2,
       margin: EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Row(
@@ -11319,7 +12792,11 @@ class MenteeHelpSupportPage extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber, color: Colors.orange.shade600, size: 18),
+              Icon(
+                Icons.warning_amber,
+                color: Colors.orange.shade600,
+                size: 18,
+              ),
               SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -11336,10 +12813,7 @@ class MenteeHelpSupportPage extends StatelessWidget {
           SizedBox(height: 8),
           Text(
             solution,
-            style: TextStyle(
-              color: Colors.orange.shade700,
-              fontSize: 13,
-            ),
+            style: TextStyle(color: Colors.orange.shade700, fontSize: 13),
           ),
         ],
       ),
@@ -11357,19 +12831,15 @@ class MenteeHelpSupportPage extends StatelessWidget {
           Expanded(
             child: Text(
               tip,
-              style: TextStyle(
-                color: Colors.grey.shade700,
-                fontSize: 14,
-              ),
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
             ),
           ),
         ],
       ),
     );
   }
-
-
 }
+
 enum MeetingFrequency {
   daily('Daily', Icons.event_repeat, 'Every day'),
   weekly('Weekly', Icons.calendar_today, 'Once a week'),
@@ -11401,6 +12871,7 @@ enum MeetingFrequency {
     }
   }
 }
+
 class CombinedScheduleEvent {
   final DateTime date;
   final String startTime;
@@ -11437,6 +12908,7 @@ class CombinedScheduleEvent {
     };
   }
 }
+
 class TimePreferences {
   final TimeOfDay? preferredStartTime;
   final TimeOfDay? preferredEndTime;
@@ -11448,7 +12920,8 @@ class TimePreferences {
     this.meetingDuration,
   });
 
-  bool get hasTimeRange => preferredStartTime != null && preferredEndTime != null;
+  bool get hasTimeRange =>
+      preferredStartTime != null && preferredEndTime != null;
 
   Map<String, dynamic> toJson() {
     return {
@@ -11459,11 +12932,13 @@ class TimePreferences {
     };
   }
 }
+
 extension TimeOfDayExtension on TimeOfDay {
   String format24Hour() {
     return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
 }
+
 class GeminiMeetingSuggestionEngine {
   static Future<List<Map<String, dynamic>>> findOptimalTimesWithAI({
     required List<CombinedScheduleEvent> allEvents,
@@ -11488,17 +12963,21 @@ class GeminiMeetingSuggestionEngine {
         'meetingTitle': meetingTitle,
         'timePreferences': {
           'hasTimeRange': timePreferences.hasTimeRange,
-          'preferredStartTime': timePreferences.preferredStartTime?.format24Hour(),
+          'preferredStartTime': timePreferences.preferredStartTime
+              ?.format24Hour(),
           'preferredEndTime': timePreferences.preferredEndTime?.format24Hour(),
           'meetingDuration': timePreferences.meetingDuration?.inMinutes ?? 60,
         },
         'numberOfSuggestions': numberOfSuggestions,
         'now': now.toIso8601String(),
-        'candidateDates': candidateDates.map((d) => d.toIso8601String()).toList(),
+        'candidateDates': candidateDates
+            .map((d) => d.toIso8601String())
+            .toList(),
       };
 
-      final HttpsCallable callable = FirebaseFunctions.instance
-          .httpsCallable('generateMeetingSuggestions');
+      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable(
+        'generateMeetingSuggestions',
+      );
 
       final result = await callable.call(requestData);
       final data = result.data as Map<String, dynamic>;
@@ -11538,24 +13017,26 @@ class GeminiMeetingSuggestionEngine {
   }
 
   static List<Map<String, dynamic>> _parseCloudFunctionResponse(
-      List<dynamic> suggestions,
-      DateTime now,
-      MeetingFrequency frequency,
-      int numberOfSuggestions,
-      List<CombinedScheduleEvent> allEvents,
-      TimePreferences timePreferences,
-      List<DateTime> candidateDates,
-      String userSignkey,
-      ) {
+    List<dynamic> suggestions,
+    DateTime now,
+    MeetingFrequency frequency,
+    int numberOfSuggestions,
+    List<CombinedScheduleEvent> allEvents,
+    TimePreferences timePreferences,
+    List<DateTime> candidateDates,
+    String userSignkey,
+  ) {
     final List<Map<String, dynamic>> results = [];
 
     for (var suggestion in suggestions) {
       try {
         final suggestionMap = suggestion as Map<String, dynamic>;
         final date = DateTime.parse(suggestionMap['date']);
-        final daysAhead = suggestionMap['daysAhead'] ?? date.difference(now).inDays;
+        final daysAhead =
+            suggestionMap['daysAhead'] ?? date.difference(now).inDays;
 
-        if (daysAhead < frequency.minDaysAhead || date.weekday == DateTime.sunday) {
+        if (daysAhead < frequency.minDaysAhead ||
+            date.weekday == DateTime.sunday) {
           continue;
         }
 
@@ -11570,8 +13051,12 @@ class GeminiMeetingSuggestionEngine {
         }
 
         final timeParts = timeStr.split(':');
-        final startTime = TimeOfDay(hour: int.parse(timeParts[0]), minute: int.parse(timeParts[1]));
-        final durationMinutes = timePreferences.meetingDuration?.inMinutes ?? 60;
+        final startTime = TimeOfDay(
+          hour: int.parse(timeParts[0]),
+          minute: int.parse(timeParts[1]),
+        );
+        final durationMinutes =
+            timePreferences.meetingDuration?.inMinutes ?? 60;
 
         final conflicts = _checkConflictsForTime(
           date,
@@ -11592,7 +13077,9 @@ class GeminiMeetingSuggestionEngine {
           'conflicts': conflicts,
           'reasoning': suggestionMap['reasoning'] ?? '',
           'matchesPreferences': suggestionMap['matchesPreferences'] ?? false,
-          'preferenceMatches': List<String>.from(suggestionMap['preferenceMatches'] ?? []),
+          'preferenceMatches': List<String>.from(
+            suggestionMap['preferenceMatches'] ?? [],
+          ),
           'foundInGap': suggestionMap['foundInGap'] ?? false,
           'daysAhead': daysAhead,
           'timetableConflict': timetableConflict,
@@ -11632,18 +13119,21 @@ class GeminiMeetingSuggestionEngine {
   }
 
   static int _checkConflictsForTime(
-      DateTime date,
-      TimeOfDay startTime,
-      int durationMinutes,
-      List<CombinedScheduleEvent> allEvents,
-      String userSignkey,
-      ) {
+    DateTime date,
+    TimeOfDay startTime,
+    int durationMinutes,
+    List<CombinedScheduleEvent> allEvents,
+    String userSignkey,
+  ) {
     int conflicts = 0;
-    final dateEvents = allEvents.where((event) =>
-    event.date.year == date.year &&
-        event.date.month == date.month &&
-        event.date.day == date.day
-    ).toList();
+    final dateEvents = allEvents
+        .where(
+          (event) =>
+              event.date.year == date.year &&
+              event.date.month == date.month &&
+              event.date.day == date.day,
+        )
+        .toList();
 
     final suggestedStartMinutes = startTime.hour * 60 + startTime.minute;
     final suggestedEndMinutes = suggestedStartMinutes + durationMinutes;
@@ -11656,10 +13146,9 @@ class GeminiMeetingSuggestionEngine {
         final eventStartMinutes = eventStart.hour * 60 + eventStart.minute;
         final eventEndMinutes = eventEnd.hour * 60 + eventEnd.minute;
 
-        final hasConflict = (
-            suggestedStartMinutes < eventEndMinutes &&
-                suggestedEndMinutes > eventStartMinutes
-        );
+        final hasConflict =
+            (suggestedStartMinutes < eventEndMinutes &&
+            suggestedEndMinutes > eventStartMinutes);
 
         if (hasConflict) {
           if (event.source == 'timetable' && event.signkey == userSignkey) {
@@ -11674,13 +13163,13 @@ class GeminiMeetingSuggestionEngine {
   }
 
   static List<Map<String, dynamic>> _getFallbackSuggestions(
-      List<CombinedScheduleEvent> allEvents,
-      MeetingFrequency frequency,
-      TimePreferences timePreferences,
-      List<DateTime> candidateDates,
-      String userSignkey,
-      int numberOfSuggestions,
-      ) {
+    List<CombinedScheduleEvent> allEvents,
+    MeetingFrequency frequency,
+    TimePreferences timePreferences,
+    List<DateTime> candidateDates,
+    String userSignkey,
+    int numberOfSuggestions,
+  ) {
     final results = <Map<String, dynamic>>[];
     final durationMinutes = timePreferences.meetingDuration?.inMinutes ?? 60;
     final now = DateTime.now();
@@ -11689,20 +13178,26 @@ class GeminiMeetingSuggestionEngine {
       if (results.length >= numberOfSuggestions) break;
       if (date.weekday == DateTime.sunday) continue;
 
-      final daysAhead = date.difference(DateTime(now.year, now.month, now.day)).inDays;
+      final daysAhead = date
+          .difference(DateTime(now.year, now.month, now.day))
+          .inDays;
       if (daysAhead < frequency.minDaysAhead) {
         continue;
       }
 
-      final dateEvents = allEvents.where((event) =>
-      event.date.year == date.year &&
-          event.date.month == date.month &&
-          event.date.day == date.day
-      ).toList();
+      final dateEvents = allEvents
+          .where(
+            (event) =>
+                event.date.year == date.year &&
+                event.date.month == date.month &&
+                event.date.day == date.day,
+          )
+          .toList();
 
       final workingStart = const TimeOfDay(hour: 8, minute: 0);
       final workingEnd = const TimeOfDay(hour: 20, minute: 0);
-      final effectiveStartTime = timePreferences.preferredStartTime ?? workingStart;
+      final effectiveStartTime =
+          timePreferences.preferredStartTime ?? workingStart;
       final effectiveEndTime = timePreferences.preferredEndTime ?? workingEnd;
 
       TimeOfDay? suggestedTime;
@@ -11714,7 +13209,11 @@ class GeminiMeetingSuggestionEngine {
       List<TimeOfDay> candidateTimes = [];
 
       if (dateEvents.isEmpty) {
-        if (_hasSufficientGap(effectiveStartTime, effectiveEndTime, durationMinutes)) {
+        if (_hasSufficientGap(
+          effectiveStartTime,
+          effectiveEndTime,
+          durationMinutes,
+        )) {
           suggestedTime = effectiveStartTime;
           matchesPreferences = timePreferences.hasTimeRange;
           if (matchesPreferences) matchedPrefs.add('time');
@@ -11726,17 +13225,21 @@ class GeminiMeetingSuggestionEngine {
           final timeA = _parseTimeString(a.startTime);
           final timeB = _parseTimeString(b.startTime);
           if (timeA == null || timeB == null) return 0;
-          return (timeA.hour * 60 + timeA.minute).compareTo(timeB.hour * 60 + timeB.minute);
+          return (timeA.hour * 60 + timeA.minute).compareTo(
+            timeB.hour * 60 + timeB.minute,
+          );
         });
 
-        candidateTimes.addAll(_findAvailableSlotsInDay(
-          dateEvents,
-          durationMinutes,
-          effectiveStartTime,
-          effectiveEndTime,
-          workingStart,
-          workingEnd,
-        ));
+        candidateTimes.addAll(
+          _findAvailableSlotsInDay(
+            dateEvents,
+            durationMinutes,
+            effectiveStartTime,
+            effectiveEndTime,
+            workingStart,
+            workingEnd,
+          ),
+        );
       }
 
       for (final candidateTime in candidateTimes) {
@@ -11750,10 +13253,18 @@ class GeminiMeetingSuggestionEngine {
 
         if (conflicts == 0) {
           suggestedTime = candidateTime;
-          matchesPreferences = _isTimeInRange(suggestedTime, effectiveStartTime, effectiveEndTime);
+          matchesPreferences = _isTimeInRange(
+            suggestedTime,
+            effectiveStartTime,
+            effectiveEndTime,
+          );
           if (matchesPreferences) matchedPrefs.add('time');
 
-          final eventIndex = _findGapForTime(dateEvents, candidateTime, durationMinutes);
+          final eventIndex = _findGapForTime(
+            dateEvents,
+            candidateTime,
+            durationMinutes,
+          );
           if (eventIndex >= 0) {
             foundInGap = true;
             reasoning = 'Found gap between events';
@@ -11779,7 +13290,11 @@ class GeminiMeetingSuggestionEngine {
           continue;
         }
 
-        final isInTimeRange = _isTimeInRange(suggestedTime, effectiveStartTime, effectiveEndTime);
+        final isInTimeRange = _isTimeInRange(
+          suggestedTime,
+          effectiveStartTime,
+          effectiveEndTime,
+        );
         final score = _calculateFallbackScore(
           matchesPreferences,
           foundInGap,
@@ -11792,7 +13307,8 @@ class GeminiMeetingSuggestionEngine {
 
         results.add({
           'date': date,
-          'time': '${suggestedTime.hour.toString().padLeft(2, '0')}:${suggestedTime.minute.toString().padLeft(2, '0')}',
+          'time':
+              '${suggestedTime.hour.toString().padLeft(2, '0')}:${suggestedTime.minute.toString().padLeft(2, '0')}',
           'score': score,
           'conflicts': conflicts,
           'reasoning': '$reasoning ($daysAhead days ahead)',
@@ -11811,21 +13327,30 @@ class GeminiMeetingSuggestionEngine {
 
         if (date.weekday == DateTime.sunday) continue;
 
-        final daysAhead = date.difference(DateTime(now.year, now.month, now.day)).inDays;
+        final daysAhead = date
+            .difference(DateTime(now.year, now.month, now.day))
+            .inDays;
         if (daysAhead < frequency.minDaysAhead) continue;
 
-        final dateEvents = allEvents.where((event) =>
-        event.date.year == date.year &&
-            event.date.month == date.month &&
-            event.date.day == date.day
-        ).toList();
+        final dateEvents = allEvents
+            .where(
+              (event) =>
+                  event.date.year == date.year &&
+                  event.date.month == date.month &&
+                  event.date.day == date.day,
+            )
+            .toList();
 
         if (dateEvents.isEmpty && date.weekday <= 5) {
           TimeOfDay defaultTime;
           if (timePreferences.hasTimeRange) {
             final preferredTime = timePreferences.preferredStartTime!;
-            defaultTime = _isTimeInRange(preferredTime,
-                timePreferences.preferredStartTime!, timePreferences.preferredEndTime!)
+            defaultTime =
+                _isTimeInRange(
+                  preferredTime,
+                  timePreferences.preferredStartTime!,
+                  timePreferences.preferredEndTime!,
+                )
                 ? preferredTime
                 : const TimeOfDay(hour: 9, minute: 0);
           } else {
@@ -11844,15 +13369,22 @@ class GeminiMeetingSuggestionEngine {
             continue;
           }
 
-          final isInPreferredRange = timePreferences.hasTimeRange ?
-          _isTimeInRange(defaultTime, timePreferences.preferredStartTime!, timePreferences.preferredEndTime!) : false;
+          final isInPreferredRange = timePreferences.hasTimeRange
+              ? _isTimeInRange(
+                  defaultTime,
+                  timePreferences.preferredStartTime!,
+                  timePreferences.preferredEndTime!,
+                )
+              : false;
 
           results.add({
             'date': date,
-            'time': '${defaultTime.hour.toString().padLeft(2, '0')}:${defaultTime.minute.toString().padLeft(2, '0')}',
+            'time':
+                '${defaultTime.hour.toString().padLeft(2, '0')}:${defaultTime.minute.toString().padLeft(2, '0')}',
             'score': isInPreferredRange ? 70 : 60,
             'conflicts': 0,
-            'reasoning': 'No conflicts for $durationMinutes minutes ($daysAhead days ahead)',
+            'reasoning':
+                'No conflicts for $durationMinutes minutes ($daysAhead days ahead)',
             'matchesPreferences': isInPreferredRange,
             'preferenceMatches': isInPreferredRange ? ['time'] : [],
             'foundInGap': false,
@@ -11867,13 +13399,13 @@ class GeminiMeetingSuggestionEngine {
   }
 
   static List<TimeOfDay> _findAvailableSlotsInDay(
-      List<CombinedScheduleEvent> events,
-      int durationMinutes,
-      TimeOfDay preferredStart,
-      TimeOfDay preferredEnd,
-      TimeOfDay workingStart,
-      TimeOfDay workingEnd,
-      ) {
+    List<CombinedScheduleEvent> events,
+    int durationMinutes,
+    TimeOfDay preferredStart,
+    TimeOfDay preferredEnd,
+    TimeOfDay workingStart,
+    TimeOfDay workingEnd,
+  ) {
     final List<TimeOfDay> slots = [];
 
     final effectiveStart = _maxTimeOfDay(preferredStart, workingStart);
@@ -11890,7 +13422,9 @@ class GeminiMeetingSuggestionEngine {
       final timeA = _parseTimeString(a.startTime);
       final timeB = _parseTimeString(b.startTime);
       if (timeA == null || timeB == null) return 0;
-      return (timeA.hour * 60 + timeA.minute).compareTo(timeB.hour * 60 + timeB.minute);
+      return (timeA.hour * 60 + timeA.minute).compareTo(
+        timeB.hour * 60 + timeB.minute,
+      );
     });
 
     final firstEventStart = _parseTimeString(events.first.startTime);
@@ -11906,7 +13440,11 @@ class GeminiMeetingSuggestionEngine {
       final nextEventStart = _parseTimeString(events[i + 1].startTime);
 
       if (currentEventEnd != null && nextEventStart != null) {
-        if (_hasSufficientGap(currentEventEnd, nextEventStart, durationMinutes) &&
+        if (_hasSufficientGap(
+              currentEventEnd,
+              nextEventStart,
+              durationMinutes,
+            ) &&
             _isTimeInRange(currentEventEnd, workingStart, workingEnd) &&
             _isTimeInRange(currentEventEnd, preferredStart, preferredEnd)) {
           slots.add(currentEventEnd);
@@ -11939,15 +13477,17 @@ class GeminiMeetingSuggestionEngine {
   }
 
   static int _findGapForTime(
-      List<CombinedScheduleEvent> events,
-      TimeOfDay time,
-      int durationMinutes,
-      ) {
+    List<CombinedScheduleEvent> events,
+    TimeOfDay time,
+    int durationMinutes,
+  ) {
     events.sort((a, b) {
       final timeA = _parseTimeString(a.startTime);
       final timeB = _parseTimeString(b.startTime);
       if (timeA == null || timeB == null) return 0;
-      return (timeA.hour * 60 + timeA.minute).compareTo(timeB.hour * 60 + timeB.minute);
+      return (timeA.hour * 60 + timeA.minute).compareTo(
+        timeB.hour * 60 + timeB.minute,
+      );
     });
 
     final timeInMinutes = time.hour * 60 + time.minute;
@@ -11957,7 +13497,8 @@ class GeminiMeetingSuggestionEngine {
 
     final firstEventStart = _parseTimeString(events.first.startTime);
     if (firstEventStart != null) {
-      final firstStartMinutes = firstEventStart.hour * 60 + firstEventStart.minute;
+      final firstStartMinutes =
+          firstEventStart.hour * 60 + firstEventStart.minute;
       if (endTimeInMinutes <= firstStartMinutes) {
         return -2;
       }
@@ -11968,8 +13509,10 @@ class GeminiMeetingSuggestionEngine {
       final nextEventStart = _parseTimeString(events[i + 1].startTime);
 
       if (currentEventEnd != null && nextEventStart != null) {
-        final currentEndMinutes = currentEventEnd.hour * 60 + currentEventEnd.minute;
-        final nextStartMinutes = nextEventStart.hour * 60 + nextEventStart.minute;
+        final currentEndMinutes =
+            currentEventEnd.hour * 60 + currentEventEnd.minute;
+        final nextStartMinutes =
+            nextEventStart.hour * 60 + nextEventStart.minute;
 
         if (timeInMinutes >= currentEndMinutes &&
             endTimeInMinutes <= nextStartMinutes) {
@@ -11990,11 +13533,11 @@ class GeminiMeetingSuggestionEngine {
   }
 
   static TimeOfDay? _findAnyAvailableSlot(
-      List<CombinedScheduleEvent> events,
-      int durationMinutes,
-      TimeOfDay startBoundary,
-      TimeOfDay endBoundary,
-      ) {
+    List<CombinedScheduleEvent> events,
+    int durationMinutes,
+    TimeOfDay startBoundary,
+    TimeOfDay endBoundary,
+  ) {
     if (events.isEmpty) {
       return startBoundary;
     }
@@ -12003,7 +13546,9 @@ class GeminiMeetingSuggestionEngine {
       final timeA = _parseTimeString(a.startTime);
       final timeB = _parseTimeString(b.startTime);
       if (timeA == null || timeB == null) return 0;
-      return (timeA.hour * 60 + timeA.minute).compareTo(timeB.hour * 60 + timeB.minute);
+      return (timeA.hour * 60 + timeA.minute).compareTo(
+        timeB.hour * 60 + timeB.minute,
+      );
     });
 
     final firstEventStart = _parseTimeString(events.first.startTime);
@@ -12018,7 +13563,11 @@ class GeminiMeetingSuggestionEngine {
       final nextEventStart = _parseTimeString(events[i + 1].startTime);
 
       if (currentEventEnd != null && nextEventStart != null) {
-        if (_hasSufficientGap(currentEventEnd, nextEventStart, durationMinutes)) {
+        if (_hasSufficientGap(
+          currentEventEnd,
+          nextEventStart,
+          durationMinutes,
+        )) {
           return currentEventEnd;
         }
       }
@@ -12103,7 +13652,12 @@ class GeminiMeetingSuggestionEngine {
         final hour = int.tryParse(simpleMatch.group(1)!);
         final minute = int.tryParse(simpleMatch.group(2)!);
 
-        if (hour != null && minute != null && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+        if (hour != null &&
+            minute != null &&
+            hour >= 0 &&
+            hour <= 23 &&
+            minute >= 0 &&
+            minute <= 59) {
           return TimeOfDay(hour: hour, minute: minute);
         }
       }
@@ -12113,21 +13667,25 @@ class GeminiMeetingSuggestionEngine {
     return null;
   }
 
-  static bool _hasSufficientGap(TimeOfDay start, TimeOfDay end, int durationMinutes) {
+  static bool _hasSufficientGap(
+    TimeOfDay start,
+    TimeOfDay end,
+    int durationMinutes,
+  ) {
     final startInMinutes = start.hour * 60 + start.minute;
     final endInMinutes = end.hour * 60 + end.minute;
     return (endInMinutes - startInMinutes) >= durationMinutes;
   }
 
   static int _calculateFallbackScore(
-      bool matchesPrefs,
-      bool foundInGap,
-      int conflicts,
-      bool isWeekday,
-      int daysAhead,
-      int minDaysAhead,
-      bool isInTimeRange,
-      ) {
+    bool matchesPrefs,
+    bool foundInGap,
+    int conflicts,
+    bool isWeekday,
+    int daysAhead,
+    int minDaysAhead,
+    bool isInTimeRange,
+  ) {
     int score = 50;
 
     if (matchesPrefs) score += 15;
@@ -12152,6 +13710,7 @@ class GeminiMeetingSuggestionEngine {
     return score.clamp(0, 100);
   }
 }
+
 class SmartMeetingSchedulerPage extends StatefulWidget {
   const SmartMeetingSchedulerPage({super.key});
 
@@ -12159,12 +13718,15 @@ class SmartMeetingSchedulerPage extends StatefulWidget {
   State<SmartMeetingSchedulerPage> createState() =>
       _SmartMeetingSchedulerPageState();
 }
+
 class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _venueController = TextEditingController();
-  final TextEditingController _durationController = TextEditingController(text: '60');
+  final TextEditingController _durationController = TextEditingController(
+    text: '60',
+  );
   final FocusNode _titleFocusNode = FocusNode();
   final FocusNode _venueFocusNode = FocusNode();
   final FocusNode _durationFocusNode = FocusNode();
@@ -12187,9 +13749,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   void initState() {
     super.initState();
     _initializeSignkey();
-
   }
-
 
   Future<void> _initializeSignkey() async {
     if (_isLoadingSignkey) return;
@@ -12216,17 +13776,24 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
             _hasLoadError = false;
           });
         } else {
-          throw Exception('Signkey not found in user profile. Please update your profile.');
+          throw Exception(
+            'Signkey not found in user profile. Please update your profile.',
+          );
         }
       } else {
-        throw Exception('User profile not found. Please complete your profile setup.');
+        throw Exception(
+          'User profile not found. Please complete your profile setup.',
+        );
       }
     } catch (e) {
       setState(() {
         _hasLoadError = true;
         _userSignkey = null;
       });
-      _showSnackBar('Failed to load profile: ${e.toString().replaceAll('Exception: ', '')}', isError: true);
+      _showSnackBar(
+        'Failed to load profile: ${e.toString().replaceAll('Exception: ', '')}',
+        isError: true,
+      );
     } finally {
       setState(() {
         _isLoadingSignkey = false;
@@ -12251,12 +13818,18 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     try {
       final userId = _auth.currentUser?.uid;
       if (userId == null) {
-        _showSnackBar('User not authenticated. Please sign in again.', isError: true);
+        _showSnackBar(
+          'User not authenticated. Please sign in again.',
+          isError: true,
+        );
         return allEvents;
       }
 
       if (_userSignkey == null) {
-        _showSnackBar('User profile not loaded. Please wait or retry.', isError: true);
+        _showSnackBar(
+          'User profile not loaded. Please wait or retry.',
+          isError: true,
+        );
         return allEvents;
       }
 
@@ -12293,31 +13866,37 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
               final targetWeekday = weekdayMap[dayName];
               if (targetWeekday != null) {
                 DateTime currentDate = now;
-                while (currentDate.isBefore(next90Days) || currentDate.isAtSameMomentAs(next90Days)) {
+                while (currentDate.isBefore(next90Days) ||
+                    currentDate.isAtSameMomentAs(next90Days)) {
                   if (currentDate.weekday == targetWeekday) {
-                    final isMenteeEvent = eventUserId != null && eventUserId != userId;
-                    final displayTitle = isMenteeEvent ? '$title (Mentee)' : title;
+                    final isMenteeEvent =
+                        eventUserId != null && eventUserId != userId;
+                    final displayTitle = isMenteeEvent
+                        ? '$title (Mentee)'
+                        : title;
 
-                    allEvents.add(CombinedScheduleEvent(
-                      date: DateTime(currentDate.year, currentDate.month, currentDate.day),
-                      startTime: startTime,
-                      endTime: endTime,
-                      title: displayTitle,
-                      source: 'timetable',
-                      signkey: signkey,
-                    ));
+                    allEvents.add(
+                      CombinedScheduleEvent(
+                        date: DateTime(
+                          currentDate.year,
+                          currentDate.month,
+                          currentDate.day,
+                        ),
+                        startTime: startTime,
+                        endTime: endTime,
+                        title: displayTitle,
+                        source: 'timetable',
+                        signkey: signkey,
+                      ),
+                    );
                   }
                   currentDate = currentDate.add(const Duration(days: 1));
                 }
               }
             }
-          } catch (e) {
-
-          }
+          } catch (e) {}
         }
-      } catch (e) {
-
-      }
+      } catch (e) {}
       try {
         final eventsSnapshot = await _firestore
             .collection('Events')
@@ -12344,19 +13923,26 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                 startTime = '00:00';
                 endTime = '23:59';
               } else {
-                startTime = data['startTime']?.toString() ?? DateFormat('HH:mm').format(dateTime);
-                endTime = data['endTime']?.toString() ??
-                    DateFormat('HH:mm').format(dateTime.add(const Duration(hours: 1)));
+                startTime =
+                    data['startTime']?.toString() ??
+                    DateFormat('HH:mm').format(dateTime);
+                endTime =
+                    data['endTime']?.toString() ??
+                    DateFormat(
+                      'HH:mm',
+                    ).format(dateTime.add(const Duration(hours: 1)));
               }
 
-              allEvents.add(CombinedScheduleEvent(
-                date: DateTime(dateTime.year, dateTime.month, dateTime.day),
-                startTime: startTime,
-                endTime: endTime,
-                title: isAllDay ? '$title (All Day)' : title,
-                source: 'events',
-                signkey: data['signkey']?.toString(),
-              ));
+              allEvents.add(
+                CombinedScheduleEvent(
+                  date: DateTime(dateTime.year, dateTime.month, dateTime.day),
+                  startTime: startTime,
+                  endTime: endTime,
+                  title: isAllDay ? '$title (All Day)' : title,
+                  source: 'events',
+                  signkey: data['signkey']?.toString(),
+                ),
+              );
             }
           } catch (e) {
             print('Error parsing Events entry ${doc.id}: $e');
@@ -12379,27 +13965,28 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
           try {
             final dateTime = (data['dateTime'] as Timestamp?)?.toDate();
             if (dateTime != null) {
-              allEvents.add(CombinedScheduleEvent(
-                date: DateTime(dateTime.year, dateTime.month, dateTime.day),
-                startTime: data['startTime']?.toString() ?? '09:00',
-                endTime: data['endTime']?.toString() ?? '17:00',
-                title: data['title']?.toString() ?? 'Calendar Event',
-                source: 'calendar',
-                signkey: _userSignkey,
-              ));
+              allEvents.add(
+                CombinedScheduleEvent(
+                  date: DateTime(dateTime.year, dateTime.month, dateTime.day),
+                  startTime: data['startTime']?.toString() ?? '09:00',
+                  endTime: data['endTime']?.toString() ?? '17:00',
+                  title: data['title']?.toString() ?? 'Calendar Event',
+                  source: 'calendar',
+                  signkey: _userSignkey,
+                ),
+              );
             }
           } catch (e) {
             print('Error parsing calendar event ${doc.id}: $e');
           }
         }
-      } catch (e) {
-
-      }
-
-
+      } catch (e) {}
     } catch (e) {
       print('Error fetching schedule events: $e');
-      _showSnackBar('Error loading schedule events: ${e.toString().replaceAll('Exception: ', '')}', isError: true);
+      _showSnackBar(
+        'Error loading schedule events: ${e.toString().replaceAll('Exception: ', '')}',
+        isError: true,
+      );
     }
 
     return allEvents;
@@ -12407,7 +13994,10 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
 
   Future<void> _findAvailableDates() async {
     if (_userSignkey == null || _userSignkey!.isEmpty) {
-      _showSnackBar('Please wait, still loading your profile...', isError: true);
+      _showSnackBar(
+        'Please wait, still loading your profile...',
+        isError: true,
+      );
       await _initializeSignkey();
       if (_userSignkey == null) {
         return;
@@ -12427,16 +14017,19 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     });
 
     try {
-
-
       _allEvents = await _getAllScheduleEvents();
 
       final durationText = _durationController.text.trim();
       final durationMinutes = int.tryParse(durationText) ?? 60;
 
       if (durationMinutes <= 0) {
-        _showSnackBar('Please enter a valid duration (positive number)', isError: true);
-        setState(() { _isFindingDates = false; });
+        _showSnackBar(
+          'Please enter a valid duration (positive number)',
+          isError: true,
+        );
+        setState(() {
+          _isFindingDates = false;
+        });
         return;
       }
 
@@ -12446,14 +14039,15 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         meetingDuration: Duration(minutes: durationMinutes),
       );
 
-      final suggestions = await GeminiMeetingSuggestionEngine.findOptimalTimesWithAI(
-        allEvents: _allEvents,
-        frequency: _selectedFrequency,
-        userSignkey: _userSignkey!,
-        meetingTitle: _titleController.text.trim(),
-        timePreferences: timePreferences,
-        numberOfSuggestions: 3,
-      );
+      final suggestions =
+          await GeminiMeetingSuggestionEngine.findOptimalTimesWithAI(
+            allEvents: _allEvents,
+            frequency: _selectedFrequency,
+            userSignkey: _userSignkey!,
+            meetingTitle: _titleController.text.trim(),
+            timePreferences: timePreferences,
+            numberOfSuggestions: 3,
+          );
 
       setState(() {
         _availableDates = suggestions;
@@ -12462,30 +14056,45 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
       });
 
       if (suggestions.isEmpty) {
-        _showSnackBar('No optimal dates found for $durationMinutes minutes. Try changing duration, time preferences, or frequency.');
+        _showSnackBar(
+          'No optimal dates found for $durationMinutes minutes. Try changing duration, time preferences, or frequency.',
+        );
       } else {
-        final matchesCount = suggestions.where((s) => (s['matchesPreferences'] as bool?) ?? false).length;
-        final gapCount = suggestions.where((s) => (s['foundInGap'] as bool?) ?? false).length;
+        final matchesCount = suggestions
+            .where((s) => (s['matchesPreferences'] as bool?) ?? false)
+            .length;
+        final gapCount = suggestions
+            .where((s) => (s['foundInGap'] as bool?) ?? false)
+            .length;
         String extraInfo = '';
         if (matchesCount > 0) extraInfo += '($matchesCount match preferences) ';
         if (gapCount > 0) extraInfo += '($gapCount found in gaps)';
-        final earliestDate = suggestions.map((s) => s['date'] as DateTime).reduce((a, b) => a.isBefore(b) ? a : b);
+        final earliestDate = suggestions
+            .map((s) => s['date'] as DateTime)
+            .reduce((a, b) => a.isBefore(b) ? a : b);
         final earliestDays = earliestDate.difference(DateTime.now()).inDays;
 
-        _showSnackBar('Found ${suggestions.length} optimal meeting times! Earliest: $earliestDays days ahead. $extraInfo');
+        _showSnackBar(
+          'Found ${suggestions.length} optimal meeting times! Earliest: $earliestDays days ahead. $extraInfo',
+        );
       }
     } catch (e) {
       print('Error in _findAvailableDates: $e');
       setState(() {
         _isFindingDates = false;
       });
-      _showSnackBar('Error finding available dates: ${e.toString().replaceAll('Exception: ', '')}', isError: true);
+      _showSnackBar(
+        'Error finding available dates: ${e.toString().replaceAll('Exception: ', '')}',
+        isError: true,
+      );
     }
   }
 
   Future<void> _retryFindDates() async {
     if (_retryCount >= _maxRetries) {
-      _showSnackBar('Maximum retries reached. Try changing the frequency or preferences.');
+      _showSnackBar(
+        'Maximum retries reached. Try changing the frequency or preferences.',
+      );
       return;
     }
 
@@ -12536,7 +14145,8 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
       final durationText = _durationController.text.trim();
       final durationMinutes = int.tryParse(durationText) ?? 60;
 
-      final totalMinutes = startTime.hour * 60 + startTime.minute + durationMinutes;
+      final totalMinutes =
+          startTime.hour * 60 + startTime.minute + durationMinutes;
       final endTime = TimeOfDay(
         hour: totalMinutes ~/ 60,
         minute: totalMinutes % 60,
@@ -12549,19 +14159,23 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         startTime.hour,
         startTime.minute,
       );
-      final eventId = '${DateTime.now().millisecondsSinceEpoch}_${date.millisecondsSinceEpoch}';
+      final eventId =
+          '${DateTime.now().millisecondsSinceEpoch}_${date.millisecondsSinceEpoch}';
       final eventData = {
         'id': eventId,
         'uid': userId,
         'signkey': _userSignkey,
         'title': _titleController.text.trim(),
-        'description': 'Meeting: ${_venueController.text.isNotEmpty ? _venueController.text : "No venue specified"}\nDuration: ${durationMinutes} minutes\nFrequency: ${_selectedFrequency.title}',
+        'description':
+            'Meeting: ${_venueController.text.isNotEmpty ? _venueController.text : "No venue specified"}\nDuration: ${durationMinutes} minutes\nFrequency: ${_selectedFrequency.title}',
         'venue': _venueController.text.trim(),
         'type': 'meeting',
         'duration': durationMinutes,
         'frequency': _selectedFrequency.title,
         'timestamp': Timestamp.fromDate(meetingDateTime),
-        'isoDate': DateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS").format(meetingDateTime),
+        'isoDate': DateFormat(
+          "yyyy-MM-dd'T'HH:mm:ss.SSS",
+        ).format(meetingDateTime),
         'dateTime': DateFormat('d/M/yyyy • HH:mm').format(meetingDateTime),
         'reminderType': 'immediate',
         'createdAt': FieldValue.serverTimestamp(),
@@ -12573,7 +14187,8 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         userId: userId,
         signkey: _userSignkey!,
         title: _titleController.text.trim(),
-        description: 'Meeting: ${_venueController.text.isNotEmpty ? _venueController.text : "No venue specified"}\nDuration: ${durationMinutes} minutes\nFrequency: ${_selectedFrequency.title}',
+        description:
+            'Meeting: ${_venueController.text.isNotEmpty ? _venueController.text : "No venue specified"}\nDuration: ${durationMinutes} minutes\nFrequency: ${_selectedFrequency.title}',
         date: date,
         startTime: startTime,
         endTime: endTime,
@@ -12581,7 +14196,10 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         day: DateFormat('EEEE').format(date),
       ).toMap();
 
-      await _firestore.collection('timetable_events').doc(timetableId).set(timetableData);
+      await _firestore
+          .collection('timetable_events')
+          .doc(timetableId)
+          .set(timetableData);
 
       final daysAhead = date.difference(DateTime.now()).inDays;
       _showSnackBar(
@@ -12593,7 +14211,10 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
       _findAvailableDates();
     } catch (e) {
       print('Error scheduling meeting: $e');
-      _showSnackBar('Error scheduling meeting: ${e.toString().replaceAll('Exception: ', '')}', isError: true);
+      _showSnackBar(
+        'Error scheduling meeting: ${e.toString().replaceAll('Exception: ', '')}',
+        isError: true,
+      );
     }
   }
 
@@ -12641,14 +14262,17 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
             children: [
               ListTile(
                 leading: const Icon(Icons.access_time),
-                title: Text(_preferredStartTime != null
-                    ? 'From: ${_preferredStartTime!.format(context)}'
-                    : 'Select start time'
+                title: Text(
+                  _preferredStartTime != null
+                      ? 'From: ${_preferredStartTime!.format(context)}'
+                      : 'Select start time',
                 ),
                 onTap: () async {
                   final picked = await showTimePicker(
                     context: context,
-                    initialTime: _preferredStartTime ?? const TimeOfDay(hour: 9, minute: 0),
+                    initialTime:
+                        _preferredStartTime ??
+                        const TimeOfDay(hour: 9, minute: 0),
                   );
                   if (picked != null) {
                     setState(() {
@@ -12659,14 +14283,17 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
               ),
               ListTile(
                 leading: const Icon(Icons.timer),
-                title: Text(_preferredEndTime != null
-                    ? 'To: ${_preferredEndTime!.format(context)}'
-                    : 'Select end time'
+                title: Text(
+                  _preferredEndTime != null
+                      ? 'To: ${_preferredEndTime!.format(context)}'
+                      : 'Select end time',
                 ),
                 onTap: () async {
                   final picked = await showTimePicker(
                     context: context,
-                    initialTime: _preferredEndTime ?? const TimeOfDay(hour: 17, minute: 0),
+                    initialTime:
+                        _preferredEndTime ??
+                        const TimeOfDay(hour: 17, minute: 0),
                   );
                   if (picked != null) {
                     setState(() {
@@ -12743,10 +14370,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
         appBar: AppBar(
           title: const Text(
             'Smart Scheduler',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
           ),
           backgroundColor: Colors.transparent,
           flexibleSpace: Container(
@@ -12754,10 +14378,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF667eea),
-                  Color(0xFF764ba2),
-                ],
+                colors: [Color(0xFF667eea), Color(0xFF764ba2)],
               ),
             ),
           ),
@@ -12781,7 +14402,8 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
               Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
@@ -12795,10 +14417,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                               gradient: LinearGradient(
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
-                                colors: [
-                                  Color(0xFF667eea),
-                                  Color(0xFF764ba2),
-                                ],
+                                colors: [Color(0xFF667eea), Color(0xFF764ba2)],
                               ),
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -12851,7 +14470,8 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
               Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
@@ -12931,7 +14551,8 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
               Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
@@ -12950,7 +14571,9 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                           ),
                           IconButton(
                             icon: Icon(
-                              _showTimePreferences ? Icons.expand_less : Icons.expand_more,
+                              _showTimePreferences
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
                             ),
                             onPressed: () {
                               setState(() {
@@ -12995,7 +14618,8 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       const Text(
                                         'Preferred Time Range',
@@ -13004,7 +14628,8 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                                         ),
                                       ),
                                       Text(
-                                        timeRangeText ?? 'Tap to set preferred time',
+                                        timeRangeText ??
+                                            'Tap to set preferred time',
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: Colors.grey.shade600,
@@ -13045,7 +14670,8 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
               Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
@@ -13066,7 +14692,9 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                             onTap: _showFrequencySelectionDialog,
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 8),
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   begin: Alignment.topLeft,
@@ -13142,7 +14770,8 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
               Card(
                 elevation: 2,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
@@ -13165,7 +14794,9 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                               onPressed: _findAvailableDates,
                               style: ElevatedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 8),
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
                                 backgroundColor: Color(0xFF667eea),
                                 foregroundColor: Colors.white,
                               ),
@@ -13185,7 +14816,9 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                           padding: const EdgeInsets.symmetric(vertical: 40),
                           child: Column(
                             children: [
-                              CircularProgressIndicator(color: Color(0xFF667eea)),
+                              CircularProgressIndicator(
+                                color: Color(0xFF667eea),
+                              ),
                               const SizedBox(height: 16),
                               Column(
                                 children: [
@@ -13238,11 +14871,19 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                               final score = dateInfo['score'] as int;
                               final conflicts = dateInfo['conflicts'] as int;
                               final reasoning = dateInfo['reasoning'] as String;
-                              final matchesPreferences = (dateInfo['matchesPreferences'] as bool?) ?? false;
-                              final preferenceMatches = List<String>.from(dateInfo['preferenceMatches'] ?? []);
-                              final foundInGap = (dateInfo['foundInGap'] as bool?) ?? false;
-                              final daysAhead = (dateInfo['daysAhead'] as int?) ?? date.difference(DateTime.now()).inDays;
-                              final isRecommended = index == 0 && matchesPreferences;
+                              final matchesPreferences =
+                                  (dateInfo['matchesPreferences'] as bool?) ??
+                                  false;
+                              final preferenceMatches = List<String>.from(
+                                dateInfo['preferenceMatches'] ?? [],
+                              );
+                              final foundInGap =
+                                  (dateInfo['foundInGap'] as bool?) ?? false;
+                              final daysAhead =
+                                  (dateInfo['daysAhead'] as int?) ??
+                                  date.difference(DateTime.now()).inDays;
+                              final isRecommended =
+                                  index == 0 && matchesPreferences;
 
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 12),
@@ -13274,7 +14915,8 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: Colors.orange.shade700,
                                     side: BorderSide(
-                                        color: Colors.orange.shade300),
+                                      color: Colors.orange.shade300,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -13304,9 +14946,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                               Text(
                                 'No $durationMinutes minute slots available. Try changing duration, time preferences, or frequency',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                ),
+                                style: TextStyle(color: Colors.grey.shade600),
                               ),
                             ],
                           ),
@@ -13324,31 +14964,38 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
   }
 
   Widget _buildAIDateCard(
-      DateTime date,
-      String time,
-      int score,
-      int conflicts,
-      String reasoning,
-      bool matchesPreferences,
-      List<String> preferenceMatches,
-      bool foundInGap,
-      bool isRecommended,
-      int index,
-      int durationMinutes,
-      int daysAhead,
-      ) {
+    DateTime date,
+    String time,
+    int score,
+    int conflicts,
+    String reasoning,
+    bool matchesPreferences,
+    List<String> preferenceMatches,
+    bool foundInGap,
+    bool isRecommended,
+    int index,
+    int durationMinutes,
+    int daysAhead,
+  ) {
     final timeParts = time.split(':');
     final startTime = TimeOfDay(
-        hour: int.parse(timeParts[0]), minute: int.parse(timeParts[1]));
+      hour: int.parse(timeParts[0]),
+      minute: int.parse(timeParts[1]),
+    );
 
-    final totalMinutes = startTime.hour * 60 + startTime.minute + durationMinutes;
+    final totalMinutes =
+        startTime.hour * 60 + startTime.minute + durationMinutes;
     final endTime = TimeOfDay(
       hour: totalMinutes ~/ 60,
       minute: totalMinutes % 60,
     );
 
     return Card(
-      elevation: isRecommended ? 4 : (matchesPreferences || foundInGap) ? 3 : 2,
+      elevation: isRecommended
+          ? 4
+          : (matchesPreferences || foundInGap)
+          ? 3
+          : 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
@@ -13359,7 +15006,11 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
               : foundInGap
               ? Colors.purple.shade300
               : Colors.grey.shade200,
-          width: isRecommended ? 2 : (matchesPreferences || foundInGap) ? 1.5 : 1,
+          width: isRecommended
+              ? 2
+              : (matchesPreferences || foundInGap)
+              ? 1.5
+              : 1,
         ),
       ),
       child: Padding(
@@ -13380,8 +15031,10 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
-                    matchesPreferences ? Icons.thumb_up
-                        : foundInGap ? Icons.schedule
+                    matchesPreferences
+                        ? Icons.thumb_up
+                        : foundInGap
+                        ? Icons.schedule
                         : Icons.calendar_today,
                     color: matchesPreferences
                         ? Colors.blue.shade700
@@ -13410,13 +15063,14 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                       ),
                       Text(
                         '${startTime.format(context)} - ${endTime.format(context)} ($durationMinutes min)',
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                        ),
+                        style: TextStyle(color: Colors.grey.shade600),
                       ),
                       const SizedBox(height: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: daysAhead >= _selectedFrequency.minDaysAhead
                               ? Colors.green.shade50
@@ -13439,8 +15093,10 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                 ),
                 if (matchesPreferences)
                   Container(
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.blue.shade100,
                       borderRadius: BorderRadius.circular(12),
@@ -13456,8 +15112,10 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                   )
                 else if (foundInGap)
                   Container(
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.purple.shade100,
                       borderRadius: BorderRadius.circular(12),
@@ -13477,8 +15135,10 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
             Row(
               children: [
                 Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: _getConfidenceColor(score).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(6),
@@ -13495,8 +15155,10 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
                 const SizedBox(width: 8),
                 if (conflicts > 0)
                   Container(
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.orange.shade50,
                       borderRadius: BorderRadius.circular(6),
@@ -13597,6 +15259,7 @@ class _SmartMeetingSchedulerPageState extends State<SmartMeetingSchedulerPage> {
     );
   }
 }
+
 class _FrequencySelectionDialog extends StatelessWidget {
   final MeetingFrequency selectedFrequency;
   final Function(MeetingFrequency) onFrequencySelected;
@@ -13609,9 +15272,7 @@ class _FrequencySelectionDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SingleChildScrollView(
         child: Container(
           constraints: const BoxConstraints(maxWidth: 400),
@@ -13637,20 +15298,14 @@ class _FrequencySelectionDialog extends StatelessWidget {
                   const SizedBox(width: 12),
                   const Text(
                     'Select Frequency',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
               const SizedBox(height: 4),
               Text(
                 'How often should meetings occur?',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               ),
               const SizedBox(height: 20),
               ListView.separated(
@@ -13700,7 +15355,10 @@ class _FrequencySelectionDialog extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.orange.shade50,
                             borderRadius: BorderRadius.circular(4),
@@ -13716,10 +15374,7 @@ class _FrequencySelectionDialog extends StatelessWidget {
                       ],
                     ),
                     trailing: isSelected
-                        ? Icon(
-                      Icons.check_circle,
-                      color: Colors.blue.shade700,
-                    )
+                        ? Icon(Icons.check_circle, color: Colors.blue.shade700)
                         : null,
                     onTap: () {
                       onFrequencySelected(frequency);
