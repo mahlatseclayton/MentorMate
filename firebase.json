@@ -22,30 +22,10 @@
   },
   "functions": [
     {
-      "codebase": "default",
-      "disallowLegacyRuntimeConfig": true,
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
-        "*.local"
-      ],
+      
       "source": "functions"
-    },
-    {
-      "codebase": "mentormenteeconnectbase",
-      "disallowLegacyRuntimeConfig": true,
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
-        "*.local"
-      ],
-      "predeploy": [],
-      "source": "mentormenteeconnectbase"
     }
+   
   ],
   "hosting": {
     "public": "build/web",
