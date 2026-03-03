@@ -4763,13 +4763,12 @@ class _CalendarPageState extends State<CalendarPage> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
   Map<DateTime, List<Map<String, dynamic>>> _events = {};
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _selectedDay = DateTime.now();
-
-    // Load both collections immediately without waiting for listeners
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeBothCollections();
     });
@@ -4780,9 +4779,6 @@ class _CalendarPageState extends State<CalendarPage> {
       final uid = FirebaseAuth.instance.currentUser!.uid;
       final signKey = await getKey(uid);
 
-      print('Loading from both collections...');
-
-      // Load from both collections IMMEDIATELY with get() not snapshots()
       final eventsSnapshot = await FirebaseFirestore.instance
           .collection('events')
           .where('uid', isEqualTo: uid)
@@ -4794,33 +4790,26 @@ class _CalendarPageState extends State<CalendarPage> {
           .where('signkey', isEqualTo: signKey)
           .get();
 
-      print('Lowercase events: ${eventsSnapshot.docs.length}');
-      print('Uppercase Events: ${EventsSnapshot.docs.length}');
-
-      // Create a map to hold all events
       Map<DateTime, List<Map<String, dynamic>>> allEvents = {};
 
-      // Process lowercase events
       for (var doc in eventsSnapshot.docs) {
         _addEventToMap(allEvents, doc.data() as Map<String, dynamic>);
       }
 
-      // Process uppercase Events
       for (var doc in EventsSnapshot.docs) {
         _addEventToMap(allEvents, doc.data() as Map<String, dynamic>);
       }
 
-      // Update UI with all events
       setState(() {
         _events = allEvents;
+        _isLoading = false;
       });
 
-      print('Total events loaded: ${_events.length} days');
-
-      // NOW set up the real-time listeners for future updates
       _setupRealtimeListeners(uid, signKey);
     } catch (e) {
-      print('Error initializing collections: $e');
+      setState(() {
+        _isLoading = false;
+      });
       _showToast('Error loading events', isError: true);
     }
   }
@@ -4841,7 +4830,6 @@ class _CalendarPageState extends State<CalendarPage> {
       if (eventMap[dayOnly] == null) {
         eventMap[dayOnly] = [eventData];
       } else {
-        // Check for duplicates (by title and approximate time)
         bool exists = eventMap[dayOnly]!.any(
           (existing) =>
               existing['title'] == eventData['title'] &&
@@ -4885,42 +4873,22 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   void _setupRealtimeListeners(String uid, String signKey) {
-    print('Setting up real-time listeners...');
-
-    // Listener for lowercase 'events' collection
     FirebaseFirestore.instance
         .collection('events')
         .where('uid', isEqualTo: uid)
         .where('signkey', isEqualTo: signKey)
         .snapshots()
-        .listen(
-          (snapshot) {
-            print(
-              'Real-time update from lowercase events (${snapshot.docs.length} docs)',
-            );
-            _mergeEvents(snapshot.docs);
-          },
-          onError: (error) {
-            print('Error in lowercase events listener: $error');
-          },
-        );
+        .listen((snapshot) {
+          _mergeEvents(snapshot.docs);
+        }, onError: (error) {});
 
-    // Listener for uppercase 'Events' collection
     FirebaseFirestore.instance
         .collection('Events')
         .where('signkey', isEqualTo: signKey)
         .snapshots()
-        .listen(
-          (snapshot) {
-            print(
-              'Real-time update from uppercase Events (${snapshot.docs.length} docs)',
-            );
-            _mergeEvents(snapshot.docs);
-          },
-          onError: (error) {
-            print('Error in uppercase Events listener: $error');
-          },
-        );
+        .listen((snapshot) {
+          _mergeEvents(snapshot.docs);
+        }, onError: (error) {});
   }
 
   void _mergeEvents(List<QueryDocumentSnapshot> docs) {
@@ -5140,7 +5108,6 @@ class _CalendarPageState extends State<CalendarPage> {
 
   void _showToast(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).removeCurrentSnackBar();
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -5188,36 +5155,20 @@ class _CalendarPageState extends State<CalendarPage> {
     String? uid = await FirebaseAuth.instance.currentUser?.uid;
     final signKey = await getKey(uid!);
     final email = await getEmail();
-    String formattedDateTime =
-        '${date.day}/${date.month}/${date.year} • ${time != null ? time.format(context) : 'All Day'}';
+
     final event = {
       'title': title,
       'description': description,
       'signkey': signKey,
-      'dateTime': formattedDateTime,
-      'timestamp': Timestamp.fromDate(finalDateTime),
+      'studentEmail': email,
+      'dateTime': Timestamp.fromDate(finalDateTime),
       'isoDate': finalDateTime.toIso8601String(),
       'uid': uid,
       'createdAt': FieldValue.serverTimestamp(),
-      'type': 'calendar_event',
     };
 
     try {
-      //specific email to be sent not to everyone
-      // await FirebaseFirestore.instance
-      //     .collection('Events')
-      //     .add(event);
-      await FirebaseFirestore.instance.collection('events').add({
-        'title': title,
-        'description': description,
-        'signkey': signKey,
-        'studentEmail': email,
-        'dateTime': Timestamp.fromDate(finalDateTime),
-        'isoDate': finalDateTime.toIso8601String(),
-        'uid': uid,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
+      await FirebaseFirestore.instance.collection('events').add(event);
       _showToast("Event added successfully");
     } catch (e) {
       _showToast("Failed to add event: $e", isError: true);
@@ -5370,33 +5321,6 @@ class _CalendarPageState extends State<CalendarPage> {
     return _events[dateOnly] ?? [];
   }
 
-  void _loadEventsFromFirebase() async {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    final signKey = await getKey(uid);
-
-    FirebaseFirestore.instance
-        .collection('events')
-        .where('uid', isEqualTo: uid)
-        .where('signkey', isEqualTo: signKey)
-        .snapshots()
-        .listen((snapshot) {
-          _updateEvents(snapshot.docs);
-        });
-  }
-
-  void _loadEventsFromFirebase2() async {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    final signKey = await getKey(uid);
-
-    FirebaseFirestore.instance
-        .collection('Events')
-        .where('signkey', isEqualTo: signKey)
-        .snapshots()
-        .listen((snapshot) {
-          _updateEvents(snapshot.docs);
-        });
-  }
-
   void _updateEvents(List<QueryDocumentSnapshot> docs) {
     Map<DateTime, List<Map<String, dynamic>>> newEvents = {};
 
@@ -5483,7 +5407,6 @@ class _CalendarPageState extends State<CalendarPage> {
           final time = _parseTimeString(timePart);
           return DateTime(year, month, day, time.hour, time.minute);
         }
-
         return DateTime(year, month, day);
       } else if (dateString.contains('/')) {
         final dateParts = dateString.split('/');
@@ -5560,188 +5483,223 @@ class _CalendarPageState extends State<CalendarPage> {
                     topRight: Radius.circular(20),
                   ),
                 ),
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 8,
-                              offset: Offset(0, 4),
+                child: _isLoading
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Color(0xFF667eea),
+                              ),
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              'Loading events...',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 16,
+                              ),
                             ),
                           ],
                         ),
-                        child: TableCalendar(
-                          firstDay: DateTime.now().subtract(
-                            Duration(days: 365),
-                          ),
-                          lastDay: DateTime.now().add(Duration(days: 365)),
-                          focusedDay: _focusedDay,
-                          calendarFormat: _calendarFormat,
-                          selectedDayPredicate: (day) {
-                            return isSameDay(_selectedDay, day);
-                          },
-                          onDaySelected: (selectedDay, focusedDay) {
-                            setState(() {
-                              _selectedDay = selectedDay;
-                              _focusedDay = focusedDay;
-                            });
-                          },
-                          onFormatChanged: (format) {
-                            setState(() {
-                              _calendarFormat = format;
-                            });
-                          },
-                          onPageChanged: (focusedDay) {
-                            setState(() {
-                              _focusedDay = focusedDay;
-                            });
-                          },
-                          eventLoader: _getEventsForDay,
-                          calendarStyle: CalendarStyle(
-                            todayDecoration: BoxDecoration(
-                              color: Color(0xFF667eea).withOpacity(0.3),
-                              shape: BoxShape.circle,
-                            ),
-                            selectedDecoration: BoxDecoration(
-                              color: Color(0xFF667eea),
-                              shape: BoxShape.circle,
-                            ),
-                            markerDecoration: BoxDecoration(
-                              color: Color(0xFF764ba2),
-                              shape: BoxShape.circle,
-                            ),
-                            outsideDaysVisible: false,
-                          ),
-                          headerStyle: HeaderStyle(
-                            formatButtonVisible: true,
-                            titleCentered: true,
-                            formatButtonDecoration: BoxDecoration(
-                              color: Color(0xFF667eea),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            formatButtonTextStyle: TextStyle(
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 20),
-                      if (_selectedDay != null)
-                        Container(
-                          padding: EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                blurRadius: 8,
-                                offset: Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Events for ${_selectedDay!.day}/${_selectedDay!.month}/${_selectedDay!.year}',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.grey[800],
-                                    ),
-                                  ),
-                                  ElevatedButton.icon(
-                                    onPressed: _showAddEventDialog,
-                                    icon: Icon(Icons.add, size: 18),
-                                    label: Text('Add Event'),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Color(0xFF667eea),
-                                      foregroundColor: Colors.white,
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 12,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
+                      )
+                    : SingleChildScrollView(
+                        padding: EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 8,
+                                    offset: Offset(0, 4),
                                   ),
                                 ],
                               ),
-                              SizedBox(height: 16),
-                              _getEventsForDay(_selectedDay!).isEmpty
-                                  ? Container(
-                                      padding: EdgeInsets.symmetric(
-                                        vertical: 40,
-                                      ),
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            Icons.event_note,
-                                            size: 48,
-                                            color: Colors.grey[400],
+                              child: TableCalendar(
+                                firstDay: DateTime.now().subtract(
+                                  Duration(days: 365),
+                                ),
+                                lastDay: DateTime.now().add(
+                                  Duration(days: 365),
+                                ),
+                                focusedDay: _focusedDay,
+                                calendarFormat: _calendarFormat,
+                                selectedDayPredicate: (day) {
+                                  return isSameDay(_selectedDay, day);
+                                },
+                                onDaySelected: (selectedDay, focusedDay) {
+                                  setState(() {
+                                    _selectedDay = selectedDay;
+                                    _focusedDay = focusedDay;
+                                  });
+                                },
+                                onFormatChanged: (format) {
+                                  setState(() {
+                                    _calendarFormat = format;
+                                  });
+                                },
+                                onPageChanged: (focusedDay) {
+                                  setState(() {
+                                    _focusedDay = focusedDay;
+                                  });
+                                },
+                                eventLoader: _getEventsForDay,
+                                calendarStyle: CalendarStyle(
+                                  todayDecoration: BoxDecoration(
+                                    color: Color(0xFF667eea).withOpacity(0.3),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  selectedDecoration: BoxDecoration(
+                                    color: Color(0xFF667eea),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  markerDecoration: BoxDecoration(
+                                    color: Color(0xFF764ba2),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  outsideDaysVisible: false,
+                                ),
+                                headerStyle: HeaderStyle(
+                                  formatButtonVisible: true,
+                                  titleCentered: true,
+                                  formatButtonDecoration: BoxDecoration(
+                                    color: Color(0xFF667eea),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  formatButtonTextStyle: TextStyle(
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: 20),
+                            if (_selectedDay != null)
+                              Container(
+                                padding: EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.1),
+                                      blurRadius: 8,
+                                      offset: Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'Events for ${_selectedDay!.day}/${_selectedDay!.month}/${_selectedDay!.year}',
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.grey[800],
                                           ),
-                                          SizedBox(height: 8),
-                                          Text(
-                                            'No events for this day',
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              color: Colors.grey[500],
+                                        ),
+                                        ElevatedButton.icon(
+                                          onPressed: _showAddEventDialog,
+                                          icon: Icon(Icons.add, size: 18),
+                                          label: Text('Add Event'),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Color(0xFF667eea),
+                                            foregroundColor: Colors.white,
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 12,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
                                             ),
                                           ),
-                                        ],
-                                      ),
-                                    )
-                                  : Column(
-                                      children: _getEventsForDay(_selectedDay!)
-                                          .map((event) {
-                                            final dateTime = event['dateTime'];
-                                            final displayTime =
-                                                dateTime is String
-                                                ? dateTime
-                                                : _formatTimestamp(dateTime);
-
-                                            return Card(
-                                              margin: EdgeInsets.only(
-                                                bottom: 8,
-                                              ),
-                                              child: ListTile(
-                                                leading: Icon(
-                                                  Icons.event,
-                                                  color: Color(0xFF667eea),
-                                                ),
-                                                title: Text(event['title']),
-                                                subtitle: Text(displayTime),
-                                                onTap: () => _showEventDetails(
-                                                  _selectedDay!,
-                                                  event,
-                                                ),
-                                              ),
-                                            );
-                                          })
-                                          .toList(),
+                                        ),
+                                      ],
                                     ),
-                            ],
-                          ),
+                                    SizedBox(height: 16),
+                                    _getEventsForDay(_selectedDay!).isEmpty
+                                        ? Container(
+                                            padding: EdgeInsets.symmetric(
+                                              vertical: 40,
+                                            ),
+                                            child: Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                  Icons.event_note,
+                                                  size: 48,
+                                                  color: Colors.grey[400],
+                                                ),
+                                                SizedBox(height: 8),
+                                                Text(
+                                                  'No events for this day',
+                                                  style: TextStyle(
+                                                    fontSize: 16,
+                                                    color: Colors.grey[500],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          )
+                                        : Column(
+                                            children:
+                                                _getEventsForDay(
+                                                  _selectedDay!,
+                                                ).map((event) {
+                                                  final dateTime =
+                                                      event['dateTime'];
+                                                  final displayTime =
+                                                      dateTime is String
+                                                      ? dateTime
+                                                      : _formatTimestamp(
+                                                          dateTime,
+                                                        );
+
+                                                  return Card(
+                                                    margin: EdgeInsets.only(
+                                                      bottom: 8,
+                                                    ),
+                                                    child: ListTile(
+                                                      leading: Icon(
+                                                        Icons.event,
+                                                        color: Color(
+                                                          0xFF667eea,
+                                                        ),
+                                                      ),
+                                                      title: Text(
+                                                        event['title'],
+                                                      ),
+                                                      subtitle: Text(
+                                                        displayTime,
+                                                      ),
+                                                      onTap: () =>
+                                                          _showEventDetails(
+                                                            _selectedDay!,
+                                                            event,
+                                                          ),
+                                                    ),
+                                                  );
+                                                }).toList(),
+                                          ),
+                                  ],
+                                ),
+                              ),
+                            SizedBox(height: 20),
+                          ],
                         ),
-                      SizedBox(height: 20),
-                    ],
-                  ),
-                ),
+                      ),
               ),
             ),
           ],
@@ -5751,7 +5709,6 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 }
 
-//
 class MenteesPage extends StatefulWidget {
   const MenteesPage({super.key});
 
