@@ -4768,8 +4768,172 @@ class _CalendarPageState extends State<CalendarPage> {
   void initState() {
     super.initState();
     _selectedDay = DateTime.now();
-    _loadEventsFromFirebase();
-    _loadEventsFromFirebase2();
+
+    // Load both collections immediately without waiting for listeners
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeBothCollections();
+    });
+  }
+
+  Future<void> _initializeBothCollections() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      final signKey = await getKey(uid);
+
+      print('Loading from both collections...');
+
+      // Load from both collections IMMEDIATELY with get() not snapshots()
+      final eventsSnapshot = await FirebaseFirestore.instance
+          .collection('events')
+          .where('uid', isEqualTo: uid)
+          .where('signkey', isEqualTo: signKey)
+          .get();
+
+      final EventsSnapshot = await FirebaseFirestore.instance
+          .collection('Events')
+          .where('signkey', isEqualTo: signKey)
+          .get();
+
+      print('Lowercase events: ${eventsSnapshot.docs.length}');
+      print('Uppercase Events: ${EventsSnapshot.docs.length}');
+
+      // Create a map to hold all events
+      Map<DateTime, List<Map<String, dynamic>>> allEvents = {};
+
+      // Process lowercase events
+      for (var doc in eventsSnapshot.docs) {
+        _addEventToMap(allEvents, doc.data() as Map<String, dynamic>);
+      }
+
+      // Process uppercase Events
+      for (var doc in EventsSnapshot.docs) {
+        _addEventToMap(allEvents, doc.data() as Map<String, dynamic>);
+      }
+
+      // Update UI with all events
+      setState(() {
+        _events = allEvents;
+      });
+
+      print('Total events loaded: ${_events.length} days');
+
+      // NOW set up the real-time listeners for future updates
+      _setupRealtimeListeners(uid, signKey);
+    } catch (e) {
+      print('Error initializing collections: $e');
+      _showToast('Error loading events', isError: true);
+    }
+  }
+
+  void _addEventToMap(
+    Map<DateTime, List<Map<String, dynamic>>> eventMap,
+    Map<String, dynamic> eventData,
+  ) {
+    DateTime? eventDate = _extractEventDate(eventData);
+
+    if (eventDate != null) {
+      DateTime dayOnly = DateTime(
+        eventDate.year,
+        eventDate.month,
+        eventDate.day,
+      );
+
+      if (eventMap[dayOnly] == null) {
+        eventMap[dayOnly] = [eventData];
+      } else {
+        // Check for duplicates (by title and approximate time)
+        bool exists = eventMap[dayOnly]!.any(
+          (existing) =>
+              existing['title'] == eventData['title'] &&
+              _isSameDay(_extractEventDate(existing), eventDate),
+        );
+
+        if (!exists) {
+          eventMap[dayOnly]!.add(eventData);
+        }
+      }
+    }
+  }
+
+  bool _isSameDay(DateTime? date1, DateTime? date2) {
+    if (date1 == null || date2 == null) return false;
+    return date1.year == date2.year &&
+        date1.month == date2.month &&
+        date1.day == date2.day;
+  }
+
+  DateTime? _extractEventDate(Map<String, dynamic> event) {
+    if (event['isoDate'] != null) {
+      try {
+        return DateTime.parse(event['isoDate']);
+      } catch (e) {}
+    }
+
+    if (event['timestamp'] is Timestamp) {
+      return (event['timestamp'] as Timestamp).toDate();
+    }
+
+    if (event['dateTime'] is Timestamp) {
+      return (event['dateTime'] as Timestamp).toDate();
+    }
+
+    if (event['dateTime'] is String) {
+      return _parseDateString(event['dateTime']);
+    }
+
+    return null;
+  }
+
+  void _setupRealtimeListeners(String uid, String signKey) {
+    print('Setting up real-time listeners...');
+
+    // Listener for lowercase 'events' collection
+    FirebaseFirestore.instance
+        .collection('events')
+        .where('uid', isEqualTo: uid)
+        .where('signkey', isEqualTo: signKey)
+        .snapshots()
+        .listen(
+          (snapshot) {
+            print(
+              'Real-time update from lowercase events (${snapshot.docs.length} docs)',
+            );
+            _mergeEvents(snapshot.docs);
+          },
+          onError: (error) {
+            print('Error in lowercase events listener: $error');
+          },
+        );
+
+    // Listener for uppercase 'Events' collection
+    FirebaseFirestore.instance
+        .collection('Events')
+        .where('signkey', isEqualTo: signKey)
+        .snapshots()
+        .listen(
+          (snapshot) {
+            print(
+              'Real-time update from uppercase Events (${snapshot.docs.length} docs)',
+            );
+            _mergeEvents(snapshot.docs);
+          },
+          onError: (error) {
+            print('Error in uppercase Events listener: $error');
+          },
+        );
+  }
+
+  void _mergeEvents(List<QueryDocumentSnapshot> docs) {
+    Map<DateTime, List<Map<String, dynamic>>> newEvents = {..._events};
+
+    for (var doc in docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      _addEventToMap(newEvents, data);
+    }
+
+    setState(() {
+      _events = newEvents;
+    });
   }
 
   void _showAddEventDialog() {
@@ -5587,6 +5751,7 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 }
 
+//
 class MenteesPage extends StatefulWidget {
   const MenteesPage({super.key});
 
